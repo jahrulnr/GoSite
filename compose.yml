@@ -31,3 +31,4 @@ services:
       LISTEN_ADDR: ":8080"
       TEMPLATES_DIR: /var/setup
       MIGRATIONS_DIR: /app/migrations
+      FE_EMBED: "true"
