@@ -1,0 +1,5 @@
+{
+  "lockscreen_enabled": false,
+  "basic_auth_enabled": false,
+  "lock_after_seconds": 300
+}

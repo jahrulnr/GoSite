@@ -1,0 +1,78 @@
+# Sequence: Grafana Lite
+
+Pre-aggregated nginx traffic metrics for dashboard charts — replaces legacy full-file `accessTraffic()` scans.
+
+**Routes:** `GET /api/v1/metrics/traffic/*`
+
+## Collector (background)
+
+```mermaid
+sequenceDiagram
+    participant S as gosite serve
+    participant C as grafanalite.Collector
+    participant FS as access logs
+    participant OFF as metrics_offsets.json
+    participant DB as traffic_metrics
+
+    loop every 5 minutes
+        S->>C: Collect()
+        C->>OFF: load byte offsets
+        C->>FS: read new lines since offset
+        C->>C: parse status + bytes, bucket 5m
+        C->>DB: UPSERT traffic_metrics
+        C->>OFF: save new offsets
+        C->>DB: purge buckets older than retention
+    end
+```
+
+## Query series
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant H as ObservabilityHandler
+    participant G as grafanalite.Service
+    participant DB as traffic_metrics
+
+    User->>H: GET /metrics/traffic/series?range=24h&site=
+    H->>G: TrafficSeries(range, site)
+    G->>DB: SELECT buckets in range
+    G-->>H: { step, requests{}, bytes{} }
+    H-->>User: JSON time-series
+```
+
+## Bucket model
+
+| Column | Meaning |
+|--------|---------|
+| `bucket_ts` | 5-minute floor UTC |
+| `site` | Derived from log filename (`access-{domain}.log`) |
+| `requests` | Line count in bucket |
+| `bytes` | Sum of `$body_bytes_sent` |
+| `s2xx`…`s5xx` | Status family counters |
+
+**Offset file:** `{STORAGE}/gosite/metrics_offsets.json` — per-file byte offset for incremental tail.
+
+## Endpoints
+
+| Path | Params | Response |
+|------|--------|----------|
+| `/metrics/traffic/series` | `range`, `site` | Multi-series `[[iso8601, value], …]` |
+| `/metrics/traffic/top-sites` | `range`, `limit` | Ranked sites |
+| `/metrics/traffic/status-codes` | `range`, `site` | 2xx/3xx/4xx/5xx totals |
+| `/metrics/traffic/summary` | `range` | Dashboard card totals |
+
+Supported `range`: `1h`, `6h`, `24h`, `7d`.
+
+## Log paths
+
+| File | Site key |
+|------|----------|
+| `{STORAGE}/laravel/logs/access.log` | `default` |
+| `{STORAGE}/laravel/logs/access-{domain}.log` | `{domain}` |
+
+## Implikasi GoSite
+
+- Collector goroutine started from `gosite serve` (SA-7 wiring)
+- Dashboard `traffic_summary` reads `summary?range=1h`
+- Retention aligned with `LOG_EVENTS_RETENTION_DAYS` (default 14)

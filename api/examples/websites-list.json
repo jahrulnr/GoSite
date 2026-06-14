@@ -1,0 +1,13 @@
+{
+  "websites": [
+    {
+      "id": 1,
+      "name": "Marketing Site",
+      "domain": "marketing.demo.local",
+      "path": "/tmp/gosite-qa/storage/www/marketing",
+      "type": "static",
+      "ssl": true,
+      "active": true
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "system": {
+    "cpu": 42.5,
+    "memory": [
+      {
+        "label": "RAM",
+        "total": 8192,
+        "used": 4096,
+        "free": 4096
+      }
+    ],
+    "storage": {
+      "system": "/",
+      "size": 102400,
+      "used": 51200,
+      "available": 51200
+    }
+  },
+  "traffic_summary": {
+    "sites": {
+      "default": { "requests": 120, "bytes": 145000 }
+    },
+    "total": { "requests": 120, "bytes": 145000 }
+  },
+  "ssl_expiring": [],
+  "recent_audit": [
+    {
+      "ts": "2026-06-14T10:00:00Z",
+      "source": "audit",
+      "action": "login",
+      "user": "admin@demo.com",
+      "message": "signed in",
+      "meta": {}
+    }
+  ]
+}

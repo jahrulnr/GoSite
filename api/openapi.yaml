@@ -1,0 +1,2772 @@
+openapi: 3.1.0
+info:
+  title: GoSite Panel API
+  version: 1.0.0
+  description: |
+    REST API for the GoSite hosting control panel.
+
+    Authentication uses an HTTP-only session cookie (`gosite_session`) issued by
+    `POST /auth/login`. When `AUTH_ENABLE=true`, all `/api/v1/*` routes also
+    require HTTP Basic authentication before session checks.
+
+    Errors use a consistent envelope: `{ "error": { "code": "...", "message": "..." } }`.
+servers:
+  - url: https://localhost:8080/api/v1
+    description: Panel API (v1)
+  - url: https://localhost:8080
+    description: Root (health check only)
+
+tags:
+  - name: Health
+  - name: Auth
+  - name: Dashboard
+  - name: System
+  - name: Settings
+  - name: Logs
+  - name: Database
+  - name: Websites
+  - name: SSL
+  - name: Nginx
+  - name: Docker
+  - name: Files
+  - name: Mounts
+  - name: Cronjobs
+  - name: Observability
+  - name: Metrics
+
+paths:
+  /health:
+    servers:
+      - url: https://localhost:8080
+    get:
+      tags: [Health]
+      summary: Liveness check
+      description: Service readiness probe. Does not require authentication.
+      operationId: getHealth
+      security: []
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+                    example: ok
+
+  /auth/login:
+    get:
+      tags: [Auth]
+      summary: Auth metadata
+      description: |
+        Returns panel authentication configuration for the login and lockscreen UI.
+        Available before session login when HTTP Basic auth (if enabled) succeeds.
+      operationId: getAuthLoginMetadata
+      security:
+        - basicAuth: []
+      responses:
+        "200":
+          description: Auth metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthMetadata"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Auth]
+      summary: Login
+      description: |
+        Authenticates a user and issues a `gosite_session` HTTP-only cookie plus a
+        session token in the response body.
+      operationId: postAuthLogin
+      security:
+        - basicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          headers:
+            Set-Cookie:
+              description: HTTP-only session cookie (`gosite_session`)
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout
+      description: Destroys the current session and clears the session cookie.
+      operationId: postAuthLogout
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "204":
+          description: Logged out
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Current user
+      operationId: getAuthMe
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "200":
+          description: Authenticated user profile
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user:
+                    $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/lockscreen:
+    get:
+      tags: [Auth]
+      summary: Lockscreen state
+      description: Returns lockscreen context for the current (locked) session user.
+      operationId: getAuthLockscreen
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "200":
+          description: Lockscreen state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LockscreenResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/lock:
+    post:
+      tags: [Auth]
+      summary: Lock session
+      description: Locks the panel UI while preserving the session for unlock.
+      operationId: postAuthLock
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "204":
+          description: Session locked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/unlock:
+    post:
+      tags: [Auth]
+      summary: Unlock session
+      description: Re-authenticates the locked session user with their password.
+      operationId: postAuthUnlock
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UnlockRequest"
+      responses:
+        "200":
+          description: Session unlocked
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user:
+                    $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /dashboard:
+    get:
+      tags: [Dashboard]
+      summary: Dashboard snapshot
+      operationId: getDashboard
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "200":
+          description: Aggregated dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /system/info:
+    get:
+      tags: [System]
+      summary: Host system info
+      operationId: getSystemInfo
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "200":
+          description: CPU, memory, and storage stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemInfo"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /system/network:
+    get:
+      tags: [System]
+      summary: Network traffic counters
+      operationId: getSystemNetwork
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "200":
+          description: Per-interface RX/TX byte counters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkTraffic"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /system/disk-io:
+    get:
+      tags: [System]
+      summary: Disk I/O snapshot
+      operationId: getSystemDiskIO
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "200":
+          description: Disk read/write counters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiskIO"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /system/nginx-traffic:
+    get:
+      tags: [System]
+      summary: Nginx access-log traffic rollup
+      operationId: getSystemNginxTraffic
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "200":
+          description: Per-site and total nginx traffic from access logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrafficSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /settings/profile:
+    put:
+      tags: [Settings]
+      summary: Update profile
+      operationId: putSettingsProfile
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileUpdateRequest"
+      responses:
+        "200":
+          description: Updated user profile
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user:
+                    $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /logs/sites:
+    get:
+      tags: [Logs]
+      summary: List log sites
+      operationId: getLogsSites
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "200":
+          description: Selectable domains for log tailing
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sites]
+                properties:
+                  sites:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/LogSite"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /logs:
+    get:
+      tags: [Logs]
+      summary: Tail nginx logs
+      operationId: getLogsTail
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - name: domain
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Site domain or `default`
+        - name: type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [access, error]
+        - name: tail
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1000
+          description: Number of trailing lines to return
+      responses:
+        "200":
+          description: Log tail content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LogTailResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /database/tables:
+    get:
+      tags: [Database]
+      summary: List database tables
+      operationId: getDatabaseTables
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "200":
+          description: Whitelisted SQLite tables
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatabaseTablesResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /database/tables/{name}:
+    get:
+      tags: [Database]
+      summary: Browse table rows
+      operationId: getDatabaseTable
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/TableName"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Table page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatabaseTableData"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /websites:
+    get:
+      tags: [Websites]
+      summary: List websites
+      operationId: listWebsites
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "200":
+          description: All websites
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [websites]
+                properties:
+                  websites:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Website"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Websites]
+      summary: Create website
+      operationId: createWebsite
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebsiteCreateRequest"
+      responses:
+        "201":
+          description: Website created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Website"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /websites/validate:
+    post:
+      tags: [Websites]
+      summary: Validate domain and path
+      operationId: validateWebsite
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebsiteValidateRequest"
+      responses:
+        "200":
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebsiteValidateResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /websites/{id}:
+    get:
+      tags: [Websites]
+      summary: Get website
+      operationId: getWebsite
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/WebsiteId"
+      responses:
+        "200":
+          description: Website details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Website"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Websites]
+      summary: Update website
+      operationId: updateWebsite
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/WebsiteId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebsiteUpdateRequest"
+      responses:
+        "200":
+          description: Website updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Website"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Websites]
+      summary: Delete website
+      operationId: deleteWebsite
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/WebsiteId"
+        - name: clean
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Remove filesystem artifacts when true
+      responses:
+        "200":
+          description: Website deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /websites/{id}/toggle:
+    patch:
+      tags: [Websites]
+      summary: Toggle website active state
+      operationId: toggleWebsite
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/WebsiteId"
+      responses:
+        "200":
+          description: Website toggled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebsiteToggleResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /websites/{id}/nginx-config:
+    get:
+      tags: [Websites]
+      summary: Get site nginx config
+      operationId: getWebsiteNginxConfig
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/WebsiteId"
+      responses:
+        "200":
+          description: Site-specific nginx configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NginxConfigResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Websites]
+      summary: Update site nginx config
+      operationId: putWebsiteNginxConfig
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/WebsiteId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NginxConfigUpdateRequest"
+      responses:
+        "200":
+          description: Config updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /websites/{id}/ssl:
+    get:
+      tags: [SSL]
+      summary: SSL status
+      operationId: getWebsiteSslStatus
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/WebsiteId"
+      responses:
+        "200":
+          description: SSL certificate status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SslStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /websites/{id}/ssl/manual:
+    put:
+      tags: [SSL]
+      summary: Upload manual SSL certificate
+      operationId: putWebsiteSslManual
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/WebsiteId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SslManualUpdateRequest"
+      responses:
+        "200":
+          description: SSL updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /websites/{id}/ssl/certbot:
+    post:
+      tags: [SSL]
+      summary: Start certbot job
+      operationId: postWebsiteSslCertbot
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/WebsiteId"
+      responses:
+        "202":
+          description: Certbot job queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobAcceptedResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /websites/{id}/ssl/certbot/stream:
+    get:
+      tags: [SSL]
+      summary: Certbot job output stream
+      description: Server-Sent Events stream of certbot job output and status updates.
+      operationId: getWebsiteSslCertbotStream
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/WebsiteId"
+        - name: job_id
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: |
+                  Newline-delimited SSE `data:` frames containing certbot output lines
+                  and `status=<pending|running|done|failed>` updates.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /nginx/default:
+    get:
+      tags: [Nginx]
+      summary: Get default nginx config
+      operationId: getNginxDefault
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "200":
+          description: default.conf content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NginxConfigResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    put:
+      tags: [Nginx]
+      summary: Update default nginx config
+      operationId: putNginxDefault
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NginxConfigUpdateRequest"
+      responses:
+        "200":
+          description: Config updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /nginx/global:
+    get:
+      tags: [Nginx]
+      summary: Get global nginx config
+      operationId: getNginxGlobal
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "200":
+          description: Global nginx.conf content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NginxConfigResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    put:
+      tags: [Nginx]
+      summary: Update global nginx config
+      operationId: putNginxGlobal
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NginxGlobalUpdateRequest"
+      responses:
+        "200":
+          description: Config updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /nginx/test:
+    post:
+      tags: [Nginx]
+      summary: Test nginx configuration
+      operationId: postNginxTest
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NginxConfigUpdateRequest"
+      responses:
+        "200":
+          description: Configuration is valid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NginxTestResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /nginx/reload:
+    post:
+      tags: [Nginx]
+      summary: Reload nginx
+      operationId: postNginxReload
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "200":
+          description: Nginx reloaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /docker/containers:
+    get:
+      tags: [Docker]
+      summary: List containers
+      operationId: listDockerContainers
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "200":
+          description: Docker containers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [containers]
+                properties:
+                  containers:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DockerContainer"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /docker/containers/{id}/restart:
+    post:
+      tags: [Docker]
+      summary: Restart container
+      operationId: restartDockerContainer
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ContainerId"
+      responses:
+        "200":
+          description: Container restarted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /docker/containers/{id}/stop:
+    post:
+      tags: [Docker]
+      summary: Stop container
+      operationId: stopDockerContainer
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ContainerId"
+      responses:
+        "200":
+          description: Container stopped
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /docker/containers/{id}/logs:
+    get:
+      tags: [Docker]
+      summary: Container logs
+      operationId: getDockerContainerLogs
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ContainerId"
+        - name: tail
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 200
+      responses:
+        "200":
+          description: Recent log lines
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LogLinesResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /files:
+    get:
+      tags: [Files]
+      summary: Browse directory
+      operationId: browseFiles
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Absolute path within an allowed root
+      responses:
+        "200":
+          description: Directory listing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Files]
+      summary: Create file or directory
+      description: |
+        Creates a file or directory from JSON, or uploads a file via
+        `multipart/form-data` with fields `path` and `file`.
+      operationId: createFile
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FileCreateRequest"
+          multipart/form-data:
+            schema:
+              type: object
+              required: [path, file]
+              properties:
+                path:
+                  type: string
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Created or uploaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    delete:
+      tags: [Files]
+      summary: Delete file or directory
+      operationId: deleteFile
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /files/content:
+    get:
+      tags: [Files]
+      summary: Read file content
+      operationId: readFileContent
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: File content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileContentResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /files/actions:
+    post:
+      tags: [Files]
+      summary: File action
+      description: Perform chmod, copy, or execute on a path.
+      operationId: postFileAction
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FileActionRequest"
+      responses:
+        "200":
+          description: Action completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /mounts:
+    get:
+      tags: [Mounts]
+      summary: List fstab mounts
+      operationId: listMounts
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "200":
+          description: Fstab entries with mount status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [mounts]
+                properties:
+                  mounts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Mount"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Mounts]
+      summary: Add mount entry
+      operationId: createMount
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MountCreateRequest"
+      responses:
+        "201":
+          description: Mount added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    put:
+      tags: [Mounts]
+      summary: Update mount entry
+      operationId: updateMount
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MountUpdateRequest"
+      responses:
+        "200":
+          description: Mount updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    delete:
+      tags: [Mounts]
+      summary: Delete mount entry
+      operationId: deleteMount
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - name: device
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: dir
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Mount deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /mounts/enable:
+    post:
+      tags: [Mounts]
+      summary: Enable mount
+      operationId: enableMount
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MountEnableRequest"
+      responses:
+        "200":
+          description: Mount enabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /cronjobs:
+    get:
+      tags: [Cronjobs]
+      summary: List cron jobs
+      operationId: listCronjobs
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "200":
+          description: Scheduled cron jobs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cronjobs]
+                properties:
+                  cronjobs:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Cronjob"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Cronjobs]
+      summary: Create cron job
+      operationId: createCronjob
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CronjobCreateRequest"
+      responses:
+        "201":
+          description: Cron job created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cronjob"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /cronjobs/{id}:
+    put:
+      tags: [Cronjobs]
+      summary: Update cron job
+      operationId: updateCronjob
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/CronjobId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CronjobUpdateRequest"
+      responses:
+        "200":
+          description: Cron job updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cronjob"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Cronjobs]
+      summary: Delete cron job
+      operationId: deleteCronjob
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/CronjobId"
+      responses:
+        "200":
+          description: Cron job deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /cronjobs/{id}/run:
+    post:
+      tags: [Cronjobs]
+      summary: Run cron job manually
+      operationId: runCronjob
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/CronjobId"
+      responses:
+        "202":
+          description: Manual run queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobAcceptedResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /cronjobs/{id}/run/stream:
+    get:
+      tags: [Cronjobs]
+      summary: Cron run output stream
+      description: Server-Sent Events stream of manual cron job output.
+      operationId: getCronjobRunStream
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/CronjobId"
+        - name: job_id
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Newline-delimited SSE `data:` frames with job output.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /ui/meta:
+    get:
+      tags: [System]
+      summary: Runtime UI metadata and capabilities
+      operationId: getUiMeta
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "200":
+          description: Backend-owned UI options and capabilities
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UiMetaResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /query/meta:
+    get:
+      tags: [Observability]
+      summary: Query source and filter metadata
+      operationId: getQueryMeta
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "200":
+          description: Backend-owned query sources, fields, quick filters, and time ranges
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueryMetaResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /query:
+    post:
+      tags: [Observability]
+      summary: Splunk Lite search
+      operationId: postQuery
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QueryRequest"
+      responses:
+        "200":
+          description: Query results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueryResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /query/tail:
+    get:
+      tags: [Observability]
+      summary: Live tail of query events
+      description: |
+        Server-Sent Events stream of `QueryEvent` objects. The connection stays
+        open and emits new audit, job, access, and error events as they are
+        ingested. Use `event: error` SSE events to observe errors and `: keepalive`
+        comments as heartbeats.
+      operationId: getQueryTail
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - name: source
+          in: query
+          schema:
+            type: string
+            enum: [audit, job, access, error, all]
+          description: Source to subscribe to. Defaults to `all`.
+        - name: site
+          in: query
+          schema:
+            type: string
+          description: Optional nginx site/domain scope for access/error sources.
+      responses:
+        "200":
+          description: SSE stream of QueryEvent frames
+          content:
+            text/event-stream:
+              schema:
+                $ref: "#/components/schemas/QueryTailResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /query/saved:
+    get:
+      tags: [Observability]
+      summary: List saved queries
+      operationId: listSavedQueries
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "200":
+          description: Saved queries
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [queries]
+                properties:
+                  queries:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SavedQuery"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Observability]
+      summary: Save query
+      operationId: saveQuery
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SavedQueryCreateRequest"
+      responses:
+        "201":
+          description: Query saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedQuery"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /query/saved/{id}:
+    patch:
+      tags: [Observability]
+      summary: Update saved query
+      description: |
+        Partial update of a saved query. Only the fields present in the body
+        are changed; `updated_at` is always refreshed. Omitted (or empty)
+        fields keep their current value. The `q` field, if non-empty, is
+        validated against the same parser used by `POST /query`.
+      operationId: patchSavedQuery
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SavedQueryUpdateRequest"
+      responses:
+        "200":
+          description: Updated saved query
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedQuery"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Observability]
+      summary: Delete saved query
+      operationId: deleteSavedQuery
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: Saved query deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /metrics/traffic/series:
+    get:
+      tags: [Metrics]
+      summary: Traffic time series
+      operationId: getTrafficSeries
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/Range"
+        - name: site
+          in: query
+          schema:
+            type: string
+          description: Filter to a single site domain
+      responses:
+        "200":
+          description: Request and byte series per site
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrafficSeriesResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /metrics/traffic/top-sites:
+    get:
+      tags: [Metrics]
+      summary: Top sites by traffic
+      operationId: getTrafficTopSites
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/Range"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 10
+      responses:
+        "200":
+          description: Ranked sites
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sites]
+                properties:
+                  sites:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/TopSiteEntry"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /metrics/traffic/status-codes:
+    get:
+      tags: [Metrics]
+      summary: HTTP status code breakdown
+      operationId: getTrafficStatusCodes
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/Range"
+        - name: site
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Status code family totals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusCodesResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /metrics/traffic/summary:
+    get:
+      tags: [Metrics]
+      summary: Traffic summary
+      operationId: getTrafficSummary
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/Range"
+      responses:
+        "200":
+          description: Aggregate requests and bytes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrafficMetricsSummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: gosite_session
+      description: HTTP-only session cookie issued by POST /auth/login
+    basicAuth:
+      type: http
+      scheme: basic
+      description: Required on all /api/v1 routes when AUTH_ENABLE=true
+
+  parameters:
+    WebsiteId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+    ContainerId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Docker container ID or name
+    CronjobId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+    TableName:
+      name: name
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Whitelisted SQLite table name
+    Range:
+      name: range
+      in: query
+      schema:
+        type: string
+        enum: [1h, 6h, 24h, 1d, 7d]
+        default: 1h
+      description: Relative time window for metrics
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+    Unauthorized:
+      description: Authentication required or session expired
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+    Forbidden:
+      description: Operation not permitted
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+    Conflict:
+      description: Resource conflict
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+    UnprocessableEntity:
+      description: Operation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+
+  schemas:
+    ApiError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Stable machine-readable error code
+              examples:
+                - VALIDATION_FAILED
+                - AUTH_INVALID_CREDENTIALS
+                - SESSION_EXPIRED
+                - BASIC_AUTH_REQUIRED
+                - NGINX_TEST_FAILED
+            message:
+              type: string
+              description: Human-readable error message
+
+    User:
+      type: object
+      required: [id, name, email]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 1
+        remember:
+          type: boolean
+          default: false
+
+    LoginResponse:
+      type: object
+      required: [user]
+      properties:
+        token:
+          type: string
+          description: Session token (also stored in `gosite_session` cookie)
+        user:
+          $ref: "#/components/schemas/User"
+
+    AuthMetadata:
+      type: object
+      required: [lockscreen_enabled, basic_auth_enabled, lock_after_seconds]
+      properties:
+        lockscreen_enabled:
+          type: boolean
+          description: Whether UI lockscreen is enabled (ENABLE_LOCKSCREEN)
+        basic_auth_enabled:
+          type: boolean
+          description: Whether HTTP Basic auth gates /api/v1 (AUTH_ENABLE)
+        lock_after_seconds:
+          type: integer
+          minimum: 0
+          description: Idle seconds before auto-lock (LOCK_AFTER)
+
+    LockscreenResponse:
+      type: object
+      required: [locked]
+      properties:
+        locked:
+          type: boolean
+        user:
+          $ref: "#/components/schemas/User"
+
+    UnlockRequest:
+      type: object
+      required: [password]
+      properties:
+        password:
+          type: string
+          format: password
+
+    ProfileUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          description: New password; omit to keep current
+
+    SystemInfo:
+      type: object
+      properties:
+        cpu:
+          type: number
+          format: double
+          description: CPU usage percentage
+        memory:
+          type: array
+          items:
+            $ref: "#/components/schemas/MemoryStat"
+        storage:
+          $ref: "#/components/schemas/StorageStat"
+
+    MemoryStat:
+      type: object
+      required: [label, total, used, free]
+      properties:
+        label:
+          type: string
+        total:
+          type: integer
+          format: int64
+        used:
+          type: integer
+          format: int64
+        free:
+          type: integer
+          format: int64
+
+    StorageStat:
+      type: object
+      required: [system, size, used, available]
+      properties:
+        system:
+          type: string
+        size:
+          type: integer
+          format: int64
+        used:
+          type: integer
+          format: int64
+        available:
+          type: integer
+          format: int64
+
+    NetworkTraffic:
+      type: object
+      properties:
+        in:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+          description: Per-interface inbound byte counters
+        out:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+          description: Per-interface outbound byte counters
+
+    DiskIO:
+      type: object
+      properties:
+        read:
+          type: string
+        write:
+          type: string
+
+    TrafficSite:
+      type: object
+      required: [requests, bytes]
+      properties:
+        requests:
+          type: integer
+          format: int64
+        bytes:
+          type: integer
+          format: int64
+
+    TrafficSummary:
+      type: object
+      required: [sites, total]
+      properties:
+        sites:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/TrafficSite"
+        total:
+          $ref: "#/components/schemas/TrafficSite"
+
+    DashboardResponse:
+      type: object
+      required: [system, traffic_summary, ssl_expiring, recent_audit]
+      properties:
+        system:
+          $ref: "#/components/schemas/SystemInfo"
+        traffic_summary:
+          oneOf:
+            - $ref: "#/components/schemas/TrafficSummary"
+            - $ref: "#/components/schemas/TrafficMetricsSummary"
+        ssl_expiring:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExpiringCert"
+        recent_audit:
+          type: array
+          items:
+            $ref: "#/components/schemas/QueryEvent"
+
+    ExpiringCert:
+      type: object
+      required: [website_id, domain, expires_at, days_left, expired]
+      properties:
+        website_id:
+          type: integer
+          format: int64
+        domain:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        days_left:
+          type: integer
+        expired:
+          type: boolean
+
+    QueryEvent:
+      type: object
+      required: [ts, source, action, user, message, meta]
+      properties:
+        ts:
+          type: string
+          format: date-time
+        source:
+          type: string
+        action:
+          type: string
+        user:
+          type: string
+        message:
+          type: string
+        meta:
+          type: object
+          additionalProperties: true
+
+    LogSite:
+      type: object
+      required: [domain]
+      properties:
+        domain:
+          type: string
+        name:
+          type: string
+
+    LogTailResponse:
+      type: object
+      required: [domain, type, path, lines]
+      properties:
+        domain:
+          type: string
+        type:
+          type: string
+          enum: [access, error]
+        path:
+          type: string
+        lines:
+          type: array
+          items:
+            type: string
+        line_count:
+          type: integer
+        content:
+          type: string
+          description: Legacy combined content; prefer `lines`
+
+    LogLinesResponse:
+      type: object
+      required: [lines]
+      properties:
+        lines:
+          type: array
+          items:
+            type: string
+
+    DatabaseTablesResponse:
+      type: object
+      required: [path, tables]
+      properties:
+        path:
+          type: string
+        tables:
+          type: array
+          items:
+            type: string
+
+    DatabaseTableData:
+      type: object
+      required: [name, columns, rows, limit, offset, count]
+      properties:
+        name:
+          type: string
+        columns:
+          type: array
+          items:
+            type: string
+        rows:
+          type: array
+          items:
+            type: array
+            items: {}
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+
+    Website:
+      type: object
+      required: [id, name, domain, path, type, ssl, active]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        domain:
+          type: string
+        path:
+          type: string
+        type:
+          type: string
+          enum: [static, proxy]
+        upstream:
+          type: string
+        ssl:
+          type: boolean
+        active:
+          type: boolean
+        config:
+          type: string
+
+    WebsiteCreateRequest:
+      type: object
+      required: [name, domain, path, type]
+      properties:
+        name:
+          type: string
+        domain:
+          type: string
+        path:
+          type: string
+        type:
+          type: string
+          enum: [static, proxy]
+        upstream:
+          type: string
+        active:
+          type: boolean
+          default: false
+
+    WebsiteUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        domain:
+          type: string
+        path:
+          type: string
+        type:
+          type: string
+          enum: [static, proxy]
+        upstream:
+          type: string
+        active:
+          type: boolean
+
+    WebsiteValidateRequest:
+      type: object
+      required: [domain, path]
+      properties:
+        domain:
+          type: string
+        path:
+          type: string
+        id:
+          type: integer
+          format: int64
+          description: Existing website ID to exclude from duplicate checks
+
+    WebsiteValidateResponse:
+      type: object
+      required: [valid]
+      properties:
+        valid:
+          type: boolean
+        reason:
+          type: string
+
+    WebsiteToggleResponse:
+      type: object
+      required: [id, active, message]
+      properties:
+        id:
+          type: integer
+          format: int64
+        active:
+          type: boolean
+        message:
+          type: string
+
+    SslStatus:
+      type: object
+      required: [enabled, expired]
+      properties:
+        enabled:
+          type: boolean
+        cert_path:
+          type: string
+        key_path:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        expired:
+          type: boolean
+        public_pem:
+          type: string
+        private_pem:
+          type: string
+
+    SslManualUpdateRequest:
+      type: object
+      required: [public, private]
+      properties:
+        public:
+          type: string
+          description: PEM-encoded certificate chain
+        private:
+          type: string
+          description: PEM-encoded private key
+
+    NginxConfigResponse:
+      type: object
+      required: [config]
+      properties:
+        config:
+          type: string
+
+    NginxConfigUpdateRequest:
+      type: object
+      required: [config]
+      properties:
+        config:
+          type: string
+
+    NginxGlobalUpdateRequest:
+      type: object
+      properties:
+        content:
+          type: string
+          description: Preferred field for global nginx.conf body
+        config:
+          type: string
+          description: Alias accepted for backward compatibility
+
+    NginxTestResult:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+
+    DockerContainer:
+      type: object
+      required: [id, name, image, status]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        image:
+          type: string
+        status:
+          type: string
+        state:
+          type: string
+        created:
+          type: string
+
+    FileEntry:
+      type: object
+      required: [name, path, size, mode, is_dir, mod_time]
+      properties:
+        name:
+          type: string
+        path:
+          type: string
+        size:
+          type: integer
+          format: int64
+        mode:
+          type: string
+        is_dir:
+          type: boolean
+        mod_time:
+          type: string
+
+    FileListResponse:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileEntry"
+
+    FileContentResponse:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+
+    FileCreateRequest:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [directory, file, remote]
+        name:
+          type: string
+        path:
+          type: string
+        content:
+          type: string
+
+    FileActionRequest:
+      type: object
+      required: [action, path]
+      properties:
+        action:
+          type: string
+          enum: [chmod, copy, execute]
+        path:
+          type: string
+        mode:
+          type: string
+          description: Octal mode for chmod
+        to_path:
+          type: string
+          description: Destination path for copy
+
+    Mount:
+      type: object
+      required: [device, dir, type, options, dump, fsck, mounted]
+      properties:
+        device:
+          type: string
+        dir:
+          type: string
+        type:
+          type: string
+        options:
+          type: string
+        dump:
+          type: string
+        fsck:
+          type: string
+        mounted:
+          type: boolean
+
+    MountCreateRequest:
+      type: object
+      required: [device, dir, type]
+      properties:
+        device:
+          type: string
+        dir:
+          type: string
+        type:
+          type: string
+        options:
+          type: string
+          default: defaults
+        dump:
+          type: string
+          default: "0"
+        fsck:
+          type: string
+          default: "0"
+
+    MountUpdateRequest:
+      type: object
+      required: [old_device, old_dir, entry]
+      properties:
+        old_device:
+          type: string
+        old_dir:
+          type: string
+        entry:
+          $ref: "#/components/schemas/MountCreateRequest"
+
+    MountEnableRequest:
+      type: object
+      required: [device, dir]
+      properties:
+        device:
+          type: string
+        dir:
+          type: string
+
+    Cronjob:
+      type: object
+      required: [id, name, payload, run_every]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        payload:
+          type: string
+        run_every:
+          type: string
+          enum: [min, hour, day, month]
+        executed_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    CronjobCreateRequest:
+      type: object
+      required: [name, payload, run_every]
+      properties:
+        name:
+          type: string
+        payload:
+          type: string
+        run_every:
+          type: string
+          enum: [min, hour, day, month]
+
+    CronjobUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        payload:
+          type: string
+        run_every:
+          type: string
+          enum: [min, hour, day, month]
+
+    JobAcceptedResponse:
+      type: object
+      required: [job_id, message]
+      properties:
+        job_id:
+          type: integer
+          format: int64
+        message:
+          type: string
+
+    UiMetaResponse:
+      type: object
+      additionalProperties: true
+      description: Backend-owned UI options and feature capabilities.
+
+    QueryMetaResponse:
+      type: object
+      required: [syntax_hint, time_ranges, sources]
+      properties:
+        syntax_hint:
+          type: string
+        time_ranges:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuerySourceMeta"
+
+    QuerySourceMeta:
+      type: object
+      required: [id, label, group, description, query, fields, quick_filters, examples]
+      properties:
+        id:
+          type: string
+          example: access-example.com
+        label:
+          type: string
+          example: access-example.com.log
+        group:
+          type: string
+          enum: [nginx, system]
+        description:
+          type: string
+        log_path:
+          type: string
+        query:
+          type: object
+          required: [source]
+          properties:
+            source:
+              type: string
+              enum: [audit, job, access, error, all]
+            site:
+              type: string
+        fields:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        quick_filters:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        examples:
+          type: array
+          items:
+            type: string
+
+    QueryRequest:
+      type: object
+      required: [source, q]
+      properties:
+        source:
+          type: string
+          enum: [audit, job, access, error, all]
+        site:
+          type: string
+          description: Optional nginx site/domain scope supplied by query metadata.
+        q:
+          type: string
+          description: |
+            Mini Splunk query. Supports `field:value` tokens, plain bareword
+            search, `*` wildcards, and Go-regexp wrapped in `/.../`. Examples:
+            `login`, `action:website.*`, `status_code:5\d\d`, `action:/^login.*/`,
+            or bareword `/timeout|500/`. Space means AND.
+        from:
+          type: string
+          format: date-time
+          nullable: true
+        to:
+          type: string
+          format: date-time
+          nullable: true
+        limit:
+          type: integer
+          minimum: 1
+          default: 100
+        offset:
+          type: integer
+          minimum: 0
+          default: 0
+        mode:
+          type: string
+          enum: [history, live]
+          description: |
+            Informational hint for client UIs that toggle between History
+            (POST /query) and Live Tail (GET /query/tail). The SQL layer
+            ignores this field.
+
+    QueryResponse:
+      type: object
+      required: [hits, events]
+      properties:
+        hits:
+          type: integer
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/QueryEvent"
+
+    SavedQuery:
+      type: object
+      required: [id, name, source, query, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        source:
+          type: string
+          enum: [audit, job, access, error, all]
+        query:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    SavedQueryCreateRequest:
+      type: object
+      required: [name, source, q]
+      properties:
+        name:
+          type: string
+        source:
+          type: string
+          enum: [audit, job, access, error, all]
+        q:
+          type: string
+          description: Query text to persist
+
+    SavedQueryUpdateRequest:
+      type: object
+      description: |
+        All fields are optional; omitted (or empty) values keep the existing
+        stored value. Pass `q` to update the query text; it is validated via
+        the same parser used by `POST /query`.
+      properties:
+        name:
+          type: string
+        source:
+          type: string
+          enum: [audit, job, access, error, all]
+        q:
+          type: string
+
+    QueryTailResponse:
+      type: object
+      description: |
+        Documentation shape for an SSE `/query/tail` stream. Each
+        `data: <json>` line in the response carries one `QueryEvent` from
+        this envelope. The envelope also accepts an `event: error` SSE event
+        whose `data` is an `ApiError` envelope.
+      required: [events]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/QueryEvent"
+
+    TrafficSeriesResponse:
+      type: object
+      required: [step, requests, bytes]
+      properties:
+        step:
+          type: string
+          description: Bucket step (e.g. 5m)
+        requests:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: array
+              prefixItems:
+                - type: string
+                  format: date-time
+                - type: integer
+              minItems: 2
+              maxItems: 2
+        bytes:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: array
+              prefixItems:
+                - type: string
+                  format: date-time
+                - type: integer
+              minItems: 2
+              maxItems: 2
+
+    TopSiteEntry:
+      type: object
+      required: [site, requests, bytes]
+      properties:
+        site:
+          type: string
+        requests:
+          type: integer
+        bytes:
+          type: integer
+
+    StatusCodesResponse:
+      type: object
+      required: [s2xx, s3xx, s4xx, s5xx]
+      properties:
+        s2xx:
+          type: integer
+        s3xx:
+          type: integer
+        s4xx:
+          type: integer
+        s5xx:
+          type: integer
+
+    TrafficMetricsSummary:
+      type: object
+      required: [range, requests, bytes]
+      properties:
+        range:
+          type: string
+        requests:
+          type: integer
+        bytes:
+          type: integer
+
+    MessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
