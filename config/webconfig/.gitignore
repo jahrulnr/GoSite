@@ -2,7 +2,7 @@
 !.gitignore
 !nginx.conf
 !site.conf
-!app.ini
+!site-proxy.conf
 !index.html
 
 !site.d

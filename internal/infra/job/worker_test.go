@@ -3,12 +3,15 @@ package job_test
 import (
 	"bytes"
 	"context"
+	"io"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jahrulnr/gosite/internal/contracts"
+	"github.com/jahrulnr/gosite/internal/infra/commander"
 	"github.com/jahrulnr/gosite/internal/infra/job"
 	"github.com/jahrulnr/gosite/internal/repository/sqlite"
 	"github.com/jahrulnr/gosite/internal/testutil"
@@ -213,4 +216,47 @@ func TestJob_MarkRunningSetsStartedAt(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, sqlite.JobStatusRunning, stored.Status)
 	assert.NotNil(t, stored.StartedAt)
+}
+
+func TestJob_RealCommandStreamsEachLine(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "gosite.db")
+	db, err := sqlite.Open(dbPath)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	require.NoError(t, sqlite.Migrate(db, filepath.Clean(filepath.Join("..", "..", "..", "migrations"))))
+	jobs := sqlite.NewJobRepository(db)
+	w := job.NewWorker(jobs, realCommander{}, 1)
+	w.Start(context.Background(), 1)
+	t.Cleanup(w.Stop)
+
+	ctx := context.Background()
+	run, err := jobs.Create(ctx, sqlite.JobRun{
+		JobType: "cron",
+		Name:    "stream-lines",
+		Status:  sqlite.JobStatusPending,
+		Output:  "printf 'one\\ntwo\\n'",
+	})
+	require.NoError(t, err)
+	w.Enqueue(run.ID)
+
+	rec := httptest.NewRecorder()
+	require.NoError(t, w.StreamSSE(ctx, rec, run.ID))
+	body := rec.Body.String()
+	assert.Contains(t, body, "data: one")
+	assert.Contains(t, body, "data: two")
+	assert.Contains(t, body, "event: done")
+}
+
+type realCommander struct{}
+
+func (realCommander) Run(ctx context.Context, name string, args ...string) (contracts.CommandResult, error) {
+	return commander.NewExecRunner().Run(ctx, name, args...)
+}
+
+func (realCommander) RunWithInput(ctx context.Context, stdin io.Reader, name string, args ...string) (contracts.CommandResult, error) {
+	return commander.NewExecRunner().RunWithInput(ctx, stdin, name, args...)
+}
+
+func (realCommander) RunStreaming(ctx context.Context, name string, args []string, onChunk func(stream, chunk string)) (contracts.CommandResult, error) {
+	return commander.NewExecRunner().RunStreaming(ctx, name, args, onChunk)
 }

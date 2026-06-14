@@ -2,6 +2,7 @@ package database_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"testing"
@@ -124,6 +125,12 @@ func TestDatabase_GetTable_UnknownAllowedTableEmpty(t *testing.T) {
 	data, err := svc.GetTable(context.Background(), "saved_queries", 10, 0)
 	require.NoError(t, err)
 	assert.Empty(t, data.Rows)
+	assert.NotNil(t, data.Rows)
+
+	raw, err := json.Marshal(data)
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), `"rows":[]`)
+	assert.NotContains(t, string(raw), `"rows":null`)
 }
 
 func TestDatabase_ListTables_Sorted(t *testing.T) {

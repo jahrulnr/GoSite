@@ -56,7 +56,7 @@ func seedDemoIfNeeded(ctx context.Context, cfg config.Config, db *sql.DB) error 
 		return seedDemoAuditIfEmpty(ctx, db)
 	}
 
-	logDir := filepath.Join(cfg.Storage, "laravel", "logs")
+	logDir := cfg.LogsDir()
 	webconfig := filepath.Join(cfg.Storage, "webconfig")
 	siteD := filepath.Join(webconfig, "site.d")
 	activeD := filepath.Join(webconfig, "active.d")
@@ -212,7 +212,7 @@ func generateDemoCert(domain string, ttl time.Duration) (string, string, error) 
 }
 
 func seedDemoLogsIfMissing(cfg config.Config) error {
-	logDir := filepath.Join(cfg.Storage, "laravel", "logs")
+	logDir := cfg.LogsDir()
 	entries, err := os.ReadDir(logDir)
 	if err != nil {
 		return nil

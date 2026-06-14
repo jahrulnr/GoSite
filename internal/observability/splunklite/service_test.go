@@ -70,6 +70,14 @@ func TestQueryParser_Empty(t *testing.T) {
 	assert.Nil(t, clauses)
 }
 
+func TestQueryParser_StarMatchesAll(t *testing.T) {
+	t.Parallel()
+
+	clauses, err := splunklite.ParseQuery("*")
+	require.NoError(t, err)
+	assert.Nil(t, clauses)
+}
+
 func TestQueryParser_FreeText(t *testing.T) {
 	t.Parallel()
 

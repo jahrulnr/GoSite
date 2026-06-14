@@ -179,18 +179,45 @@ export const database = {
     http.get<DatabaseTableData>(`/database/tables/${encodeURIComponent(name)}`, { limit, offset }),
 };
 
+export interface QueryPayload {
+  source: string;
+  q: string;
+  site?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface QueryStreamFrame {
+  type: 'ingesting' | 'meta' | 'event' | 'done' | 'error';
+  hits?: number;
+  event?: QueryEvent;
+  error?: { code?: string; message?: string };
+}
+
+function queryUrl(path: string, params: QueryPayload & { stream?: string }) {
+  const qs = new URLSearchParams();
+  qs.set('source', params.source);
+  if (params.q) qs.set('q', params.q);
+  if (params.site) qs.set('site', params.site);
+  if (params.from) qs.set('from', params.from);
+  if (params.to) qs.set('to', params.to);
+  if (params.limit) qs.set('limit', String(params.limit));
+  if (params.offset) qs.set('offset', String(params.offset));
+  if (params.stream) qs.set('stream', params.stream);
+  return `${API_BASE}${path}?${qs.toString()}`;
+}
+
 // ---- Observability (Splunk Lite) ----
 export const observability = {
   queryMeta: () => http.get<QueryMetaResponse>('/query/meta'),
-  query: (payload: {
-    source: string;
-    q: string;
-    site?: string;
-    from?: string;
-    to?: string;
-    limit?: number;
-    offset?: number;
-  }) => http.post<QueryResponse>('/query', payload),
+  query: (payload: QueryPayload, signal?: AbortSignal) => {
+    const { source, q, site, from, to, limit, offset } = payload;
+    return http.get<QueryResponse>('/query', { source, q, site, from, to, limit, offset }, signal);
+  },
+  queryPost: (payload: QueryPayload) => http.post<QueryResponse>('/query', payload),
+  queryStreamUrl: (payload: QueryPayload, mode: 'sse' | 'ndjson' = 'sse') => queryUrl('/query', { ...payload, stream: mode }),
   tailUrl: (params: { source: string; site?: string; from?: string; to?: string }) => {
     const qs = new URLSearchParams();
     qs.set('source', params.source);
@@ -216,6 +243,24 @@ export const observability = {
       }
     };
     if (onError) es.onerror = onError;
+    return () => es.close();
+  },
+  startQueryStream: (payload: QueryPayload, onFrame: (frame: QueryStreamFrame) => void, onError?: (e: Event) => void) => {
+    const es = new EventSource(observability.queryStreamUrl(payload, 'sse'), { withCredentials: true });
+    es.onmessage = (event) => {
+      try {
+        onFrame(JSON.parse(event.data) as QueryStreamFrame);
+      } catch {
+        // ignore malformed frame
+      }
+    };
+    es.addEventListener('error', (event) => {
+      try {
+        onFrame(JSON.parse((event as MessageEvent).data) as QueryStreamFrame);
+      } catch {
+        onError?.(event);
+      }
+    });
     return () => es.close();
   },
   savedQueries: () =>

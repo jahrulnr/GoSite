@@ -3,8 +3,13 @@
 // - Source badge color depends on the event's `source` (audit/access/error/job).
 // - Row click toggles an inline detail panel with the full event `meta` JSON.
 // - Empty / loading / error states are localized to the list area.
+// - Each row is memoized and keyed by a content hash so prepending new live
+//   events does NOT remount the existing rows; only the new head row mounts.
+//   Without that, the Preact diff walks every existing row on every prepend
+//   and the main thread freezes once the list grows past a few hundred rows.
 
-import { useState } from 'preact/hooks';
+import { memo } from 'preact/compat';
+import { useCallback, useState } from 'preact/hooks';
 import type { JSX } from 'preact';
 import type { QueryEvent } from '../api/types';
 import type { LogFormat } from './LogsSearch';
@@ -103,11 +108,67 @@ function formatJson(value: unknown, indent = 2): string {
   }
 }
 
+// Stable key per event based on its content. With Live Tail we prepend new
+// events to the head of the list, so positional keys (e.g. `${ts}-${index}`)
+// change for every row on every prepend and force Preact to remount them all.
+// A content-derived key keeps existing rows untouched when a new one arrives.
+function eventKey(event: QueryEvent, index: number): string {
+  const msg = event.message.length > 80 ? event.message.slice(0, 80) : event.message;
+  return `${event.source}|${event.ts}|${event.action}|${msg}|${index}`;
+}
+
+interface EventRowProps {
+  readonly event: QueryEvent;
+  readonly index: number;
+  readonly isSmart: boolean;
+  readonly isOpen: boolean;
+  readonly onToggle: (key: string) => void;
+}
+
+const EventRow = memo(function EventRow({ event, index, isSmart, isOpen, onToggle }: EventRowProps) {
+  const key = eventKey(event, index);
+  const code = getStatusCode(event.meta);
+  const badgeClass = sourceBadgeClass(event.source);
+  return (
+    <div data-key={key}>
+      <div
+        class="evt-row"
+        role="listitem"
+        tabIndex={0}
+        aria-expanded={isOpen}
+        onClick={() => onToggle(key)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onToggle(key);
+          }
+        }}
+      >
+        <span class="ts">{formatTimestamp(event.ts)}</span>
+        <span class={`src ${badgeClass}`}>{event.source || '—'}</span>
+        <span class="msg">{isSmart ? renderSmartMessage(event.message) : event.message}</span>
+        {event.user ? <span class="user" title={event.user}>@{event.user}</span> : <span />}
+        {code !== undefined ? (
+          <span class={`status ${statusClass(code)}`}>{code}</span>
+        ) : (
+          <span />
+        )}
+      </div>
+      {isOpen && (
+        <div class="evt-detail">
+          <pre>{formatJson(event.meta)}</pre>
+        </div>
+      )}
+    </div>
+  );
+});
+
 export function EventStream({ events, loading, error, format, totalHits }: Readonly<Props>) {
-  // Track the expanded row by a stable key (ts+index at insert time) so that
-  // prepending a new event in live-tail mode doesn't shift the open row.
   const [expanded, setExpanded] = useState<string | null>(null);
   const isSmart = format === 'smart';
+  const handleToggle = useCallback((key: string) => {
+    setExpanded((current) => (current === key ? null : key));
+  }, []);
 
   const meta = (
     <div class="evt-meta">
@@ -162,44 +223,16 @@ export function EventStream({ events, loading, error, format, totalHits }: Reado
     <div>
       {meta}
       <div class="evt-list" role="list">
-        {events.map((event, index) => {
-          const key = `${event.ts}-${index}`;
-          const isOpen = expanded === key;
-          const code = getStatusCode(event.meta);
-          const badgeClass = sourceBadgeClass(event.source);
-          return (
-            <div key={key}>
-              <div
-                class="evt-row"
-                role="listitem"
-                tabIndex={0}
-                aria-expanded={isOpen}
-                onClick={() => setExpanded(isOpen ? null : key)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    setExpanded(isOpen ? null : key);
-                  }
-                }}
-              >
-                <span class="ts">{formatTimestamp(event.ts)}</span>
-                <span class={`src ${badgeClass}`}>{event.source || '—'}</span>
-                <span class="msg">{isSmart ? renderSmartMessage(event.message) : event.message}</span>
-                {event.user ? <span class="user" title={event.user}>@{event.user}</span> : <span />}
-                {code !== undefined ? (
-                  <span class={`status ${statusClass(code)}`}>{code}</span>
-                ) : (
-                  <span />
-                )}
-              </div>
-              {isOpen && (
-                <div class="evt-detail">
-                  <pre>{formatJson(event.meta)}</pre>
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {events.map((event, index) => (
+          <EventRow
+            key={eventKey(event, index)}
+            event={event}
+            index={index}
+            isSmart={isSmart}
+            isOpen={expanded === eventKey(event, index)}
+            onToggle={handleToggle}
+          />
+        ))}
       </div>
     </div>
   );

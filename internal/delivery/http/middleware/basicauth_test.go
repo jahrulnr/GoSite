@@ -89,3 +89,49 @@ func TestBasicAuth_ValidCredentials(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 }
+
+func TestBasicAuth_StreamBypass(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.Config{
+		AuthEnable: true,
+		AuthUser:   "panel",
+		AuthPass:   "secret",
+	}
+
+	router := gin.New()
+	router.Use(middleware.BasicAuth(cfg))
+	for _, path := range []string{"/api/v1/query/tail", "/api/v1/query", "/api/v1/logs"} {
+		router.GET(path, func(c *gin.Context) { c.Status(http.StatusOK) })
+	}
+
+	cases := []struct {
+		name   string
+		path   string
+		accept string
+		query  string
+	}{
+		{"tail path", "/api/v1/query/tail", "", ""},
+		{"stream=sse", "/api/v1/query", "", "stream=sse"},
+		{"stream=ndjson", "/api/v1/query", "", "stream=ndjson"},
+		{"accept sse", "/api/v1/query", "text/event-stream", ""},
+		{"accept ndjson", "/api/v1/query", "application/x-ndjson", ""},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			url := tc.path
+			if tc.query != "" {
+				url += "?" + tc.query
+			}
+			req := httptest.NewRequest(http.MethodGet, url, nil)
+			if tc.accept != "" {
+				req.Header.Set("Accept", tc.accept)
+			}
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			assert.Equal(t, http.StatusOK, rec.Code, "expected stream request to bypass BasicAuth")
+		})
+	}
+}

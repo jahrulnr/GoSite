@@ -37,7 +37,7 @@ func RunServe(cfg config.Config) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	logDir := filepath.Join(cfg.Storage, "laravel", "logs")
+	logDir := cfg.LogsDir()
 	metricsRepo := sqlite.NewTrafficMetricsRepository(db)
 	offsetPath := filepath.Join(cfg.Storage, "gosite", "metrics_offsets.json")
 	collector := grafanalite.NewCollector(logDir, offsetPath, metricsRepo, cfg.LogEventsRetentionDays)

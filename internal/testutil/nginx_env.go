@@ -81,7 +81,7 @@ func SetupTestStack(t *testing.T) *TestStack {
 	runner := nginx.NewRunner(cmd, nginx.RunnerConfig{
 		SiteDDir:   paths.SiteD,
 		BackupsDir: paths.Backups,
-		NginxConf:  paths.NginxConf,
+		NginxConf:  paths.GlobalConf,
 	})
 	ngx := nginx.NewService(runner, cmd, paths)
 	websiteRepo := sqlite.NewWebsiteRepository(db)

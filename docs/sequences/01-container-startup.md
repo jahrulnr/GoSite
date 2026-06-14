@@ -16,7 +16,7 @@ sequenceDiagram
 
     Docker->>Start: CMD /run/start.sh
 
-    Start->>Storage: mkdir laravel/, www/, webconfig/, nginx/, php/
+    Start->>Storage: mkdir logs/, www/, webconfig/, nginx/
     alt webconfig belum ada
         Start->>Storage: cp /var/setup/webconfig → /storage/webconfig
     end

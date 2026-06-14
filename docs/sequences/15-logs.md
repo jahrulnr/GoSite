@@ -37,10 +37,12 @@ sequenceDiagram
 
 ## Path log
 
+Semua nginx memakai format `main` dari `config/nginx/custom.d/nginx-log.conf`.
+
 | Log | Path |
 |-----|------|
-| Global access | `/storage/laravel/logs/access.log` |
-| Global error | `/storage/laravel/logs/error.log` |
+| Global access | `/storage/logs/access.log` |
+| Global error | `/storage/logs/error.log` |
 | Per domain access | `access-{domain}.log` |
 | Per domain error | `error-{domain}.log` |
 

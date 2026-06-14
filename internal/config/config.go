@@ -44,10 +44,15 @@ type Config struct {
 	CORSOrigins          []string
 }
 
+// LogsDir returns the centralized nginx and app log directory.
+func (c Config) LogsDir() string {
+	return filepath.Join(c.Storage, "logs")
+}
+
 // StorageLayout returns persistent directories created during bootstrap.
 func (c Config) StorageLayout() []string {
 	return []string{
-		filepath.Join(c.Storage, "laravel", "logs"),
+		c.LogsDir(),
 		filepath.Join(c.Storage, "www"),
 		filepath.Join(c.Storage, "webconfig", "site.d"),
 		filepath.Join(c.Storage, "webconfig", "active.d"),

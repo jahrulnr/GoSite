@@ -66,8 +66,8 @@ Laravel queue — di GoSite diganti mekanisme job internal.
 
 ### Log nginx per domain
 
-- Access: `/storage/laravel/logs/access-{domain}.log`
-- Error: `/storage/laravel/logs/error-{domain}.log`
+- Access: `/storage/logs/access-{domain}.log`
+- Error: `/storage/logs/error-{domain}.log`
 - Global: `access.log`, `error.log`
 
 ## Relasi konseptual

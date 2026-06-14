@@ -235,6 +235,17 @@ func (s *Service) queryLogs(ctx context.Context, req QueryRequest, logSource str
 	return mapLogEvents(rows, logSource), count, nil
 }
 
+func applySiteScope(clauses []sqlite.FieldClause, site string) []sqlite.FieldClause {
+	site = strings.TrimSpace(site)
+	if site == "" {
+		return clauses
+	}
+	out := make([]sqlite.FieldClause, 0, len(clauses)+1)
+	out = append(out, clauses...)
+	out = append(out, sqlite.LikeClause("site", site))
+	return out
+}
+
 func (s *Service) queryAll(ctx context.Context, req QueryRequest, clauses []sqlite.FieldClause, limit int) ([]QueryEvent, int, error) {
 	fetch := limit + req.Offset
 	if fetch <= 0 {
@@ -243,53 +254,51 @@ func (s *Service) queryAll(ctx context.Context, req QueryRequest, clauses []sqli
 	if fetch > 2000 {
 		fetch = 2000
 	}
-	sub := req
-	sub.Limit = fetch
-	sub.Offset = 0
 
-	var merged []QueryEvent
+	type result struct {
+		events []QueryEvent
+		hits   int
+		err    error
+	}
+	sources := []string{SourceAudit, SourceJob, SourceAccess, SourceError}
+	ch := make(chan result, len(sources))
+
+	for _, src := range sources {
+		src := src
+		go func() {
+			sub := req
+			sub.Source = src
+			sub.Limit = fetch
+			sub.Offset = 0
+			res, err := s.Query(ctx, sub)
+			ch <- result{events: res.Events, hits: res.Hits, err: err}
+		}()
+	}
+
+	merged := make([]QueryEvent, 0, fetch)
 	total := 0
-
-	for _, src := range []string{SourceAudit, SourceJob, SourceAccess, SourceError} {
-		sub.Source = src
-		res, err := s.Query(ctx, sub)
-		if err != nil {
-			return nil, 0, err
+	for range sources {
+		res := <-ch
+		if res.err != nil {
+			return nil, 0, res.err
 		}
-		total += res.Hits
-		merged = append(merged, res.Events...)
+		total += res.hits
+		merged = append(merged, res.events...)
 	}
 
 	sort.Slice(merged, func(i, j int) bool {
 		return merged[i].TS.After(merged[j].TS)
 	})
-
-	if req.Offset >= len(merged) {
-		return nil, total, nil
+	start := req.Offset
+	if start > len(merged) {
+		start = len(merged)
 	}
-	end := req.Offset + limit
+	end := start + limit
 	if end > len(merged) {
 		end = len(merged)
 	}
-	return merged[req.Offset:end], total, nil
+	return merged[start:end], total, nil
 }
-
-func applySiteScope(clauses []sqlite.FieldClause, site string) []sqlite.FieldClause {
-	site = strings.TrimSpace(site)
-	if site == "" {
-		return clauses
-	}
-	for _, c := range clauses {
-		if strings.EqualFold(c.Field, "site") {
-			return clauses
-		}
-	}
-	out := make([]sqlite.FieldClause, 0, len(clauses)+1)
-	out = append(out, sqlite.LikeClause("site", site))
-	out = append(out, clauses...)
-	return out
-}
-
 func buildJobWhere(clauses []sqlite.FieldClause) (wheres []string, args []interface{}, err error) {
 	columns := map[string]string{
 		"job_type": "job_type",

@@ -74,7 +74,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	baseRunner := nginx.NewRunner(cmd, nginx.RunnerConfig{
 		SiteDDir:   paths.SiteD,
 		BackupsDir: paths.Backups,
-		NginxConf:  paths.NginxConf,
+		NginxConf:  paths.GlobalConf,
 	})
 	var runner contracts.NginxRunner = baseRunner
 	if cfg.AppEnv == "local" {
@@ -96,7 +96,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	savedRepo := sqlite.NewSavedQueryRepository(db)
 	splunkSvc := splunklite.NewService(auditRepo, jobRepo, logRepo, savedRepo, cfg.AuditRetentionDays, cfg.LogEventsRetentionDays)
 	grafanaSvc := grafanalite.NewService(metricsRepo)
-	logDir := filepath.Join(storage, "laravel", "logs")
+	logDir := cfg.LogsDir()
 	logsSvc := logs.NewService(logDir, websiteRepo)
 	queryMetaSvc := splunklite.NewMetaService(logsSvc, logDir)
 	logIngestor := splunklite.NewLogIngestor(logRepo, logDir)
@@ -291,6 +291,7 @@ func registerCronRoutes(api *gin.RouterGroup, h *handler.CronHandler) {
 
 func registerObservabilityRoutes(api *gin.RouterGroup, h *handler.ObservabilityHandler) {
 	api.GET("/query/meta", gin.WrapF(h.QueryMeta))
+	api.GET("/query", gin.WrapF(h.QueryGet))
 	api.POST("/query", gin.WrapF(h.Query))
 	api.GET("/query/tail", gin.WrapF(h.Tail))
 	api.GET("/query/saved", gin.WrapF(h.ListSavedQueries))

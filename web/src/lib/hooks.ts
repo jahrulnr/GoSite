@@ -26,6 +26,7 @@ export function useAsync<T>(loader: (signal: AbortSignal) => Promise<T>, deps: u
     let active = true;
     setLoading(true);
     setError(undefined);
+    setData(undefined);
     loaderRef
       .current(ctrl.signal)
       .then((res) => {

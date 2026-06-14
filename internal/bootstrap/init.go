@@ -73,11 +73,51 @@ func createStorageLayout(cfg config.Config) error {
 		}
 	}
 
+	if err := migrateLegacyLogs(cfg); err != nil {
+		return err
+	}
+
 	nginxDir := filepath.Join(cfg.Storage, "nginx")
 	if err := os.MkdirAll(nginxDir, 0o755); err != nil {
 		return fmt.Errorf("create nginx directory: %w", err)
 	}
 
+	return nil
+}
+
+func migrateLegacyLogs(cfg config.Config) error {
+	logsDir := cfg.LogsDir()
+	legacyDir := filepath.Join(cfg.Storage, "laravel", "logs")
+	info, err := os.Stat(legacyDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("stat legacy log dir: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return nil
+	}
+
+	entries, err := os.ReadDir(legacyDir)
+	if err != nil {
+		return fmt.Errorf("read legacy log dir: %w", err)
+	}
+	for _, entry := range entries {
+		src := filepath.Join(legacyDir, entry.Name())
+		dst := filepath.Join(logsDir, entry.Name())
+		if _, err := os.Stat(dst); err == nil {
+			continue
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("stat log file %s: %w", dst, err)
+		}
+		if err := os.Rename(src, dst); err != nil {
+			return fmt.Errorf("migrate log %s: %w", entry.Name(), err)
+		}
+	}
+
+	_ = os.Remove(legacyDir)
+	_ = os.Remove(filepath.Join(cfg.Storage, "laravel"))
 	return nil
 }
 

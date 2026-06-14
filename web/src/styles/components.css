@@ -940,6 +940,13 @@ table.table tbody tr:last-child td { border-bottom: none; }
   font-variant-numeric: tabular-nums;
 }
 .logbox::first-line { color: var(--accent); }
+.stream-logbox {
+  max-height: min(60vh, 520px);
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 
 /* ---------- Sparkline ---------- */
 .sparkline {
@@ -1754,6 +1761,14 @@ code {
 }
 
 /* Source badge colors */
+.evt-row .src.evt-source-audit,
+.evt-row .src.evt-source-access,
+.evt-row .src.evt-source-error,
+.evt-row .src.evt-source-job {
+  color: oklch(98% 0.02 120);
+  font-weight: 900;
+  text-shadow: 0 1px 1px oklch(0% 0 0 / 0.55);
+}
 .evt-source-audit  { background: var(--src-audit);  border-color: oklch(70% 0.16 295 / 0.55); }
 .evt-source-access { background: var(--src-access); border-color: oklch(70% 0.16 245 / 0.55); }
 .evt-source-error  { background: var(--src-error);  border-color: oklch(74% 0.18 70 / 0.55); }

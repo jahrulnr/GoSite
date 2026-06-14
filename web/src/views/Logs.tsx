@@ -18,7 +18,10 @@ import { queryRangeFrom } from '../lib/format';
 import { useStore } from '../lib/store';
 
 const STORAGE_KEY = 'gosite:logs:search-state';
-const MAX_LIVE_EVENTS = 500;
+// Hard cap for the rendered event list. Larger buffers make the Preact diff
+// walk the whole array on every prepend during Live Tail, which freezes the
+// main thread. 200 keeps the list scannable without blowing the budget.
+const MAX_LIVE_EVENTS = 200;
 
 interface SearchState {
   sourceId?: string;
@@ -73,6 +76,37 @@ export function LogsView() {
 
   const abortRef = useRef<AbortController | undefined>(undefined);
   const stopTailRef = useRef<(() => void) | undefined>(undefined);
+
+  // Monotonic epoch bumped on every cleanup(). Any async callback that
+  // captured the previous epoch must skip its state update, otherwise a
+  // late-arriving SSE event or rAF flush can overwrite the fresh empty list
+  // after the user has already kicked off a new query.
+  const liveEpochRef = useRef(0);
+
+  // Batched live-tail buffer: events that arrive between animation frames are
+  // accumulated and committed in a single setState. This keeps the Preact diff
+  // cost at O(MAX_LIVE_EVENTS) per frame instead of O(N) per individual event,
+  // which is the difference between a smooth scroll and a frozen tab.
+  const liveQueueRef = useRef<QueryEvent[]>([]);
+  const liveFlushRef = useRef<number | null>(null);
+  const flushLiveQueue = useCallback(() => {
+    liveFlushRef.current = null;
+    if (liveQueueRef.current.length === 0) return;
+    const epoch = liveEpochRef.current;
+    const queued = liveQueueRef.current;
+    liveQueueRef.current = [];
+    // Defer the state update to the next microtask so we can check whether
+    // the tail session is still the current one. If cleanup() ran, the epoch
+    // will have advanced and we drop the queued events on the floor.
+    queueMicrotask(() => {
+      if (liveEpochRef.current !== epoch) return;
+      setEvents((current) => {
+        const merged = queued.concat(current);
+        return merged.length > MAX_LIVE_EVENTS ? merged.slice(0, MAX_LIVE_EVENTS) : merged;
+      });
+      setTotalHits((total) => total + queued.length);
+    });
+  }, []);
 
   // Persist state on change.
   useEffect(() => {
@@ -143,6 +177,18 @@ export function LogsView() {
       stopTailRef.current();
       stopTailRef.current = undefined;
     }
+    if (liveFlushRef.current !== null) {
+      if (typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(liveFlushRef.current);
+      } else {
+        clearTimeout(liveFlushRef.current);
+      }
+      liveFlushRef.current = null;
+    }
+    liveQueueRef.current = [];
+    // Invalidate any in-flight live flush so a late rAF cannot clobber the
+    // empty list we set when the next run kicks off.
+    liveEpochRef.current += 1;
   }, []);
 
   useEffect(() => cleanup, [cleanup]);
@@ -150,12 +196,16 @@ export function LogsView() {
   const runHistoryInternal = useCallback(
     async (signal: AbortSignal, opts: { from?: string } = {}): Promise<QueryEvent[]> => {
       if (!source) return [];
-      const res = await observability.query({
-        source: source.query.source,
-        q: query,
-        site: source.query.site,
-        from: opts.from,
-      });
+      const normalizedQuery = query.trim() === '*' ? '' : query;
+      const res = await observability.query(
+        {
+          source: source.query.source,
+          q: normalizedQuery,
+          site: source.query.site,
+          from: opts.from,
+        },
+        signal,
+      );
       if (signal.aborted) return [];
       setTotalHits(res.hits);
       return res.events;
@@ -167,6 +217,11 @@ export function LogsView() {
     if (!source) return;
     cleanup();
     setError(undefined);
+    // Clear stale events immediately so the user does not see the previous
+    // result while the new query is in flight. The empty-state placeholder
+    // (loading=true, events=[]) renders the "Scanning…" indicator.
+    setEvents([]);
+    setTotalHits(0);
     setRunning(true);
     const ctrl = new AbortController();
     abortRef.current = ctrl;
@@ -191,6 +246,10 @@ export function LogsView() {
     if (!source) return;
     cleanup();
     setError(undefined);
+    // Reset the displayed list so the user does not see stale events from a
+    // prior history query while the live seed is in flight.
+    setEvents([]);
+    setTotalHits(0);
     setRunning(true);
     const ctrl = new AbortController();
     abortRef.current = ctrl;
@@ -208,11 +267,13 @@ export function LogsView() {
       const stop = observability.startTail(
         url,
         (event) => {
-          setEvents((current) => {
-            const next = [event, ...current];
-            return next.length > MAX_LIVE_EVENTS ? next.slice(0, MAX_LIVE_EVENTS) : next;
-          });
-          setTotalHits((total) => total + 1);
+          liveQueueRef.current.push(event);
+          if (liveFlushRef.current === null && typeof requestAnimationFrame === 'function') {
+            liveFlushRef.current = requestAnimationFrame(flushLiveQueue);
+          } else if (liveFlushRef.current === null) {
+            // SSR / non-browser fallback: flush on next microtask.
+            liveFlushRef.current = setTimeout(flushLiveQueue, 16) as unknown as number;
+          }
         },
         () => {
           // Stream closed (network error or backend close). Stop the tail.

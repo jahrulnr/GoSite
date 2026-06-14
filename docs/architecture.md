@@ -42,7 +42,7 @@ Lihat detail: [sequences/01-container-startup.md](./sequences/01-container-start
 
 `config/start.sh` melakukan:
 
-1. Buat struktur `/storage/laravel`, `/storage/www`, `/storage/webconfig`, dll.
+1. Buat struktur `/storage/logs`, `/storage/www`, `/storage/webconfig`, dll.
 2. Copy template nginx/php/webconfig jika belum ada
 3. Symlink `/storage` → `/etc/nginx`, `/etc/php`, `/app/storage`, `/www`
 4. `composer install` + generate `.env` + `key:generate` jika first run
@@ -89,7 +89,7 @@ Frontend (belum dipilih) hanya memanggil handler di atas.
 | `mount` | fstab CRUD + mount/umount | `/etc/fstab`, `mount` |
 | `cron` | CRUD + scheduler + manual run | SQLite + queue/job runner |
 | `settings` | Profile + PHP/FPM config | file `/storage/php/*` |
-| `logs` | Tail access/error log | `/storage/laravel/logs/` |
+| `logs` | Tail access/error log | `/storage/logs/` |
 | `database` | SQLite viewer (admin tool) | `/storage/db.sqlite` |
 
 ## Path persisten penting
@@ -101,9 +101,8 @@ Frontend (belum dipilih) hanya memanggil handler di atas.
 | `/storage/webconfig/active.d/` | Symlink vhost aktif |
 | `/storage/webconfig/site.conf` | Template vhost |
 | `/storage/webconfig/ssl/` | Sertifikat (Let's Encrypt layout) |
-| `/storage/webconfig/app.ini` | PHP ini untuk artisan server / panel |
+| `/storage/logs/` | Nginx access/error + gosite process logs |
 | `/storage/nginx/` | nginx.conf, http.d/, custom.d/ |
-| `/storage/php/` | php.ini, php-fpm.conf, pool |
 | `/storage/fstab` | Mount entries (symlink `/etc/fstab`) |
 | `/www/` | Document root website |
 | `/var/run/docker.sock` | Akses Docker dari dalam container |

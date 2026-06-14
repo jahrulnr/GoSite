@@ -68,8 +68,8 @@ Supported `range`: `1h`, `6h`, `24h`, `7d`.
 
 | File | Site key |
 |------|----------|
-| `{STORAGE}/laravel/logs/access.log` | `default` |
-| `{STORAGE}/laravel/logs/access-{domain}.log` | `{domain}` |
+| `{STORAGE}/logs/access.log` | `default` |
+| `{STORAGE}/logs/access-{domain}.log` | `{domain}` |
 
 ## Implikasi GoSite
 

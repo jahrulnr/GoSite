@@ -1476,6 +1476,72 @@ paths:
           $ref: "#/components/responses/Unauthorized"
 
   /query:
+    get:
+      tags: [Observability]
+      summary: Splunk Lite search
+      description: |
+        Read-only log search. Returns batch JSON by default. Use
+        `stream=sse`/`Accept: text/event-stream` for Server-Sent Events, or
+        `stream=ndjson`/`Accept: application/x-ndjson` for one JSON envelope per line.
+      operationId: getQuery
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - name: source
+          in: query
+          schema:
+            type: string
+            enum: [audit, job, access, error, all]
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: site
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+        - name: to
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            maximum: 1000
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: stream
+          in: query
+          schema:
+            type: string
+            enum: [sse, ndjson]
+      responses:
+        "200":
+          description: Query results or stream frames
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueryResponse"
+            text/event-stream:
+              schema:
+                $ref: "#/components/schemas/QueryStreamFrame"
+            application/x-ndjson:
+              schema:
+                $ref: "#/components/schemas/QueryStreamFrame"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
     post:
       tags: [Observability]
       summary: Splunk Lite search
@@ -2633,6 +2699,20 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/QueryEvent"
+
+    QueryStreamFrame:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [ingesting, meta, event, done, error]
+        hits:
+          type: integer
+        event:
+          $ref: "#/components/schemas/QueryEvent"
+        error:
+          $ref: "#/components/schemas/ApiError"
 
     SavedQuery:
       type: object

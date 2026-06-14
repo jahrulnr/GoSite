@@ -11,17 +11,18 @@ export function openJobStream(url: string, handlers: JobStreamHandlers): () => v
   const es = new EventSource(url, { withCredentials: true });
 
   es.onmessage = (event) => {
-    const line = String(event.data ?? '');
-    if (line.startsWith('status=')) {
-      handlers.onLine(line);
-      const status = line.slice('status='.length);
+    const text = String(event.data ?? '');
+    if (text.startsWith('status=')) {
+      const status = text.slice('status='.length);
       if (status === 'done' || status === 'failed' || status === 'ok') {
         handlers.onDone?.(status);
         es.close();
       }
       return;
     }
-    handlers.onLine(line);
+    for (const line of text.split(/\r?\n/)) {
+      if (line !== '') handlers.onLine(line);
+    }
   };
 
   es.addEventListener('done', (event) => {
