@@ -36,7 +36,6 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN mkdir -p /storage /var/setup \
-    && mv /etc/nginx /var/setup/nginx-base \
     && rm -f /etc/fstab
 
 COPY --from=gobuilder /out/gosite /usr/local/bin/gosite
@@ -46,6 +45,17 @@ COPY ./config/webconfig /var/setup/webconfig
 COPY ./config/supervisord.conf /etc/supervisord.conf
 COPY ./config/fstab_mounter.sh /run/fstab_mounter.sh
 COPY ./config/start.sh /run/start.sh
+
+# Carry upstream nginx defaults (mime.types, fastcgi_params) into the staged tree
+# so they survive when start.sh moves /var/setup/nginx into /etc/nginx.
+RUN cp -a /etc/nginx/mime.types /var/setup/nginx/mime.types \
+    && cp -a /etc/nginx/fastcgi_params /var/setup/nginx/fastcgi_params \
+    && cp -a /etc/nginx/fastcgi.conf /var/setup/nginx/fastcgi.conf \
+    && cp -a /etc/nginx/uwsgi_params /var/setup/nginx/uwsgi_params \
+    && cp -a /etc/nginx/scgi_params /var/setup/nginx/scgi_params 2>/dev/null || true \
+    && cp -a /etc/nginx/koi-utf /var/setup/nginx/koi-utf 2>/dev/null || true \
+    && cp -a /etc/nginx/koi-win /var/setup/nginx/koi-win 2>/dev/null || true \
+    && cp -a /etc/nginx/win-utf /var/setup/nginx/win-utf 2>/dev/null || true
 
 RUN chmod +x /usr/local/bin/gosite /run/start.sh /run/fstab_mounter.sh
 
