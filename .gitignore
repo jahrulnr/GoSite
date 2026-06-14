@@ -1,0 +1,23 @@
+# Binaries
+/bin/
+*.exe
+*.out
+coverage.out
+
+# Local runtime data
+/data/
+/logs/
+
+# Frontend
+web/node_modules/
+web/tsconfig.tsbuildinfo
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Env secrets
+.env
+.env.*
