@@ -506,7 +506,14 @@ func TestTail_StreamsEvents(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
 	defer cancel()
 
-	// Pre-seed 3 events before Tail starts so they appear in the first poll.
+	ch := make(chan splunklite.QueryEvent, 16)
+	tailErr := make(chan error, 1)
+	go func() { tailErr <- env.svc.Tail(ctx, "audit", "", ch, "") }()
+
+	// Give Tail a moment to seed its cursor at time.Now() before we start
+	// writing, so the new events are picked up on the next poll.
+	time.Sleep(50 * time.Millisecond)
+
 	writer := splunklite.NewAuditWriter(env.audit)
 	for i := 0; i < 3; i++ {
 		require.NoError(t, writer.Write(ctx, contracts.AuditEntry{
@@ -515,10 +522,6 @@ func TestTail_StreamsEvents(t *testing.T) {
 			Message: "created",
 		}))
 	}
-
-	ch := make(chan splunklite.QueryEvent, 16)
-	tailErr := make(chan error, 1)
-	go func() { tailErr <- env.svc.Tail(ctx, "audit", "", ch) }()
 
 	got := 0
 	for {

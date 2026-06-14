@@ -218,6 +218,8 @@ export interface DatabaseTableData {
 // ---- Observability ----
 
 export interface QueryEvent {
+  /** Stable composite key (source|ts|message) used for dedup. */
+  id: string;
   ts: string;
   source: string;
   action: string;

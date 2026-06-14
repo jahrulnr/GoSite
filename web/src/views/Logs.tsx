@@ -89,6 +89,14 @@ export function LogsView() {
   // which is the difference between a smooth scroll and a frozen tab.
   const liveQueueRef = useRef<QueryEvent[]>([]);
   const liveFlushRef = useRef<number | null>(null);
+  // Set of event ids already shown in the current live session. Backed by a
+  // bounded ring so reconnect replays of the same events do not duplicate
+  // rows in the UI (the backend's high-water mark already prevents this for
+  // a healthy stream, but the browser's EventSource can briefly overlap
+  // events from the previous connection with the new one).
+  const liveSeenRef = useRef<Set<string>>(new Set());
+  const liveSeenOrderRef = useRef<string[]>([]);
+  const liveSeenCap = 5000;
   const flushLiveQueue = useCallback(() => {
     liveFlushRef.current = null;
     if (liveQueueRef.current.length === 0) return;
@@ -100,11 +108,26 @@ export function LogsView() {
     // will have advanced and we drop the queued events on the floor.
     queueMicrotask(() => {
       if (liveEpochRef.current !== epoch) return;
+      const seen = liveSeenRef.current;
+      const order = liveSeenOrderRef.current;
+      const accepted: QueryEvent[] = [];
+      for (const ev of queued) {
+        const key = ev.id || `${ev.source}|${ev.ts}|${ev.message.slice(0, 64)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        order.push(key);
+        if (order.length > liveSeenCap) {
+          const evict = order.shift();
+          if (evict !== undefined) seen.delete(evict);
+        }
+        accepted.push(ev);
+      }
+      if (accepted.length === 0) return;
       setEvents((current) => {
-        const merged = queued.concat(current);
+        const merged = accepted.concat(current);
         return merged.length > MAX_LIVE_EVENTS ? merged.slice(0, MAX_LIVE_EVENTS) : merged;
       });
-      setTotalHits((total) => total + queued.length);
+      setTotalHits((total) => total + accepted.length);
     });
   }, []);
 
@@ -186,6 +209,9 @@ export function LogsView() {
       liveFlushRef.current = null;
     }
     liveQueueRef.current = [];
+    // Reset the dedup set so the next live session has a clean slate.
+    liveSeenRef.current = new Set();
+    liveSeenOrderRef.current = [];
     // Invalidate any in-flight live flush so a late rAF cannot clobber the
     // empty list we set when the next run kicks off.
     liveEpochRef.current += 1;

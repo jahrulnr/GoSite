@@ -367,10 +367,19 @@ func (h *ObservabilityHandler) Tail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// If the browser reconnects with a Last-Event-ID, pass it through to the
+	// tail so we resume exactly from that point instead of replaying the
+	// full window. Last-Event-ID is the standard SSE resume token; the
+	// browser sends it automatically when we emit `id:` lines below.
+	var resumeFrom string
+	if v := r.Header.Get("Last-Event-ID"); v != "" {
+		resumeFrom = v
+	}
+
 	ch := make(chan splunklite.QueryEvent, 64)
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- h.splunk.Tail(ctx, source, site, ch)
+		errCh <- h.splunk.Tail(ctx, source, site, ch, resumeFrom)
 	}()
 
 	keepalive := time.NewTicker(15 * time.Second)
@@ -394,6 +403,15 @@ func (h *ObservabilityHandler) Tail(w http.ResponseWriter, r *http.Request) {
 			data, err := json.Marshal(ev)
 			if err != nil {
 				continue
+			}
+			// Emit the event id so the browser includes it in the
+			// Last-Event-ID header on the next reconnect, letting us
+			// resume exactly from this event (no replay of the
+			// already-shipped backlog).
+			if ev.ID != "" {
+				if _, err := fmt.Fprintf(w, "id: %s\n", ev.ID); err != nil {
+					return
+				}
 			}
 			if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
 				return
