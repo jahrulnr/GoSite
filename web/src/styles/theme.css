@@ -1,0 +1,218 @@
+/* =====================================================================
+   GoSite — Mission control for sysadmins.
+   OKLCH-first dark theme. Single source of truth for color, type, motion.
+   ===================================================================== */
+
+/* ---------- Brand: palette (raw references) ---------- */
+:root {
+  /* Base ramp: cool graphite-blue, slightly tinted toward 250 */
+  --gray-50:  oklch(98% 0.004 245);
+  --gray-100: oklch(95% 0.006 245);
+  --gray-200: oklch(88% 0.010 245);
+  --gray-300: oklch(76% 0.014 245);
+  --gray-400: oklch(64% 0.016 245);
+  --gray-500: oklch(52% 0.018 245);
+  --gray-600: oklch(42% 0.018 245);
+  --gray-700: oklch(32% 0.018 245);
+  --gray-800: oklch(24% 0.018 245);
+  --gray-850: oklch(20% 0.020 245);
+  --gray-900: oklch(16% 0.020 245);
+  --gray-950: oklch(11% 0.022 245);
+  --gray-1000: oklch(7%  0.020 245);
+
+  /* Accent: electric lime (the "ops" heartbeat). High chroma, slightly cool. */
+  --lime-300: oklch(92% 0.18 135);
+  --lime-400: oklch(85% 0.22 132);
+  --lime-500: oklch(78% 0.24 130);
+  --lime-600: oklch(70% 0.24 128);
+  --lime-700: oklch(60% 0.22 126);
+
+  /* Secondary: warm amber for warnings / cron highlights */
+  --amber-400: oklch(82% 0.18 75);
+  --amber-500: oklch(74% 0.20 70);
+  --amber-600: oklch(66% 0.20 65);
+
+  /* Tertiary: cobalt for "informational" / "running" states */
+  --cobalt-400: oklch(72% 0.16 245);
+  --cobalt-500: oklch(64% 0.18 250);
+  --cobalt-600: oklch(56% 0.18 252);
+
+  /* Danger: hot coral, not generic red */
+  --coral-400: oklch(72% 0.21 22);
+  --coral-500: oklch(64% 0.23 22);
+  --coral-600: oklch(56% 0.22 20);
+
+  /* ---------- Semantic tokens (consumed by components) ---------- */
+  /* Surfaces */
+  --bg:              var(--gray-1000);
+  --bg-elevated:     var(--gray-900);
+  --surface:         var(--gray-850);
+  --surface-2:       var(--gray-800);
+  --surface-3:       var(--gray-700);
+  --surface-hover:   var(--gray-700);
+  --inset:           var(--gray-950);
+
+  /* Borders — slim, deliberate */
+  --border:          oklch(34% 0.018 245);
+  --border-soft:     oklch(28% 0.018 245);
+  --border-strong:   oklch(46% 0.022 245);
+  --border-glow:     oklch(78% 0.24 130 / 0.35);
+
+  /* Text */
+  --text:            var(--gray-50);
+  --text-muted:      var(--gray-300);
+  --text-dim:        var(--gray-400);
+  --text-faint:      var(--gray-500);
+  --text-on-accent:  var(--gray-1000);
+
+  /* Brand */
+  --accent:          var(--lime-500);
+  --accent-strong:   var(--lime-400);
+  --accent-soft:     oklch(78% 0.24 130 / 0.16);
+  --accent-glow:     oklch(78% 0.24 130 / 0.45);
+  --accent-line:     oklch(78% 0.24 130 / 0.55);
+
+  /* States */
+  --info:            var(--cobalt-400);
+  --info-soft:       oklch(64% 0.18 250 / 0.14);
+  --warn:            var(--amber-500);
+  --warn-soft:       oklch(74% 0.20 70 / 0.16);
+  --danger:          var(--coral-500);
+  --danger-strong:   var(--coral-400);
+  --danger-soft:     oklch(64% 0.23 22 / 0.18);
+  --ok:              var(--accent);
+  --ok-soft:         var(--accent-soft);
+
+  /* Geometry */
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius:    14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+
+  /* Shadow — multi-layer ambient + crisp */
+  --shadow-sm: 0 1px 0 oklch(0% 0 0 / 0.5), 0 1px 2px oklch(0% 0 0 / 0.4);
+  --shadow:    0 1px 0 oklch(0% 0 0 / 0.45), 0 8px 24px -8px oklch(0% 0 0 / 0.55), 0 24px 64px -24px oklch(0% 0 0 / 0.55);
+  --shadow-lg: 0 1px 0 oklch(0% 0 0 / 0.5), 0 20px 60px -12px oklch(0% 0 0 / 0.7), 0 32px 96px -24px oklch(0% 0 0 / 0.55);
+
+  /* Focus ring */
+  --ring: 0 0 0 1px var(--accent-line), 0 0 0 4px oklch(78% 0.24 130 / 0.18);
+
+  /* ---------- Splunk / Logs search tokens ---------- */
+  --splunk-green:      oklch(78% 0.24 130);
+  --splunk-green-soft: oklch(78% 0.24 130 / 0.12);
+  --evt-key:           oklch(78% 0.13 220);
+  --evt-val:           oklch(86% 0.14 80);
+  --src-audit:         oklch(70% 0.16 295);
+  --src-access:        oklch(70% 0.16 245);
+  --src-error:         oklch(74% 0.18 70);
+  --src-job:           oklch(72% 0.14 195);
+
+  /* Type */
+  --font-display: 'Geist', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font:         'Geist', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono:         'Geist Mono', 'JetBrains Mono', 'SF Mono', ui-monospace, 'Cascadia Code', monospace;
+
+  /* Layout */
+  --sidebar-w: 264px;
+  --header-h:  64px;
+
+  /* Motion */
+  --ease-out:  cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-in:   cubic-bezier(0.5, 0, 0.8, 0.4);
+  --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+  --d-fast:  120ms;
+  --d-base:  200ms;
+  --d-slow:  360ms;
+
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+}
+
+body {
+  font-family: var(--font);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  font-feature-settings: 'ss01', 'cv11';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+}
+
+#app { height: 100%; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-strong); }
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+/* ---------- Scrollbar — slim, monochrome ---------- */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: oklch(36% 0.014 245);
+  border-radius: 99px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background: oklch(50% 0.016 245); background-clip: padding-box; border: 2px solid transparent; }
+
+/* ---------- Background atmosphere ---------- */
+/* Layered: conic + radial gradient blobs + dot grid */
+.app-bg-glow {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 600px at 88% -10%, oklch(78% 0.24 130 / 0.10), transparent 60%),
+    radial-gradient(700px 500px at -10% 110%, oklch(64% 0.18 250 / 0.10), transparent 60%),
+    radial-gradient(400px 300px at 50% 50%, oklch(74% 0.20 70 / 0.04), transparent 60%);
+}
+
+.app-bg-glow::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(oklch(100% 0 0 / 0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: 0 0;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 90%);
+  -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 90%);
+}
+
+/* Subtle scanline-like horizontal stripe for "control room" feel */
+.app-bg-glow::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    oklch(100% 0 0 / 0.012) 0 1px,
+    transparent 1px 4px
+  );
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+/* ---------- Focus ring utility ---------- */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--radius-xs);
+}
