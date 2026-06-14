@@ -1,0 +1,33 @@
+services:
+  nfs:
+    image: itsthenetwork/nfs-server-alpine:latest
+    container_name: gosite-nfs
+    privileged: true
+    environment:
+      SHARED_DIRECTORY: /export
+    volumes:
+      - ./data/nfs-export:/export
+
+  gosite:
+    image: gosite:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gosite
+    restart: unless-stopped
+    depends_on:
+      - nfs
+    ports:
+      - "8080:8080"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./data:/storage
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      STORAGE_PATH: /storage
+      DB_DATABASE: /storage/db.sqlite
+      WEB_PATH: /www
+      LISTEN_ADDR: ":8080"
+      TEMPLATES_DIR: /var/setup
+      MIGRATIONS_DIR: /app/migrations
