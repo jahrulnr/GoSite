@@ -230,9 +230,16 @@ export const observability = {
    * Open a Server-Sent Events stream to /query/tail. Each `data:` line is a
    * JSON-encoded `QueryEvent`. EventSource does not support custom headers, so
    * the cookie session auth is used (withCredentials: true).
+   *
+   * The browser's EventSource auto-reconnects on transient network errors and
+   * fires `onerror` while reconnecting. We only treat the stream as dead when
+   * the readyState is `CLOSED` (server sent no `retry:` hint and gave up, or
+   * we explicitly called `es.close()`). Mid-reconnect errors must NOT stop
+   * the tail — otherwise the UI shows the Stop button flipping back to Run
+   * while events are still flowing.
    * Returns a `stop()` function that closes the stream.
    */
-  startTail: (url: string, onEvent: (e: QueryEvent) => void, onError?: (e: Event) => void) => {
+  startTail: (url: string, onEvent: (e: QueryEvent) => void, onClosed?: () => void) => {
     const es = new EventSource(url, { withCredentials: true });
     es.onmessage = (event) => {
       try {
@@ -242,7 +249,15 @@ export const observability = {
         // ignore malformed payload; backend will close the stream if it errors
       }
     };
-    if (onError) es.onerror = onError;
+    es.onerror = () => {
+      // EventSource constants: 0 = CONNECTING (auto-reconnect in flight),
+      // 2 = CLOSED (gave up). Only the latter is terminal.
+      if (es.readyState === EventSource.CLOSED) {
+        onClosed?.();
+        es.close();
+      }
+      // Otherwise the browser is reconnecting; keep the tail alive.
+    };
     return () => es.close();
   },
   startQueryStream: (payload: QueryPayload, onFrame: (frame: QueryStreamFrame) => void, onError?: (e: Event) => void) => {

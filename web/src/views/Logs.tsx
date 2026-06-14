@@ -275,8 +275,10 @@ export function LogsView() {
             liveFlushRef.current = setTimeout(flushLiveQueue, 16) as unknown as number;
           }
         },
+        // Only invoked when the browser has given up reconnecting (the
+        // transient-error case is handled silently by EventSource's built-in
+        // retry, and must not flip the Stop button back to Run).
         () => {
-          // Stream closed (network error or backend close). Stop the tail.
           if (stopTailRef.current === stop) {
             stopTailRef.current = undefined;
             setRunning(false);
