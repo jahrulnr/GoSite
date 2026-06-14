@@ -18,7 +18,8 @@ ENV WEB_PATH="/www"
 ENV TEMPLATES_DIR="/var/setup"
 ENV MIGRATIONS_DIR="/app/migrations"
 ENV LISTEN_ADDR=":8080"
-ENV FE_EMBED="false"
+ENV FE_EMBED="true"
+ENV TLS_ENABLE="true"
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -61,6 +62,7 @@ RUN chmod +x /usr/local/bin/gosite /run/start.sh /run/fstab_mounter.sh
 
 EXPOSE 80
 EXPOSE 443
+EXPOSE 443/udp
 EXPOSE 8080
 
 WORKDIR /app

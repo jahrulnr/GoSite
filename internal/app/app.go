@@ -64,8 +64,12 @@ func RunServe(cfg config.Config) error {
 		cancel()
 	}()
 
-	log.Printf("gosite serve listening on %s", cfg.ListenAddr)
-	return server.HTTPS(cfg, engine)
+	if cfg.TLSEnable {
+		log.Printf("gosite serve listening on %s (tls, panel)", cfg.ListenAddr)
+		return server.HTTPS(cfg, engine)
+	}
+	log.Printf("gosite serve listening on %s (http)", cfg.ListenAddr)
+	return server.HTTP(cfg, engine)
 }
 
 func runMetricsCollector(ctx context.Context, collector *grafanalite.Collector) {

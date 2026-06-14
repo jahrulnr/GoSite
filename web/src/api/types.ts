@@ -20,6 +20,8 @@ export interface AuthMetadata {
   lockscreen_enabled: boolean;
   basic_auth_enabled: boolean;
   lock_after_seconds: number;
+  web_root?: string;
+  file_roots?: Array<{ path: string; label?: string }>;
 }
 
 export interface LockscreenResponse {

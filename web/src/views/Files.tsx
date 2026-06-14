@@ -7,6 +7,7 @@ import { Page } from '../components/Layout';
 import { formatBytes, formatDate } from '../lib/format';
 import { useAction, useAsync } from '../lib/hooks';
 import { navigate } from '../lib/router';
+import { fileRootsFromMeta } from '../lib/meta';
 import { useStore } from '../lib/store';
 
 function FileActionModal({
@@ -91,7 +92,7 @@ function Crumbs({ path, roots }: Readonly<{ path: string; roots: Array<{ path: s
 
 export function FilesView({ path }: Readonly<{ path: string }>) {
   const { meta, toast } = useStore();
-  const roots = meta?.files?.roots ?? [];
+  const roots = fileRootsFromMeta(meta);
   const rootPath = roots[0]?.path ?? '';
   const currentPath = path || rootPath;
   const currentLabel = roots.find((r) => r.path === currentPath)?.label ?? currentPath;

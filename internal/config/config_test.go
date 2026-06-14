@@ -32,6 +32,7 @@ func TestConfig_LoadDefaults(t *testing.T) {
 	t.Setenv("LETSENCRYPT_DIR", "")
 	t.Setenv("FE_EMBED", "")
 	t.Setenv("SESSION_COOKIE_SECURE", "")
+	t.Setenv("TLS_ENABLE", "")
 	t.Setenv("CORS_ORIGINS", "")
 
 	cfg := config.Load()
@@ -64,6 +65,7 @@ func TestConfig_LoadDefaults(t *testing.T) {
 
 	assert.False(t, cfg.FEEmbed)
 	assert.True(t, cfg.SessionCookieSecure)
+	assert.True(t, cfg.TLSEnable)
 	assert.Nil(t, cfg.CORSOrigins)
 }
 

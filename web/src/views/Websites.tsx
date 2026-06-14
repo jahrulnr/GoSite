@@ -17,7 +17,7 @@ import { humanizeError, humanizeValidation } from '../lib/errors';
 import { useAction, useAsync } from '../lib/hooks';
 import { useStore } from '../lib/store';
 
-function WebsiteModal({ site, onClose, onSaved }: Readonly<{ site: Website; onClose: () => void; onSaved: () => void }>) {
+export function WebsiteModal({ site, onClose, onSaved }: Readonly<{ site: Website; onClose: () => void; onSaved: () => void }>) {
   const { meta, toast } = useStore();
   const pathHint = meta?.websites?.static_path_hint ?? '';
   const [form, setForm] = useState<WebsiteCreateRequest>({
@@ -96,7 +96,7 @@ function WebsiteModal({ site, onClose, onSaved }: Readonly<{ site: Website; onCl
   );
 }
 
-function SslModal({ site, onClose }: Readonly<{ site: Website; onClose: () => void }>) {
+export function SslModal({ site, onClose }: Readonly<{ site: Website; onClose: () => void }>) {
   const { toast } = useStore();
   const status = useAsync(() => ssl.status(site.id), [site.id]);
   const [pub, setPub] = useState('');

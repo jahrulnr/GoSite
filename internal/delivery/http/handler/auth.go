@@ -50,7 +50,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	h.sessions.SetCookie(c.Writer, result.Session)
+	h.sessions.SetCookie(c.Writer, c.Request, result.Session)
 	c.JSON(http.StatusOK, gin.H{
 		"token": result.Token,
 		"user":  result.User,
@@ -61,7 +61,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 func (h *AuthHandler) Logout(c *gin.Context) {
 	token := middleware.SessionToken(c)
 	h.auth.Logout(token)
-	h.sessions.ClearCookie(c.Writer)
+	h.sessions.ClearCookie(c.Writer, c.Request)
 	c.Status(http.StatusNoContent)
 }
 

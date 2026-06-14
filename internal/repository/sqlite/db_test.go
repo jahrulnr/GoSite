@@ -38,6 +38,7 @@ func TestMigrate_ApplyAllTables(t *testing.T) {
 		"traffic_metrics",
 		"saved_queries",
 		"schema_migrations",
+		"sessions",
 	} {
 		assert.Contains(t, tables, expected)
 	}
@@ -63,9 +64,9 @@ func TestMigrate_Idempotent(t *testing.T) {
 
 	tables, err := sqlite.ListTables(db)
 	require.NoError(t, err)
-	assert.Len(t, tables, 10)
+	assert.Len(t, tables, 11)
 
 	var count int
 	require.NoError(t, db.QueryRow(`SELECT COUNT(1) FROM schema_migrations`).Scan(&count))
-	assert.Equal(t, 3, count)
+	assert.Equal(t, 4, count)
 }

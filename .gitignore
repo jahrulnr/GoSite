@@ -21,3 +21,9 @@ web/tsconfig.tsbuildinfo
 # Env secrets
 .env
 .env.*
+
+# Local deploy (never commit — may contain host/IP/credentials)
+scripts/*.local.sh
+deploy.local.env
+gosite.tar.gz
+compose.bangunsoft.yml

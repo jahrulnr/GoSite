@@ -15,7 +15,7 @@ func TestSession_ClearCookie(t *testing.T) {
 
 	store := auth.NewStore(0)
 	rec := httptest.NewRecorder()
-	store.ClearCookie(rec)
+	store.ClearCookie(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 
 	cookies := rec.Result().Cookies()
 	requireCookie := func(t *testing.T) *http.Cookie {
@@ -71,7 +71,7 @@ func TestSession_SetCookie(t *testing.T) {
 		t.Fatalf("create session: %v", err)
 	}
 	rec := httptest.NewRecorder()
-	store.SetCookie(rec, session)
+	store.SetCookie(rec, httptest.NewRequest(http.MethodGet, "/", nil), session)
 
 	cookies := rec.Result().Cookies()
 	found := false
@@ -83,4 +83,42 @@ func TestSession_SetCookie(t *testing.T) {
 		}
 	}
 	assert.True(t, found)
+}
+
+func TestSession_CookieSecureFollowsForwardedProto(t *testing.T) {
+	t.Parallel()
+
+	store := auth.NewStoreWithOptions(0, true, nil)
+	session, err := store.Create(1)
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	t.Run("http via proxy", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("X-Forwarded-Proto", "http")
+		store.SetCookie(rec, req, session)
+		for _, c := range rec.Result().Cookies() {
+			if c.Name == auth.SessionCookieName {
+				assert.False(t, c.Secure)
+				return
+			}
+		}
+		t.Fatal("session cookie not set")
+	})
+
+	t.Run("https via proxy", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("X-Forwarded-Proto", "https")
+		store.SetCookie(rec, req, session)
+		for _, c := range rec.Result().Cookies() {
+			if c.Name == auth.SessionCookieName {
+				assert.True(t, c.Secure)
+				return
+			}
+		}
+		t.Fatal("session cookie not set")
+	})
 }

@@ -1,6 +1,7 @@
 // Login + lockscreen. All copy/options come from the backend ui/meta + auth metadata.
 import { useState } from 'preact/hooks';
-import { auth } from '../api/endpoints';
+import { auth, ui } from '../api/endpoints';
+import { mergePanelMeta } from '../lib/meta';
 import { useAction } from '../lib/hooks';
 import { useStore } from '../lib/store';
 import { ApiError } from '../api/client';
@@ -9,7 +10,7 @@ import { Spinner } from '../components/Ui';
 import { IconLock, IconLogout } from '../components/Icons';
 
 export function Login() {
-  const { meta, setUser, setLocked, toast } = useStore();
+  const { meta, setUser, setLocked, setMeta, toast } = useStore();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(false);
@@ -25,6 +26,13 @@ export function Login() {
       if (res?.user) {
         setUser(res.user);
         setLocked(false);
+        // Session cookie is set by login; refresh ui/meta so files.roots and nav load.
+        try {
+          const fresh = await ui.meta();
+          setMeta(mergePanelMeta(fresh, meta?.auth));
+        } catch {
+          /* keep existing partial meta from BootGate */
+        }
         toast(`Welcome back, ${res.user.name}`);
       }
     } catch {
@@ -85,12 +93,6 @@ export function Login() {
         <button type="submit" class="btn primary" style="width:100%;justify-content:center;padding:10px;" disabled={loading}>
           {loading ? <Spinner /> : <><IconLogout /> Sign in</>}
         </button>
-
-        {authMeta?.basic_auth_enabled && (
-          <p class="dim" style="font-size:11.5px;margin:14px 0 0;text-align:center;font-family:var(--mono);">
-            Basic auth also enabled
-          </p>
-        )}
       </form>
     </div>
   );

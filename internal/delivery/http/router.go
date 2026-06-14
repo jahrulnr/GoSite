@@ -3,7 +3,9 @@ package http
 import (
 	"context"
 	"database/sql"
+	"log/slog"
 	"path/filepath"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jahrulnr/gosite/internal/config"
@@ -36,10 +38,13 @@ import (
 func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 
-	sessions := auth.NewStoreWithOptions(0, cfg.SessionCookieSecure)
+	sessionRepo := sqlite.NewSessionRepository(db)
+	sessionPersister := auth.NewSQLitePersister(sessionRepo)
+	sessions := auth.NewStoreWithOptions(0, cfg.SessionCookieSecure, sessionPersister)
 	users := sqlite.NewUserRepository(db)
 	lockscreen := auth.NewLockscreen()
 	authSvc := auth.NewService(users, sessions, auth.WithLockscreen(lockscreen))
+	go purgeExpiredSessions(sessionRepo)
 
 	healthHandler := handler.NewHealthHandler()
 	authHandler := handler.NewAuthHandler(authSvc, sessions, auth.LoginMetadataFromConfig(
@@ -206,6 +211,22 @@ func registerDatabaseRoutes(api *gin.RouterGroup, h *handler.DatabaseHandler) {
 
 func registerUIMetaRoutes(api *gin.RouterGroup, h *handler.UIMetaHandler) {
 	api.GET("/ui/meta", gin.WrapF(h.Get))
+}
+
+// purgeExpiredSessions removes stale session rows on a 15-minute cadence so
+// the sessions table never grows unbounded.
+func purgeExpiredSessions(repo *sqlite.SessionRepository) {
+	ticker := time.NewTicker(15 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if n, err := repo.PurgeExpired(ctx); err != nil {
+			slog.Warn("purge expired sessions failed", "err", err)
+		} else if n > 0 {
+			slog.Info("purged expired sessions", "count", n)
+		}
+		cancel()
+	}
 }
 
 func registerWebsiteRoutes(api *gin.RouterGroup, h *handler.WebsiteHandler) {

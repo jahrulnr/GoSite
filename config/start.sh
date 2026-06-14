@@ -44,6 +44,12 @@ if [ -d /var/setup ]; then
     rm -vr /var/setup >> /storage/app.log 2>&1 || true
 fi
 
+# Substitute public HTTPS/QUIC port for Alt-Svc (host-mapped port, default 443).
+PUBLIC_HTTPS_PORT="${PUBLIC_HTTPS_PORT:-443}"
+if [ -d /etc/nginx ]; then
+    find /etc/nginx -type f -name '*.conf' -exec sed -i "s/__PUBLIC_HTTPS_PORT__/${PUBLIC_HTTPS_PORT}/g" {} +
+fi
+
 echo "--- Mounting FSTAB ---"
 /run/fstab_mounter.sh
 

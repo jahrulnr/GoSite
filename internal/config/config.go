@@ -40,6 +40,7 @@ type Config struct {
 
 	FEEmbed              bool
 	SessionCookieSecure  bool
+	TLSEnable            bool
 	CORSOrigins          []string
 }
 
@@ -90,6 +91,7 @@ func Load() Config {
 
 		FEEmbed:             envBool("FE_EMBED", false),
 		SessionCookieSecure: envBool("SESSION_COOKIE_SECURE", true),
+		TLSEnable:           envBool("TLS_ENABLE", true),
 		CORSOrigins:         splitCSV(envOr("CORS_ORIGINS", "")),
 	}
 }

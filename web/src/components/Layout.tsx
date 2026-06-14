@@ -2,6 +2,7 @@ import type { ComponentChildren, ComponentType } from 'preact';
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { auth, rootHealth, ui } from '../api/endpoints';
 import type { TrafficSite, UiMetaResponse, UiOption } from '../api/types';
+import { useIdleLock } from '../lib/idleLock';
 import {
   IconChart,
   IconClock,
@@ -19,6 +20,7 @@ import {
 } from './Icons';
 import { ErrorState, Loading, Toasts } from './Ui';
 import { initials, envLabel } from '../lib/format';
+import { mergePanelMeta } from '../lib/meta';
 import { useAction, useAsync } from '../lib/hooks';
 import { navigate, useRoute } from '../lib/router';
 import { useStore } from '../lib/store';
@@ -207,7 +209,7 @@ export function BootGate({ children }: Readonly<{ children: ComponentChildren }>
         if (!active) return;
         if (authMetaRes.status === 'fulfilled') {
           const metaValue = metaRes.status === 'fulfilled' ? metaRes.value : undefined;
-          setMeta({ ...(metaValue ?? {}), auth: { ...(metaValue?.auth ?? {}), ...authMetaRes.value } } as never);
+          setMeta(mergePanelMeta(metaValue, authMetaRes.value));
         } else if (metaRes.status === 'fulfilled') {
           setMeta(metaRes.value);
         }
@@ -305,6 +307,7 @@ export function Shell() {
   const { meta, user, setUser, setLocked, toast } = useStore();
   const { run: runLogout, loading: loggingOut } = useAction(auth.logout);
   const { run: runLock, loading: locking } = useAction(auth.lock);
+  useIdleLock();
   const grouped = useMemo(() => {
     const map = new Map<string, NavItem[]>();
     for (const item of navFromMeta(meta)) map.set(item.group, [...(map.get(item.group) ?? []), item]);
