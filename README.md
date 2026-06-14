@@ -87,9 +87,40 @@ make up    # build image (host network for DNS) + docker compose up -d
 make down
 ```
 
-Panel API: `https://localhost:8080/api/v1` · Health: `https://localhost:8080/health`
+After `make up`, the production stack listens on three ports:
+
+| Port | URL | Purpose |
+|------|-----|---------|
+| `http://localhost/` | nginx default vhost | BangunSite welcome (from `/www/default`) |
+| `https://localhost/panel/` | nginx → Go SPA embed | Control panel UI (Preact) |
+| `http://localhost/api/...` | nginx → `:8080` | Panel REST API (proxied) |
+| `https://localhost:8080/health` | Go service | Liveness probe |
+
+Default login (seeded by `gosite init` on first boot):
+
+| Field | Value |
+|-------|-------|
+| Basic auth | `admin` / `admin` |
+| Panel login | `admin@demo.com` / `123456` |
+
+> **Why `FE_EMBED=true` and `/panel/`?**
+> GoSite runs behind nginx as the default vhost, so the panel SPA is mounted at `/panel/` (rewrite-stripped) while `/` keeps the legacy BangunSite welcome and any vhosts under `/storage/webconfig/active.d/` continue to serve their domains unchanged. The API is reverse-proxied from `/api/` to `:8080`, and `proxy_ssl_verify off` is acceptable because nginx and gosite share the container's loopback.
 
 > On networks that block public DNS (e.g. some ISP resolvers), `make build-docker` uses `--network=host` so image pulls use the host resolver. See [docs/README.md](docs/README.md#build-docker-di-jaringan-isp-yang-memblokir-dns-publik).
+
+### Verifying the production stack
+
+```bash
+curl -s -o /dev/null -w "/ -> %{http_code}\n" http://localhost/
+curl -s -o /dev/null -w "/panel/ -> %{http_code}\n" http://localhost/panel/
+curl -s -o /dev/null -w "/api/v1/auth/login -> %{http_code}\n" http://localhost/api/v1/auth/login
+curl -sk -o /dev/null -w "https :8080/health -> %{http_code}\n" https://localhost:8080/health
+
+# API with basic auth
+curl -sk -u admin:admin https://localhost/api/v1/auth/login
+curl -sk -u admin:admin https://localhost/api/v1/dashboard
+curl -sk -u admin:admin https://localhost/api/v1/database/tables
+```
 
 ## Configuration
 
