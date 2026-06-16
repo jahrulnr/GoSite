@@ -1,7 +1,7 @@
 {
   "domain": "marketing.demo.local",
   "type": "access",
-  "path": "/storage/laravel/logs/access-marketing.demo.local.log",
+  "path": "/storage/logs/access-marketing.demo.local.log",
   "lines": [
     "203.0.113.1 - - [14/Jun/2026:10:00:01 +0000] \"GET / HTTP/1.1\" 200 512 \"-\" \"Mozilla/5.0\""
   ],

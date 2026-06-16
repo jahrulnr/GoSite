@@ -48,8 +48,9 @@ func TestLogIngestorPersistsAccessLogEvents(t *testing.T) {
 	require.NoError(t, err)
 
 	logDir := t.TempDir()
+	path := filepath.Join(logDir, "access-example.test.log")
 	line := `127.0.0.1 - - [14/Jun/2026:08:00:00 +0000] "GET / HTTP/1.1" 200 123 "-" "curl"`
-	require.NoError(t, os.WriteFile(filepath.Join(logDir, "access-example.test.log"), []byte(line+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(path, []byte(line+"\n"), 0o644))
 
 	ingestor := NewLogIngestor(sqlite.NewLogEventRepository(db), logDir)
 	require.NoError(t, ingestor.Ingest(context.Background()))
@@ -62,4 +63,17 @@ func TestLogIngestorPersistsAccessLogEvents(t *testing.T) {
 	require.Equal(t, 1, count)
 	require.Equal(t, "example.test", site)
 	require.Equal(t, 200, status)
+
+	second := `127.0.0.1 - - [14/Jun/2026:08:00:01 +0000] "GET /two HTTP/1.1" 201 42 "-" "curl"`
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+	require.NoError(t, err)
+	_, err = file.WriteString(second + "\n")
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+	require.NoError(t, os.Chtimes(path, info.ModTime(), info.ModTime()))
+	require.NoError(t, ingestor.Ingest(context.Background()))
+	require.NoError(t, db.QueryRow(`SELECT COUNT(1) FROM log_events`).Scan(&count))
+	require.Equal(t, 2, count)
 }

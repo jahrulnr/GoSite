@@ -8,7 +8,7 @@ TLS_DIR="$STORAGE/webconfig/ssl/live/default"
 
 mkdir -p \
   "$STORAGE/nginx" \
-  "$STORAGE/laravel/logs" \
+  "$STORAGE/logs" \
   "$STORAGE/webconfig/site.d" \
   "$STORAGE/webconfig/active.d" \
   "$TLS_DIR"

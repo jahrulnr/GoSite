@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/jahrulnr/gosite/internal/contracts"
@@ -14,27 +15,32 @@ import (
 
 // Entry is one fstab row.
 type Entry struct {
-	Device  string `json:"device"`
-	Dir     string `json:"dir"`
-	Type    string `json:"type"`
-	Options string `json:"options"`
-	Dump    string `json:"dump"`
-	Fsck    string `json:"fsck"`
-	Mounted bool   `json:"mounted"`
+	Device  string    `json:"device"`
+	Dir     string    `json:"dir"`
+	Type    string    `json:"type"`
+	Options string    `json:"options"`
+	Dump    string    `json:"dump"`
+	Fsck    string    `json:"fsck"`
+	Mounted bool      `json:"mounted"`
+	S3      *S3Config `json:"s3,omitempty"`
 }
 
 // Service manages fstab entries and mount operations.
 type Service struct {
 	fstabPath string
+	secretsDir string
 	cmd       contracts.CommandRunner
 }
 
 // NewService returns a mount manager service.
-func NewService(fstabPath string, cmd contracts.CommandRunner) *Service {
+func NewService(fstabPath, secretsDir string, cmd contracts.CommandRunner) *Service {
 	if fstabPath == "" {
 		fstabPath = "/etc/fstab"
 	}
-	return &Service{fstabPath: fstabPath, cmd: cmd}
+	if secretsDir == "" {
+		secretsDir = "/storage/mount-secrets"
+	}
+	return &Service{fstabPath: fstabPath, secretsDir: secretsDir, cmd: cmd}
 }
 
 // List reads fstab entries and checks mount status.
@@ -50,6 +56,7 @@ func (s *Service) List(ctx context.Context) ([]Entry, error) {
 			continue
 		}
 		entry.Mounted = s.isMounted(ctx, entry.Dir)
+		entry = enrichS3ForList(entry)
 		out = append(out, entry)
 	}
 	return out, nil
@@ -57,6 +64,13 @@ func (s *Service) List(ctx context.Context) ([]Entry, error) {
 
 // Add appends a new fstab entry.
 func (s *Service) Add(ctx context.Context, entry Entry) error {
+	if IsS3Type(entry.Type) {
+		prepared, err := s.applyS3Entry(entry, "", true)
+		if err != nil {
+			return err
+		}
+		entry = prepared
+	}
 	entry, err := normalizeEntry(entry)
 	if err != nil {
 		return err
@@ -80,11 +94,33 @@ func (s *Service) Add(ctx context.Context, entry Entry) error {
 
 // Update replaces an entry matched by old device and dir.
 func (s *Service) Update(ctx context.Context, oldDevice, oldDir string, entry Entry) error {
-	entry, err := normalizeEntry(entry)
+	if err := validateLookupFields(oldDevice, oldDir); err != nil {
+		return err
+	}
+	var oldEntry Entry
+	lines, err := s.readLines()
 	if err != nil {
 		return err
 	}
-	lines, err := s.readLines()
+	for _, line := range lines {
+		existing, parseErr := parseFstabLine(line)
+		if parseErr != nil {
+			continue
+		}
+		if existing.Device == oldDevice && existing.Dir == oldDir {
+			oldEntry = existing
+			break
+		}
+	}
+	if IsS3Type(entry.Type) {
+		keepPasswd := parsePasswdFileOption(oldEntry.Options)
+		prepared, prepErr := s.applyS3Entry(entry, keepPasswd, false)
+		if prepErr != nil {
+			return prepErr
+		}
+		entry = prepared
+	}
+	entry, err = normalizeEntry(entry)
 	if err != nil {
 		return err
 	}
@@ -108,6 +144,9 @@ func (s *Service) Update(ctx context.Context, oldDevice, oldDir string, entry En
 
 // Delete removes an entry and attempts umount.
 func (s *Service) Delete(ctx context.Context, device, dir string) error {
+	if err := validateLookupFields(device, dir); err != nil {
+		return err
+	}
 	lines, err := s.readLines()
 	if err != nil {
 		return err
@@ -122,6 +161,9 @@ func (s *Service) Delete(ctx context.Context, device, dir string) error {
 		}
 		if entry.Device == device && entry.Dir == dir {
 			removed = true
+			if IsS3Type(entry.Type) {
+				removePasswdFromOptions(entry.Options)
+			}
 			continue
 		}
 		filtered = append(filtered, line)
@@ -135,8 +177,8 @@ func (s *Service) Delete(ctx context.Context, device, dir string) error {
 
 // Enable mounts a directory defined in fstab.
 func (s *Service) Enable(ctx context.Context, device, dir string) error {
-	if strings.TrimSpace(dir) == "" {
-		return apperror.New(apperror.CodeInvalidInput, "dir required")
+	if err := validateLookupFields(device, dir); err != nil {
+		return err
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return apperror.Wrap(apperror.CodeInternal, "create mount point", err)
@@ -218,10 +260,18 @@ func formatEntry(entry Entry) string {
 }
 
 func normalizeEntry(entry Entry) (Entry, error) {
-	if strings.TrimSpace(entry.Device) == "" || strings.TrimSpace(entry.Dir) == "" {
+	entry.Device = strings.TrimSpace(entry.Device)
+	entry.Dir = strings.TrimSpace(entry.Dir)
+	entry.Type = strings.TrimSpace(entry.Type)
+	entry.Options = strings.TrimSpace(entry.Options)
+	entry.Dump = strings.TrimSpace(entry.Dump)
+	entry.Fsck = strings.TrimSpace(entry.Fsck)
+
+	if entry.Device == "" || entry.Dir == "" {
 		return Entry{}, apperror.New(apperror.CodeInvalidInput, "device and dir required")
 	}
-	if strings.TrimSpace(entry.Type) == "" {
+	entry.Type = normalizeS3Type(entry.Type)
+	if entry.Type == "" {
 		return Entry{}, apperror.New(apperror.CodeInvalidInput, "type required")
 	}
 	if entry.Options == "" {
@@ -233,5 +283,34 @@ func normalizeEntry(entry Entry) (Entry, error) {
 	if entry.Fsck == "" {
 		entry.Fsck = "0"
 	}
+	for _, field := range []string{entry.Device, entry.Dir, entry.Type, entry.Options, entry.Dump, entry.Fsck} {
+		if strings.ContainsAny(field, " \t\r\n") {
+			return Entry{}, apperror.New(apperror.CodeInvalidInput, "mount fields must not contain whitespace")
+		}
+	}
+	if !filepath.IsAbs(entry.Dir) {
+		return Entry{}, apperror.New(apperror.CodeInvalidInput, "mount dir must be absolute")
+	}
+	if _, err := strconv.Atoi(entry.Dump); err != nil {
+		return Entry{}, apperror.New(apperror.CodeInvalidInput, "dump must be numeric")
+	}
+	if _, err := strconv.Atoi(entry.Fsck); err != nil {
+		return Entry{}, apperror.New(apperror.CodeInvalidInput, "fsck must be numeric")
+	}
 	return entry, nil
+}
+
+func validateLookupFields(device, dir string) error {
+	if strings.TrimSpace(dir) == "" {
+		return apperror.New(apperror.CodeInvalidInput, "dir required")
+	}
+	for _, field := range []string{device, dir} {
+		if strings.ContainsAny(field, " \t\r\n") {
+			return apperror.New(apperror.CodeInvalidInput, "mount fields must not contain whitespace")
+		}
+	}
+	if !filepath.IsAbs(dir) {
+		return apperror.New(apperror.CodeInvalidInput, "mount dir must be absolute")
+	}
+	return nil
 }

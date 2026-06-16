@@ -47,19 +47,53 @@ func TestFiles_ExecuteDisabledByDefault(t *testing.T) {
 func TestFiles_BrowseListsDirectory(t *testing.T) {
 	svc, www := newFilesSvc(t, false)
 	require.NoError(t, os.WriteFile(filepath.Join(www, "a.txt"), []byte("a"), 0o644))
-	entries, err := svc.Browse(context.Background(), www)
+	result, err := svc.Browse(context.Background(), www)
 	require.NoError(t, err)
-	require.Len(t, entries, 1)
-	assert.Equal(t, "a.txt", entries[0].Name)
+	require.Len(t, result.Entries, 1)
+	assert.Equal(t, "a.txt", result.Entries[0].Name)
+	assert.Equal(t, "text", result.Entries[0].Kind)
+	assert.True(t, result.Entries[0].Editable)
+}
+
+func TestFiles_BrowseSortsDirectoriesBeforeFiles(t *testing.T) {
+	svc, www := newFilesSvc(t, false)
+	require.NoError(t, os.WriteFile(filepath.Join(www, "a-file.txt"), []byte("a"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(www, "z-folder"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(www, "b-folder"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(www, "B-file.txt"), []byte("b"), 0o644))
+
+	result, err := svc.Browse(context.Background(), www)
+	require.NoError(t, err)
+	require.Len(t, result.Entries, 4)
+	assert.Equal(t, []string{"b-folder", "z-folder", "a-file.txt", "B-file.txt"}, []string{
+		result.Entries[0].Name,
+		result.Entries[1].Name,
+		result.Entries[2].Name,
+		result.Entries[3].Name,
+	})
 }
 
 func TestFiles_ReadFileContent(t *testing.T) {
 	svc, www := newFilesSvc(t, false)
 	path := filepath.Join(www, "hello.txt")
 	require.NoError(t, os.WriteFile(path, []byte("hello"), 0o644))
-	content, err := svc.Read(context.Background(), path)
+	result, err := svc.Read(context.Background(), path)
 	require.NoError(t, err)
-	assert.Equal(t, "hello", content)
+	assert.Equal(t, "hello", result.Content)
+	assert.Equal(t, "hello.txt", result.Entry.Name)
+}
+
+func TestFiles_SaveFileContent(t *testing.T) {
+	svc, www := newFilesSvc(t, false)
+	path := filepath.Join(www, "hello.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"a":1}`), 0o640))
+	require.NoError(t, svc.Save(context.Background(), path, "{\n  \"a\": 2\n}\n"))
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, "{\n  \"a\": 2\n}\n", string(data))
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o640), info.Mode().Perm())
 }
 
 func TestFiles_CreateDirectory(t *testing.T) {
@@ -112,6 +146,19 @@ func TestFiles_Copy(t *testing.T) {
 	assert.Equal(t, "copy", string(data))
 }
 
+func TestFiles_Move(t *testing.T) {
+	svc, www := newFilesSvc(t, false)
+	src := filepath.Join(www, "src.txt")
+	dst := filepath.Join(www, "nested", "dst.txt")
+	require.NoError(t, os.WriteFile(src, []byte("move"), 0o644))
+	require.NoError(t, svc.Action(context.Background(), files.ActionInput{Action: "move", Path: src, ToPath: dst}))
+	data, err := os.ReadFile(dst)
+	require.NoError(t, err)
+	assert.Equal(t, "move", string(data))
+	_, err = os.Stat(src)
+	require.True(t, os.IsNotExist(err))
+}
+
 func TestFiles_Delete(t *testing.T) {
 	svc, www := newFilesSvc(t, false)
 	path := filepath.Join(www, "gone.txt")
@@ -119,6 +166,19 @@ func TestFiles_Delete(t *testing.T) {
 	require.NoError(t, svc.Delete(context.Background(), path))
 	_, err := os.Stat(path)
 	require.Error(t, err)
+}
+
+func TestFiles_BatchDelete(t *testing.T) {
+	svc, www := newFilesSvc(t, false)
+	first := filepath.Join(www, "one.txt")
+	second := filepath.Join(www, "two.txt")
+	require.NoError(t, os.WriteFile(first, []byte("1"), 0o644))
+	require.NoError(t, os.WriteFile(second, []byte("2"), 0o644))
+	require.NoError(t, svc.BatchDelete(context.Background(), []string{first, second}))
+	_, err := os.Stat(first)
+	require.True(t, os.IsNotExist(err))
+	_, err = os.Stat(second)
+	require.True(t, os.IsNotExist(err))
 }
 
 func TestFiles_ExecuteEnabled(t *testing.T) {
@@ -190,10 +250,14 @@ func TestFiles_CopySourceIsDirectory(t *testing.T) {
 	svc, www := newFilesSvc(t, false)
 	sub := filepath.Join(www, "subdir")
 	require.NoError(t, os.MkdirAll(sub, 0o755))
-	err := svc.Action(context.Background(), files.ActionInput{
-		Action: "copy", Path: sub, ToPath: filepath.Join(www, "out.txt"),
-	})
-	require.Error(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(sub, "nested.txt"), []byte("nested"), 0o644))
+	dst := filepath.Join(www, "out")
+	require.NoError(t, svc.Action(context.Background(), files.ActionInput{
+		Action: "copy", Path: sub, ToPath: dst,
+	}))
+	data, err := os.ReadFile(filepath.Join(dst, "nested.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "nested", string(data))
 }
 
 func TestFiles_ExecuteDirectoryRejected(t *testing.T) {
@@ -243,9 +307,9 @@ func TestFiles_BrowseNestedDirectory(t *testing.T) {
 	nested := filepath.Join(www, "a", "b")
 	require.NoError(t, os.MkdirAll(nested, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(nested, "deep.txt"), []byte("d"), 0o644))
-	entries, err := svc.Browse(context.Background(), nested)
+	result, err := svc.Browse(context.Background(), nested)
 	require.NoError(t, err)
-	require.Len(t, entries, 1)
+	require.Len(t, result.Entries, 1)
 }
 
 func TestFiles_ExecuteCommandFailure(t *testing.T) {

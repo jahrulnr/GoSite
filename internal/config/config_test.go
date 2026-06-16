@@ -62,6 +62,7 @@ func TestConfig_LoadDefaults(t *testing.T) {
 	assert.Equal(t, "migrations", cfg.MigrationsDir)
 	assert.Equal(t, "/etc", cfg.EtcDir)
 	assert.Equal(t, "/etc/letsencrypt", cfg.LetsEncryptDir)
+	assert.Equal(t, "/storage/logs", cfg.LogsDir())
 
 	assert.False(t, cfg.FEEmbed)
 	assert.True(t, cfg.SessionCookieSecure)

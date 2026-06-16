@@ -1,115 +1,103 @@
-# Backend Modules — Rencana Implementasi Go
+# Backend Modulees — Go implementationSite
 
-Pembagian paket dan urutan build untuk migrasi Laravel → Go.
+Package layout and Laravel → Go migration status.
 
-## Struktur paket usulan
+## Actual package structure
 
 ```text
 gosite/
-├── cmd/gosite/           # main binary (API + optional static FE)
+├── cmd/gosite/              # serve | init | migrate | nginx-repair
+├── api/openapi.yaml         # REST contract
 ├── internal/
-│   ├── auth/
-│   ├── system/           # CPU, RAM, disk, network
-│   ├── website/
-│   ├── nginx/
-│   ├── ssl/
-│   ├── docker/
-│   ├── files/
-│   ├── mount/
-│   ├── cron/
-│   ├── settings/
-│   ├── logs/
-│   └── database/         # SQLite viewer
-├── pkg/
-│   ├── commander/        # exec wrapper (ganti Commander.php)
-│   └── pathutil/         # validate path
-└── docs/                 # dokumen ini
+│   ├── app/                 # RunServe, RunNginxRepair
+│   ├── bootstrap/           # init, demo seed, symlinks
+│   ├── config/
+│   ├── delivery/http/       # handler, router, middleware, frontend embed
+│   ├── infra/
+│   │   ├── nginx/           # runner, service, repair, templates
+│   │   ├── job/             # worker, SSE stream
+│   │   ├── commander/
+│   │   └── docker/
+│   ├── observability/       # splunklite, grafanalite
+│   ├── repository/sqlite/
+│   └── service/             # auth, website, ssl, cron, files, …
+├── web/                     # Preact SPA
+├── config/                  # nginx, webconfig, start.sh
+└── docs/
 ```
 
-## Lapisan per modul
+## Layers
 
 ```
 handler/     → HTTP, binding, status code
-usecase/     → business rules, validasi
-repository/  → SQLite (users, websites, cronjobs)
-infra/       → filesystem, nginx test, certbot, docker sock
+service/     → business rules, validation, orchestration
+repository/  → SQLite
+infra/       → nginx, job worker, exec, filesystem
 ```
 
-## Fase implementasi
+## Phase status
 
-### Fase 0 — Fondasi
+### Phase 0 — Foundation ✅
 
-| Task | Output |
-|------|--------|
-| Binary startup + config env | Baca `/storage/.env` atau flags |
-| SQLite connection | Compatible schema dengan legacy |
-| Health endpoint | `GET /health` |
-| Auth login/session | Ganti Laravel auth |
+| Task | Package |
+|------|-------|
+| `gosite init`, storage symlinks | `internal/bootstrap` |
+| SQLite migrate | `internal/repository/sqlite` |
+| Health | `handler/health` |
+| Auth session + basic auth | `internal/service/auth` |
 
-**Sequence acuan:** 01, 02, 03
+### Phase 1 — Website & nginx ✅
 
-### Fase 1 — Core panel
+| Task | Package |
+|------|-------|
+| Website CRUD + validate (no disk on validate) | `internal/service/website` |
+| Enable/disable + reload | `website` + `infra/nginx` |
+| Nginx edit global/default/site | `handler/nginx`, `handler/website` |
+| **Nginx auto-repair** | `infra/nginx/repair.go` |
 
-| Task | Output |
-|------|--------|
-| Dashboard APIs | system/info, network, nginx-traffic |
-| Website CRUD | create, read, update, delete |
-| Enable/disable | active.d symlink |
-| Nginx config edit + test + reload | |
+### Phase 2 — SSL & ops ✅ (core)
 
-**Sequence acuan:** 04, 05, 06, 07, 09
+| Task | Package |
+|------|-------|
+| SSL manual | `internal/service/ssl` |
+| Certbot job + SSE + prepareForCertbot | `ssl` + `infra/job` |
+| Docker, logs | `service/docker`, `service/logs` |
 
-### Fase 2 — SSL & ops
+### Phase 3 — Advanced ✅
 
-| Task | Output |
-|------|--------|
-| SSL manual upload | |
-| Certbot job + stream | |
-| Docker list/actions | |
-| Log viewer | |
+| Task | Package |
+|------|-------|
+| File manager | `service/files` |
+| Mount manager | `service/mount` |
+| Cron scheduler + worker SSE | `service/cron`, `infra/job` |
+| Splunk Lite, Grafana Lite | `observability/*` |
+| DB viewer | `service/database` |
 
-**Sequence acuan:** 08, 10, 15
+### Tidak ported / deprecated
 
-### Fase 3 — Advanced ops
+| Komponen | Notes |
+|----------|---------|
+| PHP settings / FPM | Not relevant without PHP panel |
+| Laravel Queue | Replaced by `job_runs` + worker |
+| Go TLS proxy :8080 | API + SPA di `gosite serve`; nginx edge |
 
-| Task | Output |
-|------|--------|
-| File manager | path allowlist ketat |
-| Mount manager | fstab CRUD |
-| Cron scheduler + worker | |
-| Settings (PHP/FPM) | evaluasi: masih perlu jika panel tanpa PHP? |
-| DB viewer | optional |
+## Production compatibility
 
-**Sequence acuan:** 11, 12, 13, 14, 16
-
-## Keputusan teknis yang ditunda
-
-| Topik | Opsi | Catatan |
-|-------|------|---------|
-| HTTP server | chi, echo, gin, std net/http | Pilih setelah API stabil |
-| SQLite | modernc.org/sqlite, mattn/go-sqlite3 | CGO vs pure Go |
-| Auth | JWT vs encrypted cookie | SPA-friendly |
-| Job queue | channel + worker vs redis | Single container cukup in-memory |
-| Docker | CLI vs official SDK | SDK lebih aman |
-| PHP settings | keep vs drop | Jika Go tidak pakai PHP panel, modul FPM bisa deprecated |
-
-## Kompatibilitas produksi
-
-Saat cutover:
+At cutover:
 
 1. Stop container bangunsite
-2. Mount `./data` yang sama
-3. Start gosite — baca `db.sqlite`, `site.d/`, `active.d/` existing
-4. Nginx config format **tidak berubah**
-5. Rollback: start bangunsite lama jika perlu
+2. Mount the same `./data`
+3. Start gosite — reads `db.sqlite`, `site.d/`, `active.d/` existing
+4. Nginx config format **unchanged**
+5. Rollback: start legacy bangunsite if needed
 
-## Testing per modul
+## Per-module testing
 
-Setiap sequence → minimal:
+Each sequence should have at minimum:
 
-- [ ] Unit test usecase (validasi, state transition)
-- [ ] Integration test dengan tmp dir (nginx -t mock)
-- [ ] Contract test API JSON schema
+- [ ] Unit tests for use cases (validation, state transitions)
+- [ ] Integration tests with tmp dir (nginx -t mock)
+- [ ] API JSON schema contract tests
 
 ## Dependency graph
 
@@ -126,4 +114,4 @@ flowchart TD
     mount --> files
 ```
 
-Implementasi mengikuti topological order di atas.
+Implementation follows the topological order above.

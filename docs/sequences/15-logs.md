@@ -1,62 +1,66 @@
 # Sequence: Log Viewer
 
-Membaca log nginx access/error per domain atau global.
+Tail nginx access/error log per domain or globally.
 
-**Routes:** `GET /admin/logs`, `GET /admin/logs/get`
+## GoSite (implementation)
 
-## List sites untuk filter
-
-```mermaid
-sequenceDiagram
-    actor User
-    participant LC as LogController
-    participant DB as websites
-
-    User->>LC: GET /admin/logs
-    LC->>DB: Website::orderBy(name)
-    LC-->>User: Blade dropdown domain + type
-```
-
-## Fetch log content
+**Package:** `internal/service/logs`
 
 ```mermaid
 sequenceDiagram
     actor User
-    participant LC as LogController
-    participant Log as Log library
+    participant UI as Logs view
+    participant H as LogsHandler
+    participant Svc as logs.Service
+    participant FS as /storage/logs
 
-    User->>LC: GET /admin/logs/get?domain=&type=accesslog|errorlog
-    LC->>LC: map type → access | error
-    alt domain != default
-        LC->>Log: readLog("{type}-{domain}.log", 1000)
-    else default
-        LC->>Log: readLog("{type}.log", 1000)
-    end
-    LC-->>User: plain text log (last 1000 lines)
+    User->>UI: Pilih site + type
+    UI->>H: GET /logs/sites
+    H->>Svc: ListSites()
+    H-->>UI: [{ domain, name }] from DB websites
+
+    UI->>H: GET /logs?domain=&type=access|error&tail=
+    H->>Svc: Tail(domain, type, tail)
+    Svc->>FS: read last N lines
+    H-->>UI: plain text
 ```
 
-## Path log
+### API
 
-| Log | Path |
-|-----|------|
-| Global access | `/storage/laravel/logs/access.log` |
-| Global error | `/storage/laravel/logs/error.log` |
-| Per domain access | `access-{domain}.log` |
-| Per domain error | `error-{domain}.log` |
+| Method | Path | Query |
+|--------|------|-------|
+| GET | `/logs/sites` | — |
+| GET | `/logs` | `domain`, `type` (`access`\|`error`), `tail` (default 1000) |
 
-## Traffic parsing (dashboard)
+### Path log
 
-`Log::accessTraffic()` — parse access log untuk statistik per site (dipakai API dashboard).
+Format `main` from `config/nginx/custom.d/nginx-log.conf`.
 
-## Implikasi GoSite
+| domain | Access | Error |
+|--------|--------|-------|
+| `default` | `/storage/logs/access.log` | `/storage/logs/error.log` |
+| `{domain}` | `access-{domain}.log` | `error-{domain}.log` |
 
-```
-GET /api/v1/logs/sites
-GET /api/v1/logs?domain=default&type=access&tail=1000
-```
+### Integrasi observability
 
-Opsional:
-- `GET /api/v1/logs/tail` — SSE follow mode
-- Filter level, search regex
+- **Splunk Lite** — ingest + query log events ([17-splunk-lite.md](./17-splunk-lite.md))
+- **Grafana Lite** — aggregate traffic from access log ([18-grafana-lite.md](./18-grafana-lite.md))
+- **Dashboard fallback** — `GET /system/nginx-traffic` parse access log langsung
 
-Frontend hanya render text/monospace — tidak ada preferensi framework.
+---
+
+## Legacy BangunSite
+
+<details>
+<summary>GET /admin/logs/get</summary>
+
+Sama konsep path; GoSite memakai REST + auth session.
+
+</details>
+
+## Code
+
+| File | Role |
+|------|-------|
+| `internal/service/logs/service.go` | Tail, list sites |
+| `internal/delivery/http/handler/logs.go` | HTTP |

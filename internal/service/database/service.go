@@ -92,6 +92,9 @@ func (s *Service) GetTable(ctx context.Context, name string, limit, offset int) 
 	if err != nil {
 		return TableData{}, apperror.Wrap(apperror.CodeDatabase, "read table columns failed", err)
 	}
+	if cols == nil {
+		cols = []string{}
+	}
 
 	query := fmt.Sprintf("SELECT * FROM %s LIMIT ? OFFSET ?", quoteIdent(name))
 	rows, err := s.db.QueryContext(ctx, query, limit, offset)
@@ -105,7 +108,7 @@ func (s *Service) GetTable(ctx context.Context, name string, limit, offset int) 
 		return TableData{}, apperror.Wrap(apperror.CodeDatabase, "read column types failed", err)
 	}
 
-	var outRows [][]any
+	var outRows = make([][]any, 0)
 	for rows.Next() {
 		values := make([]any, len(colTypes))
 		ptrs := make([]any, len(colTypes))

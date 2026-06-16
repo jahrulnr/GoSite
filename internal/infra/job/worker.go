@@ -89,20 +89,35 @@ func (w *Worker) process(ctx context.Context, id int64) {
 		return
 	}
 
-	if err := w.jobs.MarkRunning(ctx, id); err != nil {
+	output := fmt.Sprintf("$ %s\n", command)
+	if err := w.jobs.MarkRunningWithOutput(ctx, id, output); err != nil {
 		return
 	}
 
-	res, runErr := w.cmd.Run(ctx, "sh", "-c", command)
-	output := fmt.Sprintf("$ %s\n", command)
-	if strings.TrimSpace(res.Stdout) != "" {
-		output += strings.TrimSpace(res.Stdout)
-	}
-	if res.Stderr != "" {
-		if !strings.HasSuffix(output, "\n") && output != "" {
-			output += "\n"
+	var res contracts.CommandResult
+	var runErr error
+	if streaming, ok := w.cmd.(contracts.StreamingCommandRunner); ok {
+		res, runErr = streaming.RunStreaming(ctx, "sh", []string{"-c", command}, func(stream, chunk string) {
+			if stream == "stderr" {
+				chunk = "[stderr] " + chunk
+			}
+			_ = w.jobs.AppendOutput(ctx, id, chunk)
+		})
+		stored, err := w.jobs.FindByID(ctx, id)
+		if err == nil {
+			output = stored.Output
 		}
-		output += strings.TrimSpace(res.Stderr)
+	} else {
+		res, runErr = w.cmd.Run(ctx, "sh", "-c", command)
+		if strings.TrimSpace(res.Stdout) != "" {
+			output += strings.TrimSpace(res.Stdout)
+		}
+		if res.Stderr != "" {
+			if !strings.HasSuffix(output, "\n") && output != "" {
+				output += "\n"
+			}
+			output += strings.TrimSpace(res.Stderr)
+		}
 	}
 	if runErr != nil || res.ExitCode != 0 {
 		msg := strings.TrimSpace(res.Stderr)
@@ -125,6 +140,7 @@ func (w *Worker) StreamSSE(ctx context.Context, rw http.ResponseWriter, jobID in
 	rw.Header().Set("Content-Type", "text/event-stream")
 	rw.Header().Set("Cache-Control", "no-cache")
 	rw.Header().Set("Connection", "keep-alive")
+	rw.Header().Set("X-Accel-Buffering", "no")
 
 	lastLen := 0
 	for {
@@ -139,9 +155,14 @@ func (w *Worker) StreamSSE(ctx context.Context, rw http.ResponseWriter, jobID in
 			return apperror.Wrap(apperror.CodeNotFound, "job not found", err)
 		}
 
+		if job.Status == sqlite.JobStatusPending {
+			time.Sleep(20 * time.Millisecond)
+			continue
+		}
+
 		if len(job.Output) > lastLen {
 			chunk := job.Output[lastLen:]
-			fmt.Fprintf(rw, "data: %s\n\n", chunk)
+			writeSSEData(rw, chunk)
 			flusher.Flush()
 			lastLen = len(job.Output)
 		}
@@ -163,4 +184,17 @@ func (w *Worker) StreamSSE(ctx context.Context, rw http.ResponseWriter, jobID in
 
 		time.Sleep(20 * time.Millisecond)
 	}
+}
+
+func writeSSEData(w http.ResponseWriter, chunk string) {
+	if chunk == "" {
+		return
+	}
+	chunk = strings.ReplaceAll(chunk, "\r\n", "\n")
+	chunk = strings.ReplaceAll(chunk, "\r", "\n")
+	for _, line := range strings.SplitAfter(chunk, "\n") {
+		line = strings.TrimSuffix(line, "\n")
+		fmt.Fprintf(w, "data: %s\n", line)
+	}
+	fmt.Fprint(w, "\n")
 }

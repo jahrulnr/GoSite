@@ -33,6 +33,12 @@ func main() {
 			fmt.Fprintf(os.Stderr, "gosite migrate: %v\n", err)
 			os.Exit(1)
 		}
+	case "nginx-repair":
+		cfg := config.Load()
+		if err := app.RunNginxRepair(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "gosite nginx-repair: %v\n", err)
+			os.Exit(1)
+		}
 	case "-h", "--help", "help":
 		printUsage()
 		os.Exit(0)
@@ -71,7 +77,8 @@ func printUsage() {
 	fmt.Println(`gosite — BangunSite migration panel (Go backend)
 
 Usage:
-  gosite serve    Start HTTPS API server
-  gosite init     First-boot storage initialization
-  gosite migrate  Apply database migrations`)
+  gosite serve         Start HTTPS API server
+  gosite init          First-boot storage initialization
+  gosite migrate       Apply database migrations
+  gosite nginx-repair  Test nginx config and apply safe automatic fixes`)
 }

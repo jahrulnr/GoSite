@@ -119,7 +119,7 @@ func TestValidate_RejectsTraversal(t *testing.T) {
 	stack := testutil.SetupTestStack(t)
 	ctx := context.Background()
 
-	result := stack.WebsiteSvc.Validate(ctx, "bad.example.com", stack.WebRoot+"/../etc", 0)
+	result := validateStatic(stack, ctx, "bad.example.com", stack.WebRoot+"/../etc", 0)
 	assert.False(t, result.Valid)
 }
 
@@ -134,8 +134,30 @@ func TestValidate_RejectsDuplicatePath(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	result := stack.WebsiteSvc.Validate(ctx, "second.example.com", path, 0)
+	result := validateStatic(stack, ctx, "second.example.com", path, 0)
 	assert.False(t, result.Valid)
+}
+
+func TestTestNginxConfig_DoesNotWriteSiteD(t *testing.T) {
+	stack := testutil.SetupTestStack(t)
+	ctx := context.Background()
+
+	site, err := stack.WebsiteSvc.Create(ctx, website.CreateInput{
+		Domain: "test-nginx.example",
+		Path:   filepath.Join(stack.WebRoot, "test-nginx"),
+		Type:   sqlite.WebsiteTypeStatic,
+	})
+	require.NoError(t, err)
+
+	original, err := stack.Nginx.ReadSiteConfig(ctx, site.Domain)
+	require.NoError(t, err)
+
+	newContent := testutil.SampleNginxSiteConfig + "\n# dry-run marker"
+	require.NoError(t, stack.WebsiteSvc.TestNginxConfig(ctx, site.ID, newContent))
+
+	got, err := stack.Nginx.ReadSiteConfig(ctx, site.Domain)
+	require.NoError(t, err)
+	assert.Equal(t, original, got, "TestNginxConfig must not write site.d")
 }
 
 func TestUpdateNginxConfig_BackupAndReload(t *testing.T) {
@@ -154,6 +176,35 @@ func TestUpdateNginxConfig_BackupAndReload(t *testing.T) {
 	backups, err := os.ReadDir(stack.Nginx.Paths().Backups)
 	require.NoError(t, err)
 	assert.NotEmpty(t, backups)
+}
+
+func TestList_SyncsSSLFromNginxConfig(t *testing.T) {
+	stack := testutil.SetupTestStack(t)
+	ctx := context.Background()
+
+	site, err := stack.WebsiteSvc.Create(ctx, website.CreateInput{
+		Domain: "ssl-sync.example.com",
+		Path:   filepath.Join(stack.WebRoot, "ssl-sync"),
+	})
+	require.NoError(t, err)
+	require.False(t, site.SSL)
+
+	cfg := `server {
+	listen 443 ssl;
+	server_name ssl-sync.example.com;
+	ssl_certificate /etc/letsencrypt/live/ssl-sync.example.com/fullchain.pem;
+	ssl_certificate_key /etc/letsencrypt/live/ssl-sync.example.com/privkey.pem;
+}`
+	require.NoError(t, stack.Nginx.WriteSiteConfig(ctx, site.Domain, cfg))
+
+	list, err := stack.WebsiteSvc.List(ctx)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	assert.True(t, list[0].SSL)
+
+	got, err := stack.WebsiteSvc.Get(ctx, site.ID)
+	require.NoError(t, err)
+	assert.True(t, got.SSL)
 }
 
 func TestListAndGet(t *testing.T) {
@@ -247,6 +298,40 @@ func TestUpdate_ProxyRequiresUpstream(t *testing.T) {
 		Active: true,
 	})
 	require.Error(t, err)
+}
+
+func TestValidate_ProxyActiveRunsRenderedNginxTest(t *testing.T) {
+	stack := testutil.SetupTestStack(t)
+	stack.Cmd.NginxTestFail = true
+
+	result := stack.WebsiteSvc.Validate(context.Background(), website.ValidateInput{
+		Domain:   "validate-proxy.example.com",
+		Path:     filepath.Join(stack.WebRoot, "validate-proxy"),
+		Type:     sqlite.WebsiteTypeProxy,
+		Upstream: "http://127.0.0.1:8234",
+		Active:   true,
+	})
+
+	assert.False(t, result.Valid)
+	assert.Contains(t, result.Reason, "syntax error")
+}
+
+func TestValidate_ActiveDoesNotWriteSiteConfig(t *testing.T) {
+	stack := testutil.SetupTestStack(t)
+	domain := "validate-no-write.example.com"
+	sitePath := filepath.Join(stack.Nginx.Paths().SiteD, domain+".conf")
+
+	result := stack.WebsiteSvc.Validate(context.Background(), website.ValidateInput{
+		Domain:   domain,
+		Path:     filepath.Join(stack.WebRoot, "validate-no-write"),
+		Type:     sqlite.WebsiteTypeProxy,
+		Upstream: "http://127.0.0.1:8234",
+		Active:   true,
+	})
+	assert.True(t, result.Valid)
+
+	_, err := os.Stat(sitePath)
+	assert.True(t, os.IsNotExist(err), "validate must not write site.d config")
 }
 
 func TestGetNginxConfig_ReturnsContent(t *testing.T) {
@@ -345,7 +430,7 @@ func TestValidate_RejectsPathThatIsFile(t *testing.T) {
 	filePath := filepath.Join(stack.WebRoot, "file-not-dir")
 	require.NoError(t, os.WriteFile(filePath, []byte("x"), 0o644))
 
-	result := stack.WebsiteSvc.Validate(ctx, "file.example.com", filePath, 0)
+	result := validateStatic(stack, ctx, "file.example.com", filePath, 0)
 	assert.False(t, result.Valid)
 }
 
@@ -392,7 +477,7 @@ func TestCreate_WithCustomName(t *testing.T) {
 
 func TestValidate_AcceptsValidDomain(t *testing.T) {
 	stack := testutil.SetupTestStack(t)
-	result := stack.WebsiteSvc.Validate(context.Background(), "valid.example.com",
+	result := validateStatic(stack, context.Background(), "valid.example.com",
 		filepath.Join(stack.WebRoot, "valid"), 0)
 	assert.True(t, result.Valid)
 }
@@ -501,15 +586,58 @@ func TestToggle_ReloadFail_RollbackFromActive(t *testing.T) {
 
 func TestValidate_RejectsDoubleDotDomain(t *testing.T) {
 	stack := testutil.SetupTestStack(t)
-	result := stack.WebsiteSvc.Validate(context.Background(), "bad..example.com",
+	result := validateStatic(stack, context.Background(), "bad..example.com",
 		filepath.Join(stack.WebRoot, "bad-domain"), 0)
 	assert.False(t, result.Valid)
 }
 
 func TestValidate_RejectsEmptyPath(t *testing.T) {
 	stack := testutil.SetupTestStack(t)
-	result := stack.WebsiteSvc.Validate(context.Background(), "ok.example.com", "", 0)
+	result := validateStatic(stack, context.Background(), "ok.example.com", "", 0)
 	assert.False(t, result.Valid)
+}
+
+func TestValidate_RejectsSiblingPathWithSamePrefix(t *testing.T) {
+	stack := testutil.SetupTestStack(t)
+	result := validateStatic(stack, context.Background(), "sibling.example.com", stack.WebRoot+"-other/site", 0)
+	assert.False(t, result.Valid)
+}
+
+func TestCreate_RejectsInvalidWebsiteType(t *testing.T) {
+	stack := testutil.SetupTestStack(t)
+	_, err := stack.WebsiteSvc.Create(context.Background(), website.CreateInput{
+		Domain: "badtype.example.com",
+		Path:   filepath.Join(stack.WebRoot, "badtype"),
+		Type:   "proxy\nserver",
+	})
+	require.Error(t, err)
+}
+
+func TestCreate_RejectsUnsafeProxyUpstream(t *testing.T) {
+	stack := testutil.SetupTestStack(t)
+	_, err := stack.WebsiteSvc.Create(context.Background(), website.CreateInput{
+		Domain:   "unsafe-upstream.example.com",
+		Path:     filepath.Join(stack.WebRoot, "unsafe-upstream"),
+		Type:     sqlite.WebsiteTypeProxy,
+		Upstream: "http://127.0.0.1:9000; include /etc/passwd",
+	})
+	require.Error(t, err)
+}
+
+func TestValidate_RejectsHyphenEdgeDomainLabel(t *testing.T) {
+	stack := testutil.SetupTestStack(t)
+	result := validateStatic(stack, context.Background(), "-bad.example.com",
+		filepath.Join(stack.WebRoot, "bad-hyphen"), 0)
+	assert.False(t, result.Valid)
+}
+
+func validateStatic(stack *testutil.TestStack, ctx context.Context, domain, path string, excludeID int64) website.ValidateResult {
+	return stack.WebsiteSvc.Validate(ctx, website.ValidateInput{
+		Domain:    domain,
+		Path:      path,
+		Type:      sqlite.WebsiteTypeStatic,
+		ExcludeID: excludeID,
+	})
 }
 
 func TestList_MultipleSites(t *testing.T) {

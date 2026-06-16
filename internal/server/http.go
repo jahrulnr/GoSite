@@ -11,10 +11,10 @@ import (
 // HTTP serves handler over plain HTTP (for use behind a TLS-terminating reverse proxy).
 func HTTP(cfg config.Config, handler http.Handler) error {
 	server := &http.Server{
-		Addr:         cfg.ListenAddr,
-		Handler:      handler,
-		ReadTimeout:  60 * time.Second,
-		WriteTimeout: 60 * time.Second,
+		Addr:              cfg.ListenAddr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {

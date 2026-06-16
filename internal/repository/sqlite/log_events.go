@@ -72,6 +72,45 @@ func (r *LogEventRepository) InsertIgnore(ctx context.Context, ev LogEvent) erro
 	return nil
 }
 
+// InsertIgnoreBatch inserts many log event rows inside a single transaction
+// and silently ignores duplicate line hashes. It is significantly faster than
+// per-row InsertIgnore when the input is large because it amortizes the
+// per-statement commit cost.
+func (r *LogEventRepository) InsertIgnoreBatch(ctx context.Context, events []LogEvent) (int, error) {
+	if len(events) == 0 {
+		return 0, nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin tx: %w", err)
+	}
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT OR IGNORE INTO log_events (ts, source, site, status_code, bytes, line_hash, raw_preview)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		_ = tx.Rollback()
+		return 0, fmt.Errorf("prepare insert: %w", err)
+	}
+	defer stmt.Close()
+	inserted := 0
+	for _, ev := range events {
+		ts := ev.Timestamp
+		if ts.IsZero() {
+			ts = time.Now().UTC()
+		}
+		if _, err := stmt.ExecContext(ctx, ts, ev.Source, ev.Site, nullInt(ev.StatusCode), nullInt(ev.Bytes), ev.LineHash, ev.RawPreview); err != nil {
+			_ = tx.Rollback()
+			return inserted, fmt.Errorf("insert log event: %w", err)
+		}
+		inserted++
+	}
+	if err := tx.Commit(); err != nil {
+		return inserted, fmt.Errorf("commit: %w", err)
+	}
+	return inserted, nil
+}
+
 // LogEventFilter constrains log event queries.
 type LogEventFilter struct {
 	Source string

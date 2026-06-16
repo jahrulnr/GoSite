@@ -26,6 +26,7 @@ export function useAsync<T>(loader: (signal: AbortSignal) => Promise<T>, deps: u
     let active = true;
     setLoading(true);
     setError(undefined);
+    setData(undefined);
     loaderRef
       .current(ctrl.signal)
       .then((res) => {
@@ -57,12 +58,14 @@ export function useAction<TArgs extends unknown[], TResult>(
 ) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | Error>();
+  const fnRef = useRef(fn);
+  fnRef.current = fn;
   const run = useCallback(
     async (...args: TArgs): Promise<TResult | undefined> => {
       setLoading(true);
       setError(undefined);
       try {
-        return await fn(...args);
+        return await fnRef.current(...args);
       } catch (err) {
         setError(err as Error);
         throw err;
@@ -70,7 +73,6 @@ export function useAction<TArgs extends unknown[], TResult>(
         setLoading(false);
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
   return { run, loading, error };

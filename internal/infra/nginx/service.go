@@ -43,17 +43,20 @@ func (s *Service) Paths() Paths {
 	return s.paths
 }
 
-// TestConfig validates config content for a domain using an isolated nginx.conf clone.
+// TestConfig validates config content using an isolated nginx.conf clone.
+// The site config is written to a temp file only — site.d is not modified.
 func (s *Service) TestConfig(ctx context.Context, domain, content string) error {
-	if err := s.runner.WriteSiteConfig(ctx, domain, content); err != nil {
-		return apperror.Wrap(apperror.CodeNginxTestFailed, "write site config", err)
+	tmpSitePath := filepath.Join(os.TempDir(), fmt.Sprintf("nginx-site-test-%s-%d.conf", domain, time.Now().UnixNano()))
+	if err := os.WriteFile(tmpSitePath, []byte(content), 0o644); err != nil {
+		return apperror.Wrap(apperror.CodeNginxTestFailed, "write temp site config", err)
 	}
+	defer os.Remove(tmpSitePath)
 
 	baseConf, err := os.ReadFile(s.paths.NginxConf)
 	if err != nil {
 		return apperror.Wrap(apperror.CodeNginxTestFailed, "read nginx.conf", err)
 	}
-	adjusted := strings.Replace(string(baseConf), "site.d/*.conf", fmt.Sprintf("site.d/%s.conf", domain), 1)
+	adjusted := replaceSiteIncludeForTest(string(baseConf), s.paths.SiteD, tmpSitePath)
 	tmpPath := filepath.Join(os.TempDir(), fmt.Sprintf("nginx-test-%d.conf", time.Now().UnixNano()))
 	if err := os.WriteFile(tmpPath, []byte(adjusted), 0o644); err != nil {
 		return apperror.Wrap(apperror.CodeNginxTestFailed, "write temp nginx conf", err)
@@ -66,7 +69,7 @@ func (s *Service) TestConfig(ctx context.Context, domain, content string) error 
 	return s.runner.Test(ctx)
 }
 
-// TestRawConfig validates arbitrary nginx config content at a path.
+// TestRawConfig validates a full nginx.conf (events/http at top level).
 func (s *Service) TestRawConfig(ctx context.Context, content string) error {
 	tmpPath := filepath.Join(os.TempDir(), fmt.Sprintf("nginx-raw-%d.conf", time.Now().UnixNano()))
 	if err := os.WriteFile(tmpPath, []byte(content), 0o644); err != nil {
@@ -80,9 +83,93 @@ func (s *Service) TestRawConfig(ctx context.Context, content string) error {
 	return s.runner.Test(ctx)
 }
 
-// Reload reloads nginx.
+// TestDefaultConfig validates http.d/default.conf (a server block) inside a clone of the production nginx.conf.
+func (s *Service) TestDefaultConfig(ctx context.Context, content string) error {
+	tmpDefaultPath := filepath.Join(os.TempDir(), fmt.Sprintf("nginx-default-test-%d.conf", time.Now().UnixNano()))
+	if err := os.WriteFile(tmpDefaultPath, []byte(content), 0o644); err != nil {
+		return apperror.Wrap(apperror.CodeNginxTestFailed, "write temp default config", err)
+	}
+	defer os.Remove(tmpDefaultPath)
+
+	baseConf, err := os.ReadFile(s.paths.GlobalConf)
+	if err != nil {
+		return apperror.Wrap(apperror.CodeNginxTestFailed, "read nginx.conf", err)
+	}
+	httpDDdir := filepath.Dir(s.paths.DefaultConf)
+	adjusted := replaceHttpDIncludeForTest(string(baseConf), httpDDdir, tmpDefaultPath)
+	tmpPath := filepath.Join(os.TempDir(), fmt.Sprintf("nginx-test-%d.conf", time.Now().UnixNano()))
+	if err := os.WriteFile(tmpPath, []byte(adjusted), 0o644); err != nil {
+		return apperror.Wrap(apperror.CodeNginxTestFailed, "write temp nginx conf", err)
+	}
+	defer os.Remove(tmpPath)
+
+	if r, ok := s.runner.(*Runner); ok {
+		return r.TestWithConfig(ctx, tmpPath)
+	}
+	return s.runner.Test(ctx)
+}
+
+// Reload runs nginx -t with automatic repair, ensures nginx is running, then reloads.
 func (s *Service) Reload(ctx context.Context) error {
+	if _, err := s.TestAndRepair(ctx); err != nil {
+		return err
+	}
+	if err := s.EnsureRunning(ctx); err != nil {
+		return err
+	}
 	return s.runner.Reload(ctx)
+}
+
+// EnsureRunning starts nginx when the master process is not running.
+func (s *Service) EnsureRunning(ctx context.Context) error {
+	if _, ok := s.runner.(*NoopReloadRunner); ok {
+		return nil
+	}
+	r, ok := s.repairableRunner()
+	if !ok {
+		return nil
+	}
+	return r.Start(ctx)
+}
+
+// TestAndRepair runs nginx -t and applies safe automatic fixes.
+func (s *Service) TestAndRepair(ctx context.Context) ([]RepairAction, error) {
+	if r, ok := s.repairableRunner(); ok {
+		return r.TestAndRepair(ctx, s.repairConfig())
+	}
+	if err := s.runner.Test(ctx); err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
+func (s *Service) repairableRunner() (*Runner, bool) {
+	switch r := s.runner.(type) {
+	case *Runner:
+		return r, true
+	case *NoopReloadRunner:
+		return r.InnerRunner()
+	default:
+		return nil, false
+	}
+}
+
+func (s *Service) repairConfig() RepairConfig {
+	nginxDir := filepath.Dir(s.paths.GlobalConf)
+	return RepairConfig{
+		DefaultCert: filepath.Join(s.paths.SSLDefaultDir, "cert.pem"),
+		DefaultKey:  filepath.Join(s.paths.SSLDefaultDir, "key.pem"),
+		AllowPrefixes: []string{
+			s.paths.SiteD,
+			s.paths.ActiveD,
+			s.paths.GlobalConf,
+			s.paths.DefaultConf,
+			nginxDir,
+			filepath.Join(s.paths.Storage, "webconfig"),
+			filepath.Join(s.paths.Storage, "nginx"),
+		},
+		MaxAttempts: 8,
+	}
 }
 
 // BackupSiteConfig backs up site.d config to webconfig/backups/.
@@ -207,7 +294,7 @@ func (s *Service) UpdateGlobalConfig(ctx context.Context, content string) error 
 // UpdateDefaultConfig tests and writes default server config.
 func (s *Service) UpdateDefaultConfig(ctx context.Context, content string) error {
 	original, _ := s.ReadDefaultConfig()
-	if err := s.TestRawConfig(ctx, content); err != nil {
+	if err := s.TestDefaultConfig(ctx, content); err != nil {
 		return err
 	}
 	if err := os.WriteFile(s.paths.DefaultConf, []byte(content), 0o644); err != nil {
@@ -248,4 +335,33 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	return os.WriteFile(dst, data, 0o644)
+}
+
+// replaceHttpDIncludeForTest swaps the http.d glob include with an absolute temp default config path.
+func replaceHttpDIncludeForTest(baseConf, httpDDdir, defaultConfigPath string) string {
+	httpGlob := filepath.ToSlash(filepath.Join(httpDDdir, "*.conf"))
+	tmpDefault := filepath.ToSlash(defaultConfigPath)
+	if strings.Contains(baseConf, httpGlob) {
+		return strings.Replace(baseConf, httpGlob, tmpDefault, 1)
+	}
+	legacyGlob := "/etc/nginx/http.d/*.conf"
+	if strings.Contains(baseConf, legacyGlob) {
+		return strings.Replace(baseConf, legacyGlob, tmpDefault, 1)
+	}
+	return strings.Replace(baseConf, "http.d/*.conf", tmpDefault, 1)
+}
+
+// replaceSiteIncludeForTest swaps the site.d glob include with an absolute temp config path.
+func replaceSiteIncludeForTest(baseConf, siteD, siteConfigPath string) string {
+	siteGlob := filepath.ToSlash(filepath.Join(siteD, "*.conf"))
+	tmpSite := filepath.ToSlash(siteConfigPath)
+	if strings.Contains(baseConf, siteGlob) {
+		return strings.Replace(baseConf, siteGlob, tmpSite, 1)
+	}
+	// webconfig/nginx.conf ships with a fixed storage prefix; fall back when siteD differs (tests).
+	legacyGlob := "/storage/webconfig/site.d/*.conf"
+	if strings.Contains(baseConf, legacyGlob) {
+		return strings.Replace(baseConf, legacyGlob, tmpSite, 1)
+	}
+	return strings.Replace(baseConf, "site.d/*.conf", tmpSite, 1)
 }

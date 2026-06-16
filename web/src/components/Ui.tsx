@@ -152,20 +152,35 @@ export function Modal({
 
 export function Toasts() {
   const { toasts, dismissToast } = useStore();
-  if (toasts.length === 0) return null;
+  const ref = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const dlg = ref.current;
+    if (!dlg) return;
+    if (toasts.length > 0) {
+      // Re-open so this layer stays above any modal opened earlier.
+      if (dlg.open) dlg.close();
+      dlg.show();
+    } else if (dlg.open) {
+      dlg.close();
+    }
+  }, [toasts]);
+
   return (
-    <div class="toasts">
-      {toasts.map((t) => (
-        <button
-          type="button"
-          key={t.id}
-          class={`toast ${t.kind === 'error' ? 'error' : ''}`}
-          onClick={() => dismissToast(t.id)}
-        >
-          {t.message}
-        </button>
-      ))}
-    </div>
+    <dialog ref={ref} class="toast-layer" aria-live="polite" aria-label="Notifications">
+      <div class="toasts">
+        {toasts.map((t) => (
+          <button
+            type="button"
+            key={t.id}
+            class={`toast ${t.kind === 'error' ? 'error' : ''}`}
+            onClick={() => dismissToast(t.id)}
+          >
+            {t.message}
+          </button>
+        ))}
+      </div>
+    </dialog>
   );
 }
 

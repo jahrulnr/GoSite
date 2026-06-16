@@ -42,16 +42,28 @@ type Config struct {
 	SessionCookieSecure  bool
 	TLSEnable            bool
 	CORSOrigins          []string
+
+	// Terminal (xterm.js floating window).
+	TerminalStickyTTL  time.Duration
+	TerminalDumpDir    string
+	TerminalDumpMax    int64
+	TerminalPerUserMax int
+}
+
+// LogsDir returns the centralized nginx and app log directory.
+func (c Config) LogsDir() string {
+	return filepath.Join(c.Storage, "logs")
 }
 
 // StorageLayout returns persistent directories created during bootstrap.
 func (c Config) StorageLayout() []string {
 	return []string{
-		filepath.Join(c.Storage, "laravel", "logs"),
+		c.LogsDir(),
 		filepath.Join(c.Storage, "www"),
 		filepath.Join(c.Storage, "webconfig", "site.d"),
 		filepath.Join(c.Storage, "webconfig", "active.d"),
 		filepath.Join(c.Storage, "webconfig", "ssl", "live", "default"),
+		filepath.Join(c.Storage, "mount-secrets"),
 	}
 }
 
@@ -93,7 +105,24 @@ func Load() Config {
 		SessionCookieSecure: envBool("SESSION_COOKIE_SECURE", true),
 		TLSEnable:           envBool("TLS_ENABLE", true),
 		CORSOrigins:         splitCSV(envOr("CORS_ORIGINS", "")),
+
+		TerminalStickyTTL:  envDuration("TERMINAL_STICKY_TTL", 12*time.Hour),
+		TerminalDumpDir:    envOr("TERMINAL_DUMP_DIR", "/tmp"),
+		TerminalDumpMax:    int64(envInt("TERMINAL_DUMP_MAX", 256*1024)),
+		TerminalPerUserMax: envInt("TERMINAL_PER_USER_MAX", 8),
 	}
+}
+
+func envDuration(key string, fallback time.Duration) time.Duration {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return fallback
+	}
+	parsed, err := time.ParseDuration(v)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }
 
 func splitCSV(s string) []string {

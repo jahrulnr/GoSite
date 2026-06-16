@@ -1,48 +1,52 @@
 # Sequence Diagrams — Index
 
-Setiap file berisi diagram Mermaid berdasarkan implementasi aktual di `/apps/profile/bangunsite`.
+GoSite feature flow diagrams. **Legacy BangunSite** sections (if any) are kept as migration reference.
 
-## Runtime & infrastruktur
+## Runtime & infrastructure
 
-| # | File | Fitur |
-|---|------|-------|
-| 01 | [01-container-startup.md](./01-container-startup.md) | First boot & supervisor |
-| 02 | [02-tls-proxy.md](./02-tls-proxy.md) | Go proxy panel :8080 |
+| # | File | Feature | Status |
+|---|------|-------|--------|
+| 01 | [01-container-startup.md](./01-container-startup.md) | `start.sh`, `gosite init`, nginx-repair | ✅ |
+| 02 | [02-tls-proxy.md](./02-tls-proxy.md) | Panel routing nginx → gosite | ✅ |
 
 ## Auth & monitoring
 
-| # | File | Fitur |
-|---|------|-------|
-| 03 | [03-authentication.md](./03-authentication.md) | Basic auth, login, lockscreen |
-| 04 | [04-dashboard.md](./04-dashboard.md) | Dashboard + API polling |
+| # | File | Feature | Status |
+|---|------|-------|--------|
+| 03 | [03-authentication.md](./03-authentication.md) | Basic auth + session + lockscreen | ✅ |
+| 04 | [04-dashboard.md](./04-dashboard.md) | Dashboard aggregate + system APIs | ✅ |
 
 ## Website, nginx, SSL
 
-| # | File | Fitur |
-|---|------|-------|
-| 05 | [05-website-create.md](./05-website-create.md) | Buat website + generate vhost |
-| 06 | [06-website-enable-disable.md](./06-website-enable-disable.md) | Toggle active.d symlink |
-| 07 | [07-website-nginx-config.md](./07-website-nginx-config.md) | Edit & test nginx config |
-| 08 | [08-website-ssl.md](./08-website-ssl.md) | Certbot & manual SSL |
-| 09 | [09-website-delete.md](./09-website-delete.md) | Hapus site |
+| # | File | Feature | Status |
+|---|------|-------|--------|
+| 05 | [05-website-create.md](./05-website-create.md) | Create + validate dry-run | ✅ |
+| 06 | [06-website-enable-disable.md](./06-website-enable-disable.md) | Toggle + reload + repair | ✅ |
+| 07 | [07-website-nginx-config.md](./07-website-nginx-config.md) | Edit & test nginx config | ✅ |
+| 08 | [08-website-ssl.md](./08-website-ssl.md) | Certbot job + SSE, manual SSL | ✅ |
+| 09 | [09-website-delete.md](./09-website-delete.md) | Delete + clean flag | ✅ |
+| — | [../nginx-repair.md](../nginx-repair.md) | Auto-repair sebelum reload | ✅ |
 
-## Operasional server
+## Server operations
 
-| # | File | Fitur |
-|---|------|-------|
-| 10 | [10-docker.md](./10-docker.md) | Kelola container |
-| 11 | [11-file-manager.md](./11-file-manager.md) | Browse & manipulasi file |
-| 12 | [12-mount-manager.md](./12-mount-manager.md) | fstab & mount |
-| 13 | [13-cron-jobs.md](./13-cron-jobs.md) | Scheduler & manual run |
-| 14 | [14-settings.md](./14-settings.md) | Profile & PHP/FPM |
-| 15 | [15-logs.md](./15-logs.md) | Log viewer |
-| 16 | [16-database-viewer.md](./16-database-viewer.md) | SQLite admin |
-| 17 | [17-splunk-lite.md](./17-splunk-lite.md) | Splunk Lite query |
-| 18 | [18-grafana-lite.md](./18-grafana-lite.md) | Grafana Lite metrics |
+| # | File | Feature | Status |
+|---|------|-------|--------|
+| 10 | [10-docker.md](./10-docker.md) | Docker Engine API | ✅ |
+| 11 | [11-file-manager.md](./11-file-manager.md) | Files + batch ops | ✅ |
+| 12 | [12-mount-manager.md](./12-mount-manager.md) | fstab + S3 secrets | ✅ |
+| 13 | [13-cron-jobs.md](./13-cron-jobs.md) | Scheduler + SSE manual run | ✅ |
+| 14 | [14-settings.md](./14-settings.md) | Profile only (PHP dropped) | ✅ |
+| 15 | [15-logs.md](./15-logs.md) | Log tail viewer | ✅ |
+| 16 | [16-database-viewer.md](./16-database-viewer.md) | SQLite read-only | ✅ |
+| 17 | [17-splunk-lite.md](./17-splunk-lite.md) | Audit + log query | ✅ |
+| 18 | [18-grafana-lite.md](./18-grafana-lite.md) | Traffic metrics | ✅ |
 
-## Cara pakai untuk migrasi
+## Wiki GitHub
 
-1. Baca sequence modul yang akan diimplementasi di Go
-2. Cocokkan dengan endpoint di [api-inventory.md](../api-inventory.md)
-3. Tandai side-effect OS (shell, symlink, reload) di infrastructure layer
-4. Frontend nanti hanya mengikuti API — tidak perlu tahu nginx/certbot detail
+Wiki page layout: [../wiki.md](../wiki.md).
+
+## Cara pakai
+
+1. Read the relevant sequence module
+2. Cross-check with [api-inventory.md](../api-inventory.md) and `api/openapi.yaml`
+3. For nginx/SSL: [nginx-repair.md](../nginx-repair.md)

@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jahrulnr/gosite/internal/observability/grafanalite"
@@ -44,18 +46,190 @@ func (h *ObservabilityHandler) Query(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	if h.ingestor != nil {
+	h.query(w, r, req)
+}
+
+// QueryGet handles GET /query. It supports batch JSON by default and one-shot
+// streams when the client requests text/event-stream, application/x-ndjson, or
+// passes stream=sse|ndjson.
+func (h *ObservabilityHandler) QueryGet(w http.ResponseWriter, r *http.Request) {
+	req, err := queryRequestFromURL(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if mode := queryStreamMode(r); mode != "" {
+		h.queryStream(w, r, req, mode)
+		return
+	}
+	h.query(w, r, req)
+}
+
+func (h *ObservabilityHandler) query(w http.ResponseWriter, r *http.Request, req splunklite.QueryRequest) {
+	started := time.Now()
+	ingestMs := int64(0)
+	queryMs := int64(0)
+	status := "ok"
+	defer func() {
+		slog.Info("observability query",
+			"status", status,
+			"source", req.Source,
+			"q", req.Query,
+			"site", req.Site,
+			"limit", req.Limit,
+			"offset", req.Offset,
+			"ingest_ms", ingestMs,
+			"query_ms", queryMs,
+			"total_ms", time.Since(started).Milliseconds(),
+		)
+	}()
+
+	if h.ingestor != nil && shouldIngestLogs(req.Source) {
+		phase := time.Now()
 		if err := h.ingestor.Ingest(r.Context()); err != nil {
+			ingestMs = time.Since(phase).Milliseconds()
+			status = "ingest_error"
 			writeError(w, err)
+			return
+		}
+		ingestMs = time.Since(phase).Milliseconds()
+	}
+	phase := time.Now()
+	res, err := h.splunk.Query(r.Context(), req)
+	queryMs = time.Since(phase).Milliseconds()
+	if err != nil {
+		status = "query_error"
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+func shouldIngestLogs(source string) bool {
+	switch strings.ToLower(strings.TrimSpace(source)) {
+	case "", splunklite.SourceAll, splunklite.SourceAccess, splunklite.SourceError:
+		return true
+	default:
+		return false
+	}
+}
+
+type queryStreamFrame struct {
+	Type  string                 `json:"type"`
+	Hits  int                    `json:"hits,omitempty"`
+	Event *splunklite.QueryEvent `json:"event,omitempty"`
+	Error interface{}            `json:"error,omitempty"`
+}
+
+func (h *ObservabilityHandler) queryStream(w http.ResponseWriter, r *http.Request, req splunklite.QueryRequest, mode string) {
+	flusher, _ := w.(http.Flusher)
+	if mode == "ndjson" {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+	} else {
+		w.Header().Set("Content-Type", "text/event-stream")
+	}
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+
+	emit := func(frame queryStreamFrame) bool {
+		data, err := json.Marshal(frame)
+		if err != nil {
+			return true
+		}
+		if mode == "ndjson" {
+			_, err = fmt.Fprintf(w, "%s\n", data)
+		} else if frame.Type == "error" {
+			_, err = fmt.Fprintf(w, "event: error\ndata: %s\n\n", data)
+		} else {
+			_, err = fmt.Fprintf(w, "data: %s\n\n", data)
+		}
+		if err != nil {
+			return false
+		}
+		if flusher != nil {
+			flusher.Flush()
+		}
+		return true
+	}
+
+	if h.ingestor != nil && shouldIngestLogs(req.Source) {
+		if !emit(queryStreamFrame{Type: "ingesting"}) {
+			return
+		}
+		if err := h.ingestor.Ingest(r.Context()); err != nil {
+			emit(queryStreamFrame{Type: "error", Error: apperror.From(err).Body().Error})
 			return
 		}
 	}
 	res, err := h.splunk.Query(r.Context(), req)
 	if err != nil {
-		writeError(w, err)
+		emit(queryStreamFrame{Type: "error", Error: apperror.From(err).Body().Error})
 		return
 	}
-	writeJSON(w, http.StatusOK, res)
+	if !emit(queryStreamFrame{Type: "meta", Hits: res.Hits}) {
+		return
+	}
+	for _, ev := range res.Events {
+		event := ev
+		if !emit(queryStreamFrame{Type: "event", Event: &event}) {
+			return
+		}
+	}
+	emit(queryStreamFrame{Type: "done"})
+}
+
+func queryRequestFromURL(r *http.Request) (splunklite.QueryRequest, error) {
+	q := r.URL.Query()
+	req := splunklite.QueryRequest{
+		Source: q.Get("source"),
+		Site:   q.Get("site"),
+		Query:  q.Get("q"),
+		Limit:  queryInt(r, "limit", 100),
+		Offset: queryInt(r, "offset", 0),
+	}
+	if raw := strings.TrimSpace(q.Get("from")); raw != "" {
+		from, err := parseQueryTime(raw)
+		if err != nil {
+			return req, apperror.Wrap(apperror.CodeInvalidInput, "invalid from", err)
+		}
+		req.From = &from
+	}
+	if raw := strings.TrimSpace(q.Get("to")); raw != "" {
+		to, err := parseQueryTime(raw)
+		if err != nil {
+			return req, apperror.Wrap(apperror.CodeInvalidInput, "invalid to", err)
+		}
+		req.To = &to
+	}
+	return req, nil
+}
+
+func parseQueryTime(raw string) (time.Time, error) {
+	if strings.EqualFold(raw, "now") {
+		return time.Now().UTC(), nil
+	}
+	return time.Parse(time.RFC3339, raw)
+}
+
+func queryStreamMode(r *http.Request) string {
+	s := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("stream")))
+	if s == "sse" || s == "1" || s == "true" {
+		return "sse"
+	}
+	if s == "ndjson" || s == "jsonl" {
+		return "ndjson"
+	}
+	accept := strings.ToLower(r.Header.Get("Accept"))
+	switch {
+	case strings.Contains(accept, "application/x-ndjson") || strings.Contains(accept, "application/jsonl"):
+		return "ndjson"
+	case strings.Contains(accept, "text/event-stream"):
+		return "sse"
+	default:
+		return ""
+	}
 }
 
 type savedQueryJSON struct {
@@ -161,6 +335,7 @@ func (h *ObservabilityHandler) DeleteSavedQuery(w http.ResponseWriter, r *http.R
 func (h *ObservabilityHandler) Tail(w http.ResponseWriter, r *http.Request) {
 	source := r.URL.Query().Get("source")
 	site := r.URL.Query().Get("site")
+	query := r.URL.Query().Get("q")
 
 	flusher, _ := w.(http.Flusher)
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -170,6 +345,17 @@ func (h *ObservabilityHandler) Tail(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if flusher != nil {
 		flusher.Flush()
+	}
+
+	// Long-lived SSE: the server's WriteTimeout would otherwise close the
+	// connection after the global default once the stream goes idle. Clear
+	// the write deadline so Tail can stay open for the entire browser
+	// session. ReadTimeout is irrelevant for SSE since we never read the
+	// body after the request is dispatched.
+	if rc, ok := w.(interface {
+		SetWriteDeadline(time.Time) error
+	}); ok {
+		_ = rc.SetWriteDeadline(time.Time{})
 	}
 
 	ctx, cancel := contextWithClient(r)
@@ -182,10 +368,19 @@ func (h *ObservabilityHandler) Tail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// If the browser reconnects with a Last-Event-ID, pass it through to the
+	// tail so we resume exactly from that point instead of replaying the
+	// full window. Last-Event-ID is the standard SSE resume token; the
+	// browser sends it automatically when we emit `id:` lines below.
+	var resumeFrom string
+	if v := r.Header.Get("Last-Event-ID"); v != "" {
+		resumeFrom = v
+	}
+
 	ch := make(chan splunklite.QueryEvent, 64)
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- h.splunk.Tail(ctx, source, site, ch)
+		errCh <- h.splunk.TailQuery(ctx, source, site, query, ch, resumeFrom)
 	}()
 
 	keepalive := time.NewTicker(15 * time.Second)
@@ -209,6 +404,15 @@ func (h *ObservabilityHandler) Tail(w http.ResponseWriter, r *http.Request) {
 			data, err := json.Marshal(ev)
 			if err != nil {
 				continue
+			}
+			// Emit the event id so the browser includes it in the
+			// Last-Event-ID header on the next reconnect, letting us
+			// resume exactly from this event (no replay of the
+			// already-shipped backlog).
+			if ev.ID != "" {
+				if _, err := fmt.Fprintf(w, "id: %s\n", ev.ID); err != nil {
+					return
+				}
 			}
 			if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
 				return

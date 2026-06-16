@@ -1,17 +1,22 @@
-import { useEffect, useState } from 'preact/hooks';
 import { nginx } from '../api/endpoints';
 import { IconEdit, IconRefresh, IconShield } from '../components/Icons';
-import { EmptyState, ErrorState, Loading, Spinner } from '../components/Ui';
+import { CodeEditor } from '../components/CodeEditor';
+import { ErrorState, Loading, Spinner } from '../components/Ui';
 import { Card, Page } from '../components/Layout';
+import { humanizeError } from '../lib/errors';
 import { useAction, useAsync } from '../lib/hooks';
+import { validateDefaultNginx, validateGlobalNginx } from '../lib/nginxValidate';
+import { useStore } from '../lib/store';
+import { useEffect, useState } from 'preact/hooks';
 
 export function NginxView() {
+  const { toast } = useStore();
   const defaultConfig = useAsync(() => nginx.getDefault());
   const globalConfig = useAsync(() => nginx.getGlobal());
   const [tab, setTab] = useState<'default' | 'global'>('default');
   const [defaultText, setDefaultText] = useState('');
   const [globalText, setGlobalText] = useState('');
-  const test = useAction(() => nginx.test(tab === 'default' ? defaultText : globalText));
+  const test = useAction(() => nginx.test(tab === 'default' ? defaultText : globalText, tab));
   const saveDefault = useAction(() => nginx.updateDefault(defaultText));
   const saveGlobal = useAction(() => nginx.updateGlobal(globalText));
   const reload = useAction(nginx.reload);
@@ -27,9 +32,32 @@ export function NginxView() {
     if (globalConfig.data !== undefined) setGlobalText(globalConfig.data);
   }, [globalConfig.data]);
 
+  const onTest = async () => {
+    try {
+      await test.run();
+      toast('Configuration syntax OK');
+    } catch (err) {
+      toast(humanizeError(err as Error), 'error');
+    }
+  };
+
   const save = async () => {
-    if (tab === 'default') await saveDefault.run();
-    else await saveGlobal.run();
+    try {
+      if (tab === 'default') await saveDefault.run();
+      else await saveGlobal.run();
+      toast(tab === 'default' ? 'default.conf saved' : 'nginx.conf saved');
+    } catch (err) {
+      toast(humanizeError(err as Error), 'error');
+    }
+  };
+
+  const onReload = async () => {
+    try {
+      await reload.run();
+      toast('Nginx reloaded');
+    } catch (err) {
+      toast(humanizeError(err as Error), 'error');
+    }
   };
 
   return (
@@ -39,9 +67,9 @@ export function NginxView() {
       eyebrow="config"
       actions={
         <>
-          <button type="button" class="btn" onClick={() => test.run()}>{test.loading ? <Spinner /> : <><IconShield /> Test</>}</button>
+          <button type="button" class="btn" onClick={onTest}>{test.loading ? <Spinner /> : <><IconShield /> Test</>}</button>
           <button type="button" class="btn" onClick={save}>{saveDefault.loading || saveGlobal.loading ? <Spinner /> : <><IconEdit /> Save</>}</button>
-          <button type="button" class="btn primary" onClick={() => reload.run()}>{reload.loading ? <Spinner /> : <><IconRefresh /> Reload</>}</button>
+          <button type="button" class="btn primary" onClick={onReload}>{reload.loading ? <Spinner /> : <><IconRefresh /> Reload</>}</button>
         </>
       }
     >
@@ -59,14 +87,14 @@ export function NginxView() {
         </Card>
       ) : (
         <Card title={tab === 'default' ? 'default.conf' : 'nginx.conf'} actions={<span class="dim mono" style="font-size:11px;">{activeText.length} chars</span>}>
-          {!activeText.trim() && (
-            <EmptyState title="No configuration loaded" hint="Paste or type nginx configuration in the editor below." />
-          )}
-          <textarea
-            class="textarea config-editor"
+          <CodeEditor
+            key={tab}
             value={activeText}
-            placeholder="# nginx configuration block"
-            onInput={(e) => setActiveText((e.target as HTMLTextAreaElement).value)}
+            onChange={setActiveText}
+            language="nginx"
+            className="config-editor"
+            placeholder="# nginx configuration"
+            onValidate={tab === 'default' ? validateDefaultNginx : validateGlobalNginx}
           />
         </Card>
       )}

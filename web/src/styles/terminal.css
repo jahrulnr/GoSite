@@ -1,0 +1,235 @@
+/* =====================================================================
+   GoSite — Floating Terminal
+   Topbar launcher, floating window, xterm.js theme.
+   ===================================================================== */
+
+/* Topbar icon button — generic, shared with the existing topbar styles. */
+.topbar-icon-btn--terminal {
+  position: relative;
+}
+
+.topbar-icon-btn--terminal[data-active="true"]::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent, oklch(72% 0.18 145));
+  box-shadow: 0 0 0 2px oklch(13% 0.022 245);
+}
+
+/* Floating terminal window — dragger, resizer, role badge. */
+.terminal-window {
+  position: fixed;
+  z-index: 1000;
+  background: oklch(11% 0.018 250);
+  color: oklch(94% 0.012 250);
+  border: 1px solid var(--border, oklch(28% 0.020 250));
+  border-radius: 10px;
+  box-shadow: 0 22px 48px -16px rgba(0, 0, 0, 0.55), 0 6px 14px -8px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  min-width: 320px;
+  min-height: 200px;
+  overflow: hidden;
+  font: 13px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.terminal-window[data-state="minimized"] .terminal-window__body,
+.terminal-window[data-state="minimized"] .terminal-window__resize {
+  display: none;
+}
+
+.terminal-window[data-state="maximized"] {
+  top: 56px !important;
+  left: 12px !important;
+  width: calc(100vw - 24px) !important;
+  height: calc(100vh - 68px) !important;
+}
+
+.terminal-window__titlebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: oklch(15% 0.020 250);
+  border-bottom: 1px solid oklch(25% 0.020 250);
+  cursor: grab;
+  user-select: none;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.terminal-window__titlebar:active {
+  cursor: grabbing;
+}
+
+.terminal-window__title {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.terminal-window__role {
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: oklch(28% 0.060 250);
+  color: oklch(94% 0.012 250);
+}
+
+.terminal-window__role[data-role="writer"] {
+  background: oklch(60% 0.18 145);
+  color: oklch(15% 0.020 145);
+}
+
+.terminal-window__role[data-role="reader"] {
+  background: oklch(45% 0.060 250);
+  color: oklch(94% 0.012 250);
+}
+
+.terminal-window__actions {
+  display: flex;
+  gap: 4px;
+}
+
+.terminal-window__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.terminal-window__action:hover {
+  background: oklch(22% 0.022 250);
+}
+
+.terminal-window__body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  background: oklch(8% 0.015 250);
+}
+
+.terminal-window__pane {
+  position: absolute;
+  inset: 0;
+}
+
+.terminal-window__status {
+  position: absolute;
+  bottom: 4px;
+  right: 8px;
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: oklch(70% 0.020 250);
+  background: rgba(0, 0, 0, 0.35);
+  padding: 2px 6px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.terminal-window__status[data-state="connected"] {
+  color: oklch(85% 0.18 145);
+}
+
+.terminal-window__status[data-state="reconnecting"] {
+  color: oklch(82% 0.18 80);
+}
+
+.terminal-window__status[data-state="error"] {
+  color: oklch(82% 0.20 25);
+}
+
+/* Resize handles (8 directions). */
+.terminal-window__resize {
+  position: absolute;
+  z-index: 2;
+  background: transparent;
+}
+
+.terminal-window__resize[data-dir="n"] { top: -3px; left: 8px; right: 8px; height: 6px; cursor: ns-resize; }
+.terminal-window__resize[data-dir="s"] { bottom: -3px; left: 8px; right: 8px; height: 6px; cursor: ns-resize; }
+.terminal-window__resize[data-dir="e"] { top: 8px; bottom: 8px; right: -3px; width: 6px; cursor: ew-resize; }
+.terminal-window__resize[data-dir="w"] { top: 8px; bottom: 8px; left: -3px; width: 6px; cursor: ew-resize; }
+.terminal-window__resize[data-dir="ne"] { top: -3px; right: -3px; width: 12px; height: 12px; cursor: nesw-resize; }
+.terminal-window__resize[data-dir="nw"] { top: -3px; left: -3px; width: 12px; height: 12px; cursor: nwse-resize; }
+.terminal-window__resize[data-dir="se"] { bottom: -3px; right: -3px; width: 12px; height: 12px; cursor: nwse-resize; }
+.terminal-window__resize[data-dir="sw"] { bottom: -3px; left: -3px; width: 12px; height: 12px; cursor: nesw-resize; }
+
+/* Sessions rail — vertical list of available sessions on the left edge of
+   the terminal window. Hidden when only one session is active. */
+.terminal-window__rail {
+  width: 36px;
+  background: oklch(13% 0.020 250);
+  border-right: 1px solid oklch(25% 0.020 250);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 0;
+  gap: 4px;
+}
+
+.terminal-window__rail-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  position: relative;
+}
+
+.terminal-window__rail-btn:hover {
+  background: oklch(22% 0.022 250);
+}
+
+.terminal-window__rail-btn[data-active="true"] {
+  background: oklch(60% 0.18 145);
+  color: oklch(15% 0.020 145);
+}
+
+.terminal-window__layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.terminal-window__layout[data-rail="false"] .terminal-window__rail {
+  display: none;
+}
+
+/* xterm.js overrides. xterm applies its own styles via inline <style> tags;
+   we only customize the canvas background and the focus outline. */
+.terminal-window .xterm,
+.terminal-window .xterm-viewport {
+  background: transparent !important;
+}
+
+.terminal-window .xterm-viewport::-webkit-scrollbar {
+  width: 8px;
+}
+
+.terminal-window .xterm-viewport::-webkit-scrollbar-thumb {
+  background: oklch(35% 0.020 250);
+  border-radius: 4px;
+}

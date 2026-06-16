@@ -70,6 +70,14 @@ func TestQueryParser_Empty(t *testing.T) {
 	assert.Nil(t, clauses)
 }
 
+func TestQueryParser_StarMatchesAll(t *testing.T) {
+	t.Parallel()
+
+	clauses, err := splunklite.ParseQuery("*")
+	require.NoError(t, err)
+	assert.Nil(t, clauses)
+}
+
 func TestQueryParser_FreeText(t *testing.T) {
 	t.Parallel()
 
@@ -498,7 +506,14 @@ func TestTail_StreamsEvents(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
 	defer cancel()
 
-	// Pre-seed 3 events before Tail starts so they appear in the first poll.
+	ch := make(chan splunklite.QueryEvent, 16)
+	tailErr := make(chan error, 1)
+	go func() { tailErr <- env.svc.Tail(ctx, "audit", "", ch, "") }()
+
+	// Give Tail a moment to seed its cursor at time.Now() before we start
+	// writing, so the new events are picked up on the next poll.
+	time.Sleep(50 * time.Millisecond)
+
 	writer := splunklite.NewAuditWriter(env.audit)
 	for i := 0; i < 3; i++ {
 		require.NoError(t, writer.Write(ctx, contracts.AuditEntry{
@@ -507,10 +522,6 @@ func TestTail_StreamsEvents(t *testing.T) {
 			Message: "created",
 		}))
 	}
-
-	ch := make(chan splunklite.QueryEvent, 16)
-	tailErr := make(chan error, 1)
-	go func() { tailErr <- env.svc.Tail(ctx, "audit", "", ch) }()
 
 	got := 0
 	for {
@@ -525,6 +536,48 @@ func TestTail_StreamsEvents(t *testing.T) {
 			case <-time.After(200 * time.Millisecond):
 			}
 			require.GreaterOrEqual(t, got, 3)
+			return
+		}
+	}
+}
+
+func TestTailQuery_FiltersEvents(t *testing.T) {
+	t.Parallel()
+
+	env := setupSplunk(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+
+	ch := make(chan splunklite.QueryEvent, 16)
+	tailErr := make(chan error, 1)
+	go func() { tailErr <- env.svc.TailQuery(ctx, "audit", "", "curl", ch, "") }()
+
+	time.Sleep(50 * time.Millisecond)
+
+	writer := splunklite.NewAuditWriter(env.audit)
+	require.NoError(t, writer.Write(ctx, contracts.AuditEntry{
+		Action:  "website.create",
+		Status:  "ok",
+		Message: "created by browser",
+	}))
+	require.NoError(t, writer.Write(ctx, contracts.AuditEntry{
+		Action:  "website.create",
+		Status:  "ok",
+		Message: "created by curl",
+	}))
+
+	var got []splunklite.QueryEvent
+	for {
+		select {
+		case ev := <-ch:
+			got = append(got, ev)
+		case <-ctx.Done():
+			select {
+			case <-tailErr:
+			case <-time.After(200 * time.Millisecond):
+			}
+			require.Len(t, got, 1)
+			assert.Contains(t, got[0].Message, "curl")
 			return
 		}
 	}

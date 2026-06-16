@@ -1,3 +1,11 @@
+FROM node:20-bookworm AS webbuilder
+
+WORKDIR /src
+COPY web/package.json web/package-lock.json ./web/
+RUN cd web && npm install
+COPY web/ ./web/
+RUN cd web && npm run build
+
 FROM golang:1.26.4-bookworm AS gobuilder
 
 WORKDIR /src
@@ -5,6 +13,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
+COPY --from=webbuilder /src/internal/delivery/http/frontend/dist ./internal/delivery/http/frontend/dist
 RUN CGO_ENABLED=0 go build -o /out/gosite ./cmd/gosite
 
 FROM nginx:1.30.2-trixie
@@ -28,9 +37,10 @@ RUN apt-get update \
         tzdata \
         openssl \
         make \
-        supervisor \
         certbot \
         python3-certbot-nginx \
+        fuse3 \
+        s3fs \
     && groupadd -g 1000 apps \
     && useradd -u 1000 -g 1000 apps \
     && apt-get clean \
@@ -43,7 +53,6 @@ COPY --from=gobuilder /out/gosite /usr/local/bin/gosite
 COPY ./migrations /app/migrations
 COPY ./config/nginx /var/setup/nginx
 COPY ./config/webconfig /var/setup/webconfig
-COPY ./config/supervisord.conf /etc/supervisord.conf
 COPY ./config/fstab_mounter.sh /run/fstab_mounter.sh
 COPY ./config/start.sh /run/start.sh
 

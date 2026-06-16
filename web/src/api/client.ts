@@ -66,13 +66,25 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
     body = JSON.stringify(opts.body);
   }
 
-  const res = await fetch(buildUrl(path, opts.query), {
-    method: opts.method ?? 'GET',
-    headers,
-    body,
-    credentials: 'include',
-    signal: opts.signal,
-  });
+  const url = buildUrl(path, opts.query);
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: opts.method ?? 'GET',
+      headers,
+      body,
+      credentials: 'include',
+      signal: opts.signal,
+    });
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') throw err;
+    const protocol = globalThis.location?.protocol === 'https:' ? 'HTTPS' : 'HTTP';
+    throw new ApiError(
+      0,
+      'network_error',
+      `Network request failed before the server returned a response (${protocol} ${url}). Check DevTools Network for CORS/TLS/proxy errors.`,
+    );
+  }
 
   if (res.status === 401) {
     throw await parseError(res);

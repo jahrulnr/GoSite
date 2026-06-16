@@ -1,8 +1,20 @@
 # Sequence: Splunk Lite
 
-Query internal audit, job, and nginx log events without deploying Splunk.
+Query audit, job runs, and nginx log events — without deploying external Splunk.
 
-**Routes:** `GET /api/v1/query/meta`, `POST /api/v1/query`, `GET/POST /api/v1/query/saved`
+**Status:** ✅ Implemented — `internal/observability/splunklite`
+
+## Architecture
+
+## API
+
+| Method | Path |
+|--------|------|
+| GET | `/api/v1/query/meta` |
+| GET / POST | `/api/v1/query` |
+| GET | `/api/v1/query/tail` |
+| GET / POST | `/api/v1/query/saved` |
+| PATCH / DELETE | `/api/v1/query/saved/{id}` |
 
 ## Write audit on mutation
 
@@ -50,7 +62,7 @@ sequenceDiagram
     participant S as splunklite.Service
     participant DB as SQLite sources
 
-    User->>H: POST /query { source, site, q, from, to, limit }
+    User->>H: GET /query?source=&site=&q=&from=&to=&limit=
     H->>I: Ingest nginx log files
     I->>DB: INSERT OR IGNORE log_events by line_hash
     H->>S: Query(request)
@@ -85,25 +97,51 @@ sequenceDiagram
 ## Example
 
 ```json
-POST /api/v1/query
-{
-  "source": "audit",
-  "q": "action:website.* user:admin@* status:ok",
-  "from": "2026-06-01T00:00:00Z",
-  "to": "2026-06-14T23:59:59Z",
-  "limit": 50
-}
+GET /api/v1/query?source=audit&q=action%3Awebsite.*+user%3Aadmin%40*+status%3Aok&from=2026-06-01T00%3A00%3A00Z&to=2026-06-14T23%3A59%3A59Z&limit=50
 ```
+
+## Streaming historical search
+
+`GET /api/v1/query` returns batch JSON by default. For progressive output, request a stream:
+
+```bash
+curl -N -H 'Accept: text/event-stream' 'https://host/api/v1/query?source=access&q=status%3A500&stream=sse'
+```
+
+SSE frames use a small envelope:
+
+```text
+data: {"type":"ingesting"}
+
+data: {"type":"meta","hits":12}
+
+data: {"type":"event","event":{...}}
+
+data: {"type":"done"}
+```
+
+`stream=ndjson` or `Accept: application/x-ndjson` emits the same envelopes one JSON object per line.
 
 ## Retention
 
-| Table | Default retention |
-|-------|-------------------|
-| `audit_logs` | 90 days (`AUDIT_RETENTION_DAYS`) |
-| `log_events` | 14 days (`LOG_EVENTS_RETENTION_DAYS`) |
+| Table | Env | Default |
+|-------|-----|---------|
+| `audit_logs` | `AUDIT_RETENTION_DAYS` | 90 |
+| `log_events` | `LOG_EVENTS_RETENTION_DAYS` | 14 |
+
+Purge harian via `runRetentionPurge` di `internal/app/app.go`.
+
+## Packages
+
+| Path | Role |
+|------|-------|
+| `internal/observability/splunklite/service.go` | Query engine |
+| `internal/observability/splunklite/ingestor.go` | Nginx log ingest |
+| `internal/observability/splunklite/meta.go` | Query UI metadata |
+| `internal/delivery/http/handler/observability.go` | HTTP |
 
 ## Implikasi GoSite
 
-- `internal/observability/splunklite` — parser + query service
-- `contracts.AuditWriter` — hook untuk semua mutasi sensitif
-- Saved queries di `saved_queries` untuk preset dashboard / ops
+- `contracts.AuditWriter` — hook mutasi sensitif (website create/delete, dll.)
+- Saved queries in `saved_queries` for dashboard / ops presets
+- Frontend Logs view uses `GET /query/meta` for the source picker

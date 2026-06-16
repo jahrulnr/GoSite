@@ -10,11 +10,14 @@ interface JobStreamModalProps {
 
 export function JobStreamModal({ title, streamUrl, onClose }: Readonly<JobStreamModalProps>) {
   const [lines, setLines] = useState<string[]>([]);
-  const [status, setStatus] = useState('running');
+  const [status, setStatus] = useState('connecting');
 
   useEffect(() => {
     const close = openJobStream(streamUrl, {
-      onLine: (line) => setLines((current) => [...current, line]),
+      onLine: (line) => {
+        setStatus((current) => (current === 'connecting' ? 'running' : current));
+        setLines((current) => [...current, line]);
+      },
       onDone: (next) => setStatus(next),
       onError: (message) => {
         setStatus('error');
@@ -26,7 +29,7 @@ export function JobStreamModal({ title, streamUrl, onClose }: Readonly<JobStream
 
   return (
     <Modal title={title} onClose={onClose} wide footer={<span class="dim">Status: {status}</span>}>
-      <pre class="logbox">{lines.join('\n') || 'Waiting for output…'}</pre>
+      <pre class="logbox stream-logbox">{lines.join('\n') || 'Waiting for output…'}</pre>
     </Modal>
   );
 }

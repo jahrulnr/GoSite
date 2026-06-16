@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,8 +16,8 @@ import (
 
 // Service manages website lifecycle with nginx side effects.
 type Service struct {
-	repo   *sqlite.WebsiteRepository
-	nginx  *nginx.Service
+	repo    *sqlite.WebsiteRepository
+	nginx   *nginx.Service
 	webRoot string
 }
 
@@ -51,18 +52,24 @@ type ValidateResult struct {
 	Reason string `json:"reason,omitempty"`
 }
 
+// ValidateInput holds fields for pre-save validation.
+type ValidateInput struct {
+	Domain    string
+	Path      string
+	Type      string
+	Upstream  string
+	Active    bool
+	ExcludeID int64
+}
+
 // Create validates, persists, and provisions nginx config for a website.
 func (s *Service) Create(ctx context.Context, in CreateInput) (sqlite.Website, error) {
-	if err := s.validateCreateUpdate(ctx, in.Domain, in.Path, 0); err != nil {
-		return sqlite.Website{}, err
-	}
-
 	siteType := in.Type
 	if siteType == "" {
 		siteType = sqlite.WebsiteTypeStatic
 	}
-	if siteType == sqlite.WebsiteTypeProxy && strings.TrimSpace(in.Upstream) == "" {
-		return sqlite.Website{}, apperror.New(apperror.CodeValidation, "upstream required for proxy type")
+	if err := s.validateCreateUpdate(ctx, in.Domain, in.Path, siteType, in.Upstream, 0); err != nil {
+		return sqlite.Website{}, err
 	}
 
 	name := in.Name
@@ -88,12 +95,19 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (sqlite.Website, e
 	}
 
 	if site.Active {
+		if err := s.validateRenderedConfig(ctx, site); err != nil {
+			_ = s.nginx.RemoveSiteConfig(site.Domain)
+			_ = s.repo.Delete(ctx, site.ID)
+			return sqlite.Website{}, err
+		}
 		if err := s.nginx.EnableSite(ctx, site.Domain); err != nil {
+			_ = s.nginx.RemoveSiteConfig(site.Domain)
 			_ = s.repo.Delete(ctx, site.ID)
 			return sqlite.Website{}, apperror.Wrap(apperror.CodeNginxReloadFailed, "enable site", err)
 		}
 		if err := s.nginx.Reload(ctx); err != nil {
 			_ = s.nginx.DisableSite(ctx, site.Domain)
+			_ = s.nginx.RemoveSiteConfig(site.Domain)
 			_ = s.repo.Delete(ctx, site.ID)
 			return sqlite.Website{}, err
 		}
@@ -109,16 +123,12 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (sqlite.
 		return sqlite.Website{}, apperror.Wrap(apperror.CodeNotFound, "website not found", err)
 	}
 
-	if err := s.validateCreateUpdate(ctx, in.Domain, in.Path, id); err != nil {
-		return sqlite.Website{}, err
-	}
-
 	siteType := in.Type
 	if siteType == "" {
 		siteType = sqlite.WebsiteTypeStatic
 	}
-	if siteType == sqlite.WebsiteTypeProxy && strings.TrimSpace(in.Upstream) == "" {
-		return sqlite.Website{}, apperror.New(apperror.CodeValidation, "upstream required for proxy type")
+	if err := s.validateCreateUpdate(ctx, in.Domain, in.Path, siteType, in.Upstream, id); err != nil {
+		return sqlite.Website{}, err
 	}
 
 	name := in.Name
@@ -144,6 +154,9 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (sqlite.
 	}
 
 	if site.Active {
+		if err := s.validateRenderedConfig(ctx, site); err != nil {
+			return sqlite.Website{}, err
+		}
 		if err := s.nginx.EnableSite(ctx, site.Domain); err != nil {
 			return sqlite.Website{}, err
 		}
@@ -225,37 +238,86 @@ func (s *Service) Toggle(ctx context.Context, id int64) (sqlite.Website, error) 
 		_ = s.nginx.Reload(ctx)
 		return sqlite.Website{}, apperror.Wrap(apperror.CodeDatabase, "update active flag", err)
 	}
+	s.syncSSLFromConfig(ctx, &updated)
 	return updated, nil
 }
 
-// Validate checks domain and path rules.
-func (s *Service) Validate(ctx context.Context, domain, path string, excludeID int64) ValidateResult {
-	if err := s.validateCreateUpdate(ctx, domain, path, excludeID); err != nil {
+// Validate checks the same domain/path/type/upstream rules used by save.
+func (s *Service) Validate(ctx context.Context, in ValidateInput) ValidateResult {
+	siteType := in.Type
+	if siteType == "" {
+		siteType = sqlite.WebsiteTypeStatic
+	}
+	if err := s.validateCreateUpdate(ctx, in.Domain, in.Path, siteType, in.Upstream, in.ExcludeID); err != nil {
 		var appErr *apperror.Error
 		if errors.As(err, &appErr) {
 			return ValidateResult{Valid: false, Reason: appErr.Message}
 		}
 		return ValidateResult{Valid: false, Reason: err.Error()}
 	}
+	if in.Active {
+		if err := s.validateRenderedConfig(ctx, sqlite.Website{
+			Domain:   in.Domain,
+			Path:     in.Path,
+			Type:     siteType,
+			Upstream: in.Upstream,
+		}); err != nil {
+			var appErr *apperror.Error
+			if errors.As(err, &appErr) {
+				return ValidateResult{Valid: false, Reason: appErr.Message}
+			}
+			return ValidateResult{Valid: false, Reason: err.Error()}
+		}
+	}
 	return ValidateResult{Valid: true}
 }
 
-// Get returns a website by id.
+// Get returns a website by id with SSL flag synced from nginx config when needed.
 func (s *Service) Get(ctx context.Context, id int64) (sqlite.Website, error) {
 	site, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		return sqlite.Website{}, apperror.Wrap(apperror.CodeNotFound, "website not found", err)
 	}
+	s.syncSSLFromConfig(ctx, &site)
 	return site, nil
 }
 
-// List returns all websites.
+// List returns all websites with SSL flags synced from nginx config when needed.
 func (s *Service) List(ctx context.Context) ([]sqlite.Website, error) {
 	sites, err := s.repo.List(ctx)
 	if err != nil {
 		return nil, apperror.Wrap(apperror.CodeDatabase, "list websites", err)
 	}
+	for i := range sites {
+		s.syncSSLFromConfig(ctx, &sites[i])
+	}
 	return sites, nil
+}
+
+// syncSSLFromConfig updates the website SSL flag when site.d defines certificate paths.
+func (s *Service) syncSSLFromConfig(ctx context.Context, site *sqlite.Website) {
+	config, err := s.nginx.ReadSiteConfig(ctx, site.Domain)
+	if err != nil {
+		return
+	}
+	_, _, enabled := nginx.ParseCertPaths(config)
+	if enabled == site.SSL {
+		return
+	}
+	site.SSL = enabled
+	if updated, err := s.repo.Update(ctx, *site); err == nil {
+		*site = updated
+	}
+}
+
+// TestNginxConfig validates site.d config without writing or reloading.
+func (s *Service) TestNginxConfig(ctx context.Context, id int64, config string) error {
+	site, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return apperror.Wrap(apperror.CodeNotFound, "website not found", err)
+	}
+	config = strings.ReplaceAll(config, "\r", "")
+	return s.nginx.TestConfig(ctx, site.Domain, config)
 }
 
 // UpdateNginxConfig updates raw site.d config with backup and test.
@@ -268,7 +330,11 @@ func (s *Service) UpdateNginxConfig(ctx context.Context, id int64, config string
 	if err := s.nginx.UpdateSiteConfig(ctx, site.Domain, config); err != nil {
 		return err
 	}
-	return s.nginx.Reload(ctx)
+	if err := s.nginx.Reload(ctx); err != nil {
+		return err
+	}
+	s.syncSSLFromConfig(ctx, &site)
+	return nil
 }
 
 // GetNginxConfig returns site.d config content.
@@ -284,9 +350,17 @@ func (s *Service) GetNginxConfig(ctx context.Context, id int64) (string, error) 
 	return content, nil
 }
 
-func (s *Service) validateCreateUpdate(ctx context.Context, domain, path string, excludeID int64) error {
+func (s *Service) validateCreateUpdate(ctx context.Context, domain, path, siteType, upstream string, excludeID int64) error {
 	if !isValidDomain(domain) {
 		return apperror.New(apperror.CodeDomainInvalid, "domain not valid")
+	}
+	if siteType != sqlite.WebsiteTypeStatic && siteType != sqlite.WebsiteTypeProxy {
+		return apperror.New(apperror.CodeValidation, "website type not valid")
+	}
+	if siteType == sqlite.WebsiteTypeProxy {
+		if err := validateUpstream(upstream); err != nil {
+			return err
+		}
 	}
 	if err := validatePath(path, s.webRoot); err != nil {
 		return err
@@ -328,6 +402,26 @@ func (s *Service) provisionSite(ctx context.Context, site sqlite.Website) error 
 }
 
 func (s *Service) writeRenderedConfig(ctx context.Context, site sqlite.Website) error {
+	content, err := s.renderSiteConfig(site)
+	if err != nil {
+		return err
+	}
+
+	if err := s.nginx.WriteSiteConfig(ctx, site.Domain, content); err != nil {
+		return apperror.Wrap(apperror.CodeConfig, "write site config", err)
+	}
+	return nil
+}
+
+func (s *Service) validateRenderedConfig(ctx context.Context, site sqlite.Website) error {
+	content, err := s.renderSiteConfig(site)
+	if err != nil {
+		return err
+	}
+	return s.nginx.TestConfig(ctx, site.Domain, content)
+}
+
+func (s *Service) renderSiteConfig(site sqlite.Website) (string, error) {
 	cert, key := s.nginx.DefaultSSLPaths(site.Domain)
 	data := nginx.SiteTemplateData{
 		Domain:   site.Domain,
@@ -346,13 +440,9 @@ func (s *Service) writeRenderedConfig(ctx context.Context, site sqlite.Website) 
 		content, err = nginx.RenderStatic(paths.StaticTpl, data)
 	}
 	if err != nil {
-		return apperror.Wrap(apperror.CodeConfig, "render template", err)
+		return "", apperror.Wrap(apperror.CodeConfig, "render template", err)
 	}
-
-	if err := s.nginx.WriteSiteConfig(ctx, site.Domain, content); err != nil {
-		return apperror.Wrap(apperror.CodeConfig, "write site config", err)
-	}
-	return nil
+	return content, nil
 }
 
 func isValidDomain(domain string) bool {
@@ -371,7 +461,7 @@ func isValidDomain(domain string) bool {
 		return false
 	}
 	for _, p := range parts {
-		if p == "" || len(p) > 63 {
+		if p == "" || len(p) > 63 || strings.HasPrefix(p, "-") || strings.HasSuffix(p, "-") {
 			return false
 		}
 		for _, c := range p {
@@ -391,10 +481,31 @@ func validatePath(path, webRoot string) error {
 		return apperror.New(apperror.CodePathTraversal, "path traversal rejected")
 	}
 	clean := filepath.Clean(path)
-	if !strings.HasPrefix(clean, filepath.Clean(webRoot)) {
+	root := filepath.Clean(webRoot)
+	if clean != root && !strings.HasPrefix(clean, root+string(filepath.Separator)) {
 		return apperror.New(apperror.CodePathInvalid, "path outside web root")
 	}
 	return nil
+}
+
+func validateUpstream(upstream string) error {
+	upstream = strings.TrimSpace(upstream)
+	if upstream == "" {
+		return apperror.New(apperror.CodeValidation, "upstream required for proxy type")
+	}
+	if strings.ContainsAny(upstream, " \t\r\n;{}") {
+		return apperror.New(apperror.CodeValidation, "upstream not valid")
+	}
+	parsed, err := url.Parse(upstream)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return apperror.New(apperror.CodeValidation, "upstream not valid")
+	}
+	switch parsed.Scheme {
+	case "http", "https":
+		return nil
+	default:
+		return apperror.New(apperror.CodeValidation, "upstream scheme not supported")
+	}
 }
 
 // FormatToggleMessage returns legacy-compatible toggle message.

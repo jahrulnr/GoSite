@@ -7,12 +7,15 @@ import { navigate } from '../lib/router';
 import { formatNumber } from '../lib/format';
 
 function DataTable({ data }: Readonly<{ data: DatabaseTableData }>) {
+  const columns = data.columns ?? [];
+  const rows = data.rows ?? [];
+
   return (
     <div class="table-wrap">
       <table class="table">
         <thead>
           <tr>
-            {data.columns.map((col, i) => (
+            {columns.map((col, i) => (
               <th key={col}>
                 <span class="row" style="gap:6px;">
                   <span style="color:var(--text-faint);font-family:var(--mono);font-weight:500;font-size:10px;">{String(i).padStart(2, '0')}</span>
@@ -23,9 +26,9 @@ function DataTable({ data }: Readonly<{ data: DatabaseTableData }>) {
           </tr>
         </thead>
         <tbody>
-          {data.rows.map((row, i) => (
+          {rows.map((row, i) => (
             <tr key={i}>
-              {data.columns.map((col, colIndex) => (
+              {columns.map((col, colIndex) => (
                 <td key={col}>{String(Array.isArray(row) ? row[colIndex] ?? '' : row[col] ?? '')}</td>
               ))}
             </tr>
@@ -72,8 +75,13 @@ export function DatabaseView({ table }: Readonly<{ table?: string }>) {
           {!table ? (
             <EmptyState title="Select a table" hint="Pick one on the left to view rows." />
           ) : (
-            <AsyncView state={data} loadingLabel={`Loading ${table}`}>
-              {(res) => res ? <DataTable data={res} /> : <EmptyState title="No rows" />}
+            <AsyncView
+              state={data}
+              loadingLabel={`Loading ${table}`}
+              isEmpty={(res) => !res || (res.rows ?? []).length === 0}
+              empty={<EmptyState title="No rows" />}
+            >
+              {(res) => (res ? <DataTable data={res} /> : <EmptyState title="No rows" />)}
             </AsyncView>
           )}
         </Card>

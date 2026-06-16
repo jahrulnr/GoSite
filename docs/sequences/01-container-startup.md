@@ -1,68 +1,101 @@
 # Sequence: Container Startup
 
-Proses saat container `bangunsite` pertama kali (atau restart) dijalankan.
+What happens when the GoSite container starts (first boot or restart).
 
-**Entrypoint:** `config/start.sh` → `supervisord`
+**Entrypoint:** `config/start.sh` → nginx + `gosite serve`
+
+## GoSite (current implementation)
 
 ```mermaid
 sequenceDiagram
     actor Docker
     participant Start as start.sh
-    participant Storage as /storage
-    participant Composer
-    participant Artisan as Laravel Artisan
+    participant Init as gosite init
+    participant Repair as gosite nginx-repair
+    participant SSL as openssl (default cert)
     participant Fstab as fstab_mounter.sh
-    participant Super as supervisord
+    participant NGX as nginx
+    participant Go as gosite serve
 
-    Docker->>Start: CMD /run/start.sh
+    Docker->>Start: CMD start.sh
 
-    Start->>Storage: mkdir laravel/, www/, webconfig/, nginx/, php/
-    alt webconfig belum ada
-        Start->>Storage: cp /var/setup/webconfig → /storage/webconfig
-    end
-    alt nginx/php belum ada
-        Start->>Storage: cp /var/setup/nginx, php
-    end
-    Start->>Storage: symlink .env, fstab, nginx, php, www
-    Start->>Storage: chown apps:apps
+    Start->>Start: mkdir /storage/logs, /storage/www
+    Start->>Init: gosite init
+    Note over Init: storage layout, symlink,<br/>migrate, seed admin/cron/demo
 
-    alt vendor belum ada
-        Start->>Composer: composer install --no-dev
-    end
-    alt .env belum ada
-        Start->>Storage: cp .env.example → /storage/.env
-        Start->>Artisan: key:generate
-    end
-    alt db.sqlite belum ada
-        Start->>Storage: touch db.sqlite
-        Start->>Artisan: migrate --force
-        Start->>Artisan: db:seed --force
-    end
-    alt SSL default belum ada
-        Start->>Storage: make build (self-signed cert)
+    alt default SSL missing
+        Start->>SSL: self-signed cert.pem + key.pem
     end
 
-    Start->>Fstab: mount semua entry /etc/fstab
-    Start->>Super: supervisord -n
+    Start->>Repair: gosite nginx-repair
+    Note over Repair: nginx -t + safe auto-fix
 
-    Super->>Super: start nginx (:80/:443)
-    Super->>Super: start artisan server (:8000)
-    Super->>Super: start run:cronjobs
-    Super->>Super: start server-proxy (:8080)
+    opt /var/setup staging
+        Start->>Start: mv nginx → /etc/nginx, copy webconfig
+    end
+
+    Start->>Start: substitute __PUBLIC_HTTPS_PORT__ in nginx conf
+    Start->>Fstab: /run/fstab_mounter.sh
+    Start->>NGX: nginx -c /etc/nginx/nginx.conf
+    Start->>Go: exec gosite serve
+
+    Note over Go: job worker + nginx watchdog (30s)
 ```
 
-## Supervisor programs
+### Runtime processes
 
-| Program | Command | Prioritas |
-|---------|---------|-----------|
-| nginx | `nginx -g "daemon off;"` | 10 |
-| bangunsite | `php artisan server --host=0.0.0.0 --port=8000` | 15 |
-| crond | `php artisan run:cronjobs` | 16 |
-| proxy-server | `/usr/bin/server-proxy` | 20 |
+| Process | Command | Notes |
+|--------|---------|---------|
+| nginx | `nginx -c /etc/nginx/nginx.conf` | Started from `start.sh`; reload/restart via Go |
+| gosite | `gosite serve` | PID 1; watchdog restarts nginx if it dies |
 
-## Implikasi GoSite
+Cron renewal and manual runs are handled by the **job worker** inside `gosite serve`, not a separate PHP process.
 
-- Startup script bisa tetap bash atau diganti binary `gosite init`
-- Proses `artisan server` + `server-proxy` diganti satu binary Go (HTTP + HTTPS)
-- Nginx & cron runner tetap proses terpisah atau dikelola Go supervisor
-- Invariant: struktur `/storage` harus kompatibel agar data produksi bisa dipakai
+### `gosite init` (bootstrap)
+
+| Step | Output |
+|---------|--------|
+| `createStorageLayout` | `/storage/webconfig`, `site.d`, `active.d`, `logs`, … |
+| `copyTemplatesIfMissing` | Templates from image → storage |
+| `createSymlinks` | `/etc/nginx` → `/storage/nginx`, `/etc/letsencrypt` → `/storage/webconfig/ssl`, `/www` → `/storage/www` |
+| `sqlite.Migrate` | Schema `db.sqlite` |
+| `seedAdminIfEmpty` | User demo |
+| `seedDefaultCronIfEmpty` | `certbot renew --post-hook 'nginx -s reload'` |
+| `seedDemoIfNeeded` | Demo website (when `DEMO_SEED=true`) |
+
+### Boot nginx repair
+
+`gosite nginx-repair` runs **after** the default SSL cert is created so fallback repair can point vhosts to the default cert. See [nginx-repair.md](../nginx-repair.md).
+
+---
+
+## Legacy BangunSite (migration reference)
+
+<details>
+<summary>Historical Laravel startup diagram</summary>
+
+```mermaid
+sequenceDiagram
+    participant Start as start.sh
+    participant Composer
+    participant Artisan as Laravel Artisan
+    participant Super as supervisord
+
+    Start->>Composer: composer install
+    Start->>Artisan: migrate + db:seed
+    Start->>Super: supervisord
+    Super->>Super: nginx + artisan server + cron + server-proxy :8080
+```
+
+| Program | Command |
+|---------|---------|
+| bangunsite | `php artisan server --port=8000` |
+| proxy-server | Go TLS proxy :8080 |
+| crond | `php artisan run:cronjobs` |
+
+</details>
+
+## Production invariants
+
+- `/storage` layout compatible with legacy BangunSite deploy
+- Symlink `/etc/letsencrypt` → `/storage/webconfig/ssl` — same path used by Certbot and Gosite placeholders

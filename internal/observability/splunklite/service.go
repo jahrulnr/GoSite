@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jahrulnr/gosite/internal/contracts"
@@ -34,6 +36,10 @@ type QueryRequest struct {
 
 // QueryEvent is a normalized hit returned to clients.
 type QueryEvent struct {
+	// ID is a stable composite key (source|ts|message-hash) used by the
+	// frontend to dedup rows when the SSE stream replays its backlog after
+	// a reconnect.
+	ID      string                 `json:"id"`
 	TS      time.Time              `json:"ts"`
 	Source  string                 `json:"source"`
 	Action  string                 `json:"action"`
@@ -57,6 +63,12 @@ type Service struct {
 	ingestor *LogIngestor
 	auditTTL int
 	logTTL   int
+
+	// Per-source watermark of the last event TS pushed to a /query/tail
+	// subscriber. Persisted across SSE reconnects so a brief network blip
+	// does NOT cause the tail to replay every event since the dawn of time.
+	tailMu     sync.Mutex
+	tailCursor map[string]time.Time
 }
 
 // NewService returns a Splunk Lite query service.
@@ -74,12 +86,13 @@ func NewService(
 		logRetentionDays = 14
 	}
 	return &Service{
-		audit:    audit,
-		jobs:     jobs,
-		logs:     logs,
-		saved:    saved,
-		auditTTL: auditRetentionDays,
-		logTTL:   logRetentionDays,
+		audit:      audit,
+		jobs:       jobs,
+		logs:       logs,
+		saved:      saved,
+		auditTTL:   auditRetentionDays,
+		logTTL:     logRetentionDays,
+		tailCursor: make(map[string]time.Time),
 	}
 }
 
@@ -235,6 +248,17 @@ func (s *Service) queryLogs(ctx context.Context, req QueryRequest, logSource str
 	return mapLogEvents(rows, logSource), count, nil
 }
 
+func applySiteScope(clauses []sqlite.FieldClause, site string) []sqlite.FieldClause {
+	site = strings.TrimSpace(site)
+	if site == "" {
+		return clauses
+	}
+	out := make([]sqlite.FieldClause, 0, len(clauses)+1)
+	out = append(out, clauses...)
+	out = append(out, sqlite.LikeClause("site", site))
+	return out
+}
+
 func (s *Service) queryAll(ctx context.Context, req QueryRequest, clauses []sqlite.FieldClause, limit int) ([]QueryEvent, int, error) {
 	fetch := limit + req.Offset
 	if fetch <= 0 {
@@ -243,53 +267,51 @@ func (s *Service) queryAll(ctx context.Context, req QueryRequest, clauses []sqli
 	if fetch > 2000 {
 		fetch = 2000
 	}
-	sub := req
-	sub.Limit = fetch
-	sub.Offset = 0
 
-	var merged []QueryEvent
+	type result struct {
+		events []QueryEvent
+		hits   int
+		err    error
+	}
+	sources := []string{SourceAudit, SourceJob, SourceAccess, SourceError}
+	ch := make(chan result, len(sources))
+
+	for _, src := range sources {
+		src := src
+		go func() {
+			sub := req
+			sub.Source = src
+			sub.Limit = fetch
+			sub.Offset = 0
+			res, err := s.Query(ctx, sub)
+			ch <- result{events: res.Events, hits: res.Hits, err: err}
+		}()
+	}
+
+	merged := make([]QueryEvent, 0, fetch)
 	total := 0
-
-	for _, src := range []string{SourceAudit, SourceJob, SourceAccess, SourceError} {
-		sub.Source = src
-		res, err := s.Query(ctx, sub)
-		if err != nil {
-			return nil, 0, err
+	for range sources {
+		res := <-ch
+		if res.err != nil {
+			return nil, 0, res.err
 		}
-		total += res.Hits
-		merged = append(merged, res.Events...)
+		total += res.hits
+		merged = append(merged, res.events...)
 	}
 
 	sort.Slice(merged, func(i, j int) bool {
 		return merged[i].TS.After(merged[j].TS)
 	})
-
-	if req.Offset >= len(merged) {
-		return nil, total, nil
+	start := req.Offset
+	if start > len(merged) {
+		start = len(merged)
 	}
-	end := req.Offset + limit
+	end := start + limit
 	if end > len(merged) {
 		end = len(merged)
 	}
-	return merged[req.Offset:end], total, nil
+	return merged[start:end], total, nil
 }
-
-func applySiteScope(clauses []sqlite.FieldClause, site string) []sqlite.FieldClause {
-	site = strings.TrimSpace(site)
-	if site == "" {
-		return clauses
-	}
-	for _, c := range clauses {
-		if strings.EqualFold(c.Field, "site") {
-			return clauses
-		}
-	}
-	out := make([]sqlite.FieldClause, 0, len(clauses)+1)
-	out = append(out, sqlite.LikeClause("site", site))
-	out = append(out, clauses...)
-	return out
-}
-
 func buildJobWhere(clauses []sqlite.FieldClause) (wheres []string, args []interface{}, err error) {
 	columns := map[string]string{
 		"job_type": "job_type",
@@ -351,6 +373,7 @@ func mapAuditEvents(rows []sqlite.AuditLog) []QueryEvent {
 		meta["domain"] = row.Domain
 		meta["status"] = row.Status
 		out = append(out, QueryEvent{
+			ID:      eventID(SourceAudit, row.Timestamp, row.Message),
 			TS:      row.Timestamp,
 			Source:  SourceAudit,
 			Action:  row.Action,
@@ -372,6 +395,7 @@ func mapJobEvents(rows []sqlite.JobRun) []QueryEvent {
 			msg = row.Output
 		}
 		out = append(out, QueryEvent{
+			ID:      eventID(SourceJob, row.CreatedAt, msg),
 			TS:      row.CreatedAt,
 			Source:  SourceJob,
 			Action:  row.JobType,
@@ -399,6 +423,7 @@ func mapLogEvents(rows []sqlite.LogEvent, source string) []QueryEvent {
 			meta["bytes"] = *row.Bytes
 		}
 		out = append(out, QueryEvent{
+			ID:      eventID(source, row.Timestamp, row.RawPreview),
 			TS:      row.Timestamp,
 			Source:  source,
 			Action:  "log.line",
@@ -408,6 +433,18 @@ func mapLogEvents(rows []sqlite.LogEvent, source string) []QueryEvent {
 		})
 	}
 	return out
+}
+
+// eventID derives a stable, compact id for an event so the frontend can
+// dedup across reconnects. The timestamp is rendered in nanos so two
+// events one nanosecond apart never collide, and the first 64 chars of
+// the message disambiguate bursts with the same ts.
+func eventID(source string, ts time.Time, message string) string {
+	msg := message
+	if len(msg) > 64 {
+		msg = msg[:64]
+	}
+	return source + "|" + ts.UTC().Format(time.RFC3339Nano) + "|" + msg
 }
 
 // ListSavedQueries returns stored queries.
@@ -495,11 +532,31 @@ func (s *Service) DeleteSavedQuery(ctx context.Context, id int64) error {
 // It calls Ingestor.Ingest once at the start to backfill missing log lines.
 // source may be one of: audit, job, access, error, all (default).
 // site is optional and only applies to access/error sources.
-func (s *Service) Tail(ctx context.Context, source, site string, ch chan<- QueryEvent) error {
+//
+// The high-water mark per (source, site) is persisted in the Service struct
+// across SSE reconnects. To stay true to "tail -f" semantics the cursor is
+// reset to the current wall clock whenever the gap between the last cursor
+// and the current time exceeds `tailReconnectGap`, so a long disconnect does
+// not flood the client with old events on reconnect.
+//
+// If the browser reconnects with a Last-Event-ID (resumeFrom), the cursor is
+// pinned to the timestamp embedded in that id and any backlog since then is
+// re-emitted. The id format is "source|ts|message"; only the timestamp is
+// used for resumption.
+func (s *Service) Tail(ctx context.Context, source, site string, ch chan<- QueryEvent, resumeFrom string) error {
+	return s.TailQuery(ctx, source, site, "", ch, resumeFrom)
+}
+
+// TailQuery is Tail with the same mini-query filter used by /query.
+func (s *Service) TailQuery(ctx context.Context, source, site, query string, ch chan<- QueryEvent, resumeFrom string) error {
 	if s.ingestor != nil {
 		if err := s.ingestor.Ingest(ctx); err != nil {
 			return err
 		}
+	}
+	clauses, err := ParseQuery(query)
+	if err != nil {
+		return apperror.Wrap(apperror.CodeQueryInvalid, err.Error(), err)
 	}
 	source = strings.ToLower(strings.TrimSpace(source))
 	if source == "" {
@@ -511,11 +568,36 @@ func (s *Service) Tail(ctx context.Context, source, site string, ch chan<- Query
 		sources = []string{SourceAudit, SourceJob, SourceAccess, SourceError}
 	}
 
-	// Track the most recent ts seen per source so we only emit new rows.
-	last := map[string]time.Time{}
-	for _, src := range sources {
-		last[src] = time.Time{}
+	// Parse the resume token (a Last-Event-ID from the browser) once and
+	// use its timestamp as the cursor for every relevant source key.
+	var resumeTS time.Time
+	if resumeFrom != "" {
+		if ts, ok := parseTailIDTime(resumeFrom); ok {
+			resumeTS = ts
+		}
 	}
+
+	// Seed / re-seed per-key watermarks. First connect for a key: pin to
+	// time.Now() so we only stream events that arrive from now on.
+	// Reconnect after a long gap: also reset to time.Now() to skip the
+	// backlog (live-tail semantics, not history-replay).
+	// Reconnect with Last-Event-ID: resume from the embedded timestamp
+	// (with a tiny epsilon to avoid re-emitting the boundary event).
+	now := time.Now().UTC()
+	s.tailMu.Lock()
+	for _, src := range sources {
+		key := tailKey(src, site)
+		switch {
+		case !resumeTS.IsZero():
+			s.tailCursor[key] = resumeTS.Add(time.Nanosecond)
+		default:
+			prev, ok := s.tailCursor[key]
+			if !ok || now.Sub(prev) > tailReconnectGap {
+				s.tailCursor[key] = now
+			}
+		}
+	}
+	s.tailMu.Unlock()
 
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -526,29 +608,64 @@ func (s *Service) Tail(ctx context.Context, source, site string, ch chan<- Query
 			return nil
 		case <-ticker.C:
 			for _, src := range sources {
-				maxTS, err := s.tailOne(ctx, src, site, last[src], ch)
+				s.tailMu.Lock()
+				since := s.tailCursor[tailKey(src, site)]
+				s.tailMu.Unlock()
+				maxTS, err := s.tailOne(ctx, src, site, since, clauses, ch)
 				if err != nil {
-					// ignore context cancellation as success
 					if ctx.Err() != nil {
 						return nil
 					}
 					return err
 				}
-				if !maxTS.IsZero() && maxTS.After(last[src]) {
-					last[src] = maxTS
+				if !maxTS.IsZero() && maxTS.After(since) {
+					s.tailMu.Lock()
+					s.tailCursor[tailKey(src, site)] = maxTS
+					s.tailMu.Unlock()
 				}
 			}
 		}
 	}
 }
 
+// parseTailIDTime extracts the timestamp portion of an event id of the form
+// "source|RFC3339Nano|message". Returns false if the id does not match.
+func parseTailIDTime(id string) (time.Time, bool) {
+	first := strings.IndexByte(id, '|')
+	if first < 0 {
+		return time.Time{}, false
+	}
+	rest := id[first+1:]
+	second := strings.IndexByte(rest, '|')
+	if second < 0 {
+		return time.Time{}, false
+	}
+	ts, err := time.Parse(time.RFC3339Nano, rest[:second])
+	if err != nil {
+		return time.Time{}, false
+	}
+	return ts, true
+}
+
+func tailKey(source, site string) string {
+	return source + "\x00" + site
+}
+
+// tailReconnectGap caps how much historical gap a live tail is willing to
+// replay after a brief network blip. Beyond this threshold, the tail
+// resumes from time.Now() and skips the backlog (mirrors `tail -f`).
+const tailReconnectGap = 30 * time.Second
+
 // tailOne queries the named source for rows newer than `since`, maps them to
 // QueryEvents, sends them on ch, and returns the max ts observed.
-func (s *Service) tailOne(ctx context.Context, source, site string, since time.Time, ch chan<- QueryEvent) (time.Time, error) {
+func (s *Service) tailOne(ctx context.Context, source, site string, since time.Time, clauses []sqlite.FieldClause, ch chan<- QueryEvent) (time.Time, error) {
 	var maxTS time.Time
 	record := func(ev QueryEvent) bool {
 		if ev.TS.After(maxTS) {
 			maxTS = ev.TS
+		}
+		if !eventMatchesClauses(ev, clauses) {
+			return true
 		}
 		return sendCtx(ctx, ch, ev)
 	}
@@ -594,6 +711,68 @@ func (s *Service) tailOne(ctx context.Context, source, site string, since time.T
 		}
 	}
 	return maxTS, nil
+}
+
+func eventMatchesClauses(ev QueryEvent, clauses []sqlite.FieldClause) bool {
+	for _, clause := range clauses {
+		value, ok := eventFieldValue(ev, clause.Field)
+		if !ok {
+			return false
+		}
+		switch clause.Kind {
+		case sqlite.RegexpClauseKind:
+			matched, err := regexp.MatchString(clause.Value, value)
+			if err != nil || !matched {
+				return false
+			}
+		default:
+			if !matchTailPattern(value, clause.Value) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func eventFieldValue(ev QueryEvent, field string) (string, bool) {
+	field = strings.ToLower(strings.TrimSpace(field))
+	switch field {
+	case "_text":
+		parts := []string{ev.Source, ev.Action, ev.User, ev.Message}
+		for key, value := range ev.Meta {
+			parts = append(parts, key, fmt.Sprint(value))
+		}
+		return strings.Join(parts, " "), true
+	case "source":
+		return ev.Source, true
+	case "action", "job_type", "type":
+		return ev.Action, true
+	case "user", "email":
+		return ev.User, true
+	case "message", "output", "error", "name":
+		return ev.Message, true
+	default:
+		if ev.Meta == nil {
+			return "", false
+		}
+		value, ok := ev.Meta[field]
+		if !ok {
+			return "", false
+		}
+		return fmt.Sprint(value), true
+	}
+}
+
+func matchTailPattern(value, pattern string) bool {
+	value = strings.ToLower(value)
+	pattern = strings.ToLower(pattern)
+	if strings.Contains(pattern, "*") {
+		re := regexp.QuoteMeta(pattern)
+		re = strings.ReplaceAll(re, `\*`, ".*")
+		matched, err := regexp.MatchString("^"+re+"$", value)
+		return err == nil && matched
+	}
+	return value == pattern || strings.Contains(value, pattern)
 }
 
 // sendCtx pushes ev to ch or returns false if the context was cancelled.

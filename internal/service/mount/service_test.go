@@ -18,7 +18,7 @@ func newMountSvc(t *testing.T) (*mount.Service, string, *testutil.MockCommander)
 	root := t.TempDir()
 	fstab := filepath.Join(root, "fstab")
 	cmd := testutil.NewMockCommander()
-	return mount.NewService(fstab, cmd), fstab, cmd
+	return mount.NewService(fstab, filepath.Join(root, "secrets"), cmd), fstab, cmd
 }
 
 func TestMount_ListEmpty(t *testing.T) {
@@ -92,7 +92,7 @@ func TestMount_EnableFailure(t *testing.T) {
 
 func TestMount_UpdateNotFound(t *testing.T) {
 	svc, _, _ := newMountSvc(t)
-	err := svc.Update(context.Background(), "x", "y", mount.Entry{Device: "a", Dir: "b", Type: "ext4"})
+	err := svc.Update(context.Background(), "x", "/mnt/missing", mount.Entry{Device: "a", Dir: "/mnt/new", Type: "ext4"})
 	require.Error(t, err)
 	assert.Equal(t, apperror.CodeNotFound, apperror.From(err).Code)
 }
@@ -135,4 +135,30 @@ func TestMount_EnableRequiresDir(t *testing.T) {
 	svc, _, _ := newMountSvc(t)
 	err := svc.Enable(context.Background(), "/dev/sdb1", "")
 	require.Error(t, err)
+}
+
+func TestMount_AddRejectsWhitespaceInFields(t *testing.T) {
+	svc, _, _ := newMountSvc(t)
+	err := svc.Add(context.Background(), mount.Entry{
+		Device:  "/dev/sdb1",
+		Dir:     "/mnt/data",
+		Type:    "ext4",
+		Options: "defaults 0 0\n/dev/sda1 / ext4 defaults",
+	})
+	require.Error(t, err)
+	assert.Equal(t, apperror.CodeInvalidInput, apperror.From(err).Code)
+}
+
+func TestMount_AddRejectsRelativeDir(t *testing.T) {
+	svc, _, _ := newMountSvc(t)
+	err := svc.Add(context.Background(), mount.Entry{Device: "/dev/sdb1", Dir: "mnt/data", Type: "ext4"})
+	require.Error(t, err)
+	assert.Equal(t, apperror.CodeInvalidInput, apperror.From(err).Code)
+}
+
+func TestMount_EnableRejectsWhitespaceDir(t *testing.T) {
+	svc, _, _ := newMountSvc(t)
+	err := svc.Enable(context.Background(), "/dev/sdb1", "/mnt/data -o bind /etc")
+	require.Error(t, err)
+	assert.Equal(t, apperror.CodeInvalidInput, apperror.From(err).Code)
 }

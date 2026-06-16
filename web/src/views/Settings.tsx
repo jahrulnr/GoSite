@@ -2,6 +2,7 @@ import { useState } from 'preact/hooks';
 import { rootHealth, settings } from '../api/endpoints';
 import { AsyncView, Badge, ErrorState, Field, KeyValue, Spinner } from '../components/Ui';
 import { Card, Page } from '../components/Layout';
+import { humanizeError } from '../lib/errors';
 import { useAction, useAsync } from '../lib/hooks';
 import { useStore } from '../lib/store';
 
@@ -15,10 +16,14 @@ export function SettingsView() {
 
   const submit = async (event: Event) => {
     event.preventDefault();
-    const res = await save.run({ name, email, password: password || undefined });
-    if (res?.user) setUser(res.user);
-    setPassword('');
-    toast('Profile updated');
+    try {
+      const res = await save.run({ name, email, password: password || undefined });
+      if (res?.user) setUser(res.user);
+      setPassword('');
+      toast('Profile updated');
+    } catch (err) {
+      toast(humanizeError(err as Error), 'error');
+    }
   };
 
   return (

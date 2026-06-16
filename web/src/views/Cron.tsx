@@ -6,6 +6,7 @@ import { IconEdit, IconPlay, IconPlus, IconTrash } from '../components/Icons';
 import { AsyncView, EmptyState, ErrorState, Field, Modal, Spinner } from '../components/Ui';
 import { Page, optionLabel } from '../components/Layout';
 import { formatDate } from '../lib/format';
+import { humanizeError } from '../lib/errors';
 import { useAction, useAsync } from '../lib/hooks';
 import { useStore } from '../lib/store';
 
@@ -18,9 +19,13 @@ function CronModal({ job, onClose, onSaved }: Readonly<{ job: Cronjob; onClose: 
 
   const submit = async (event: Event) => {
     event.preventDefault();
-    await save.run(form);
-    toast(`${form.name} saved`);
-    onSaved();
+    try {
+      await save.run(form);
+      toast(`${form.name} saved`);
+      onSaved();
+    } catch (err) {
+      toast(humanizeError(err as Error, meta), 'error');
+    }
   };
 
   return (
@@ -48,18 +53,26 @@ export function CronView() {
   const [stream, setStream] = useState<{ id: number; name: string; url: string }>();
 
   const doRun = async (job: Cronjob) => {
-    const res = await runJob.run(job.id);
-    if (res?.job_id) {
-      setStream({ id: job.id, name: job.name, url: cron.runStreamUrl(job.id, res.job_id) });
+    try {
+      const res = await runJob.run(job.id);
+      if (res?.job_id) {
+        setStream({ id: job.id, name: job.name, url: cron.runStreamUrl(job.id, res.job_id) });
+      }
+      toast(`${job.name} queued`);
+    } catch (err) {
+      toast(humanizeError(err as Error, meta), 'error');
     }
-    toast(`${job.name} queued`);
   };
 
   const doRemove = async (job: Cronjob) => {
     if (!globalThis.confirm(`Delete ${job.name}?`)) return;
-    await remove.run(job.id);
-    toast(`${job.name} deleted`);
-    state.reload();
+    try {
+      await remove.run(job.id);
+      toast(`${job.name} deleted`);
+      state.reload();
+    } catch (err) {
+      toast(humanizeError(err as Error, meta), 'error');
+    }
   };
 
   return (

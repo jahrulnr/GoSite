@@ -14,7 +14,7 @@ import (
 // targets `_text`, `field:/.../` targets the named column.
 func ParseQuery(q string) ([]sqlite.FieldClause, error) {
 	q = strings.TrimSpace(q)
-	if q == "" {
+	if q == "" || q == "*" {
 		return nil, nil
 	}
 

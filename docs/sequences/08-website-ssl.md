@@ -1,89 +1,134 @@
 # Sequence: SSL Management
 
-Dua jalur: **Certbot otomatis** dan **upload manual**.
+Two paths: **automatic Certbot** (job + SSE) and **manual upload**.
+
+## SSL filesystem layout
+
+```
+/etc/letsencrypt  →  symlink to /storage/webconfig/ssl
+```
+
+| Path | Contents |
+|------|-----|
+| `ssl/live/default/cert.pem` | Self-signed boot default |
+| `ssl/live/{domain}/cert.pem` | Placeholder on website create (Gosite) |
+| `ssl/live/{domain}/fullchain.pem` | Let's Encrypt (after certbot) |
+| `ssl/archive/{domain}/` | Manual archive / certbot |
+
+**Common conflict:** placeholder Gosite (`cert.pem` + `key.pem` as regular files) blocks Certbot because `/etc/letsencrypt/live/{domain}/` already exists but is not an LE lineage (`CertStorageError: live directory exists`).
 
 ## A. Install SSL via Certbot (async)
 
-**Route:** `GET /admin/website/{id}/installSSL?start=true`
+**API:**
+
+| Method | Path |
+|--------|------|
+| POST | `/api/v1/websites/{id}/ssl/certbot` |
+| GET | `/api/v1/websites/{id}/ssl/certbot/stream?job_id=` |
 
 ```mermaid
 sequenceDiagram
     actor User
-    participant WM as WebsiteManagerController
-    participant Disk
-    participant Queue as RunCommand job
+    participant UI as SslModal
+    participant API as SSLHandler
+    participant Svc as ssl.Service
+    participant Worker as job.Worker
     participant Certbot
-    participant Tmp as /tmp/{domain}.txt
 
-    User->>WM: GET installSSL?start=true
-    WM->>Disk: write /tmp/{domain}.sh (certbot --nginx -d {domain})
-    WM->>Queue: dispatch RunCommand(script > output)
-    WM-->>User: "Waiting task on queue"
+    User->>UI: Certbot
+    UI->>API: POST /ssl/certbot
+    API->>Svc: EnqueueCertbot
+    Svc->>Svc: prepareForCertbot
+    Note over Svc: swap SSL to default,<br/>reload, remove placeholder
+    Svc->>Svc: INSERT job_runs (pending)
+    Svc->>Worker: Enqueue(job_id)
+    API-->>UI: 202 { job_id }
 
-    loop polling
-        User->>WM: GET installSSL (start=false)
-        alt output file exists
-            WM->>Tmp: read output
-            WM-->>User: certbot log text
-        else belum selesai
-            WM-->>User: "Waiting task on queue"
-        end
-    end
-
-    Queue->>Certbot: certbot --non-interactive --nginx -d domain
-    Certbot-->>Tmp: stdout/stderr
+    UI->>API: GET /ssl/certbot/stream (SSE)
+    API->>Worker: StreamSSE
+    Worker->>Certbot: sh -c certbot --nginx -d domain
+    Certbot-->>Worker: stdout/stderr chunks
+    Worker-->>API: data: ... / event: done
+    API-->>UI: stream until done
 ```
 
-**Command:** `certbot --non-interactive --agree-tos --register-unsafely-without-email --nginx -d {domain}`
+### Command
+
+```bash
+certbot --non-interactive --agree-tos --register-unsafely-without-email --nginx -d {domain}
+```
+
+### `prepareForCertbot` (before job is queued)
+
+So `nginx -t` and Certbot do not fail:
+
+1. If `ssl/live/{domain}/` contains placeholder (`cert.pem` + `key.pem`, without LE `fullchain.pem`):
+2. Replace `ssl_certificate` in `site.d` → path **default** self-signed
+3. `UpdateSiteConfig` + `Reload`
+4. Remove directory `ssl/live/{domain}/` placeholder
+5. Then enqueue Certbot — LE lineage can be created cleanly
+
+Without steps 2–3, removing the placeholder alone makes `nginx -t` fail (cert path points to a missing file).
+
+### Job worker
+
+Same as manual cron run (`internal/infra/job/worker.go`):
+
+- `Enqueue(job_id)` after DB insert
+- `StreamSSE` poll output sampai `status=ok|failed`
+- Event SSE: `data:` lines + `event: done`
 
 ## B. Manual SSL upload
 
-**Route:** `POST /admin/website/{id}/updateSSL`
+**API:** `PUT /api/v1/websites/{id}/ssl/manual`
 
 ```mermaid
 sequenceDiagram
     actor User
-    participant WM as WebsiteManagerController
-    participant SSL as SSL library
-    participant Disk
-    participant FS as ssl/live + archive
+    participant Svc as ssl.Service
+    participant NGX as nginx.Service
 
-    User->>WM: POST { public, private } PEM content
-    WM->>SSL: getCertPath(domain)
-    alt cert belum ada di config
-        WM->>FS: write archive/{domain}/fullchain.pem, privkey.pem
-        WM->>FS: symlink live/{domain}/
-        Note over WM: setCustomSSL() — TODO/unimplemented (dd())
-    else cert sudah ada
-        WM->>FS: overwrite file di path dari config
+    User->>Svc: { public, private } PEM
+    Svc->>Svc: validatePEM
+    alt site.d missing
+        Svc->>Svc: write archive + live cert.pem/key.pem
+        Svc->>NGX: WriteSiteConfig with ssl directives
+    else site.d ada
+        Svc->>Svc: overwrite paths from config
+        Svc->>NGX: UpdateSiteConfig
     end
-    WM-->>User: success / error write
+    Svc->>NGX: Reload
+    Svc->>Svc: UPDATE websites.ssl = true
 ```
 
-## C. Baca status SSL
+## C. Status SSL
 
-**Digunakan di halaman edit:**
+**API:** `GET /api/v1/websites/{id}/ssl`
 
-- `SSL::readPublic(domain)` / `readPrivate(domain)` — parse path dari `site.d/{domain}.conf`
-- `SSL::checkSSL(domain)` — cek directive `ssl_certificate` tidak di-comment
+Read paths from `site.d/{domain}.conf` (`ParseCertPaths`), load PEM from disk, compute expiry.
 
-## Renewal otomatis (cron default)
+## Automatic renewal (default cron)
 
 ```
-certbot renew --post-hook 'supervisorctl restart nginx'
+certbot renew --post-hook 'nginx -s reload'
 ```
 
-Jadwal: cronjob `day` — dijalankan oleh `artisan run:cronjobs`.
+Run by Go cron scheduler (`run_every: day`), not Laravel queue.
 
-## Implikasi GoSite
+## Troubleshooting
 
-| Endpoint | Keterangan |
-|----------|------------|
-| `POST /websites/{id}/ssl/certbot` | Mulai job |
-| `GET /websites/{id}/ssl/certbot/stream` | SSE output |
-| `PUT /websites/{id}/ssl/manual` | Upload PEM |
-| `GET /websites/{id}/ssl` | Status + paths |
+| Symptom | Cause | Action |
+|--------|----------|----------|
+| `CertStorageError: live directory exists` | Placeholder Gosite di `live/{domain}` | `prepareForCertbot` (automatic) or manual delete + run certbot again |
+| Stream putus, `status=pending` | Job not enqueued to worker | Ensure latest build (fix `worker.Enqueue`) |
+| `nginx -t` fails before certbot | Cert path points to deleted file | `prepareForCertbot` swap ke default dulu |
+| Certbot sukses tapi browser warning | Masih self-signed / DNS salah | Check `ssl_certificate` path in site.d points to `fullchain.pem` |
 
-Job runner Go menggantikan Laravel Queue + file polling `/tmp/`.
+## API summary
 
-Perbaikan yang disarankan: implement `setCustomSSL` — update directive di `site.d` + reload nginx.
+| Method | Path |
+|--------|------|
+| GET | `/websites/{id}/ssl` |
+| PUT | `/websites/{id}/ssl/manual` |
+| POST | `/websites/{id}/ssl/certbot` |
+| GET | `/websites/{id}/ssl/certbot/stream?job_id=` |

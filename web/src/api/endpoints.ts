@@ -7,7 +7,8 @@ import type {
   DatabaseTableData,
   DatabaseTablesResponse,
   DockerContainer,
-  FileEntry,
+  FileContentResponse,
+  FileListResponse,
   JobAcceptedResponse,
   LockscreenResponse,
   LoginResponse,
@@ -79,10 +80,12 @@ export const websites = {
   remove: (id: number, clean = false) =>
     http.del<{ message: string }>(`/websites/${id}`, { clean }),
   toggle: (id: number) => http.patch<WebsiteToggleResponse>(`/websites/${id}/toggle`),
-  validate: (domain: string, path: string) =>
-    http.post<WebsiteValidateResponse>('/websites/validate', { domain, path }),
+  validate: (body: Partial<WebsiteCreateRequest> & { id?: number }) =>
+    http.post<WebsiteValidateResponse>('/websites/validate', body),
   nginxConfig: (id: number) =>
     http.get<{ config: string }>(`/websites/${id}/nginx-config`).then((r) => r.config),
+  testNginxConfig: (id: number, config: string, signal?: AbortSignal) =>
+    http.post<{ ok: boolean }>(`/websites/${id}/nginx-config/test`, { config }, signal),
   updateNginxConfig: (id: number, config: string) =>
     http.put<{ message: string }>(`/websites/${id}/nginx-config`, { config }),
 };
@@ -105,7 +108,8 @@ export const nginx = {
   getGlobal: () => http.get<{ config: string }>('/nginx/global').then((r) => r.config),
   updateGlobal: (content: string) =>
     http.put<{ message: string }>('/nginx/global', { content }),
-  test: (config?: string) => http.post<{ ok: boolean; output?: string }>('/nginx/test', { config }),
+  test: (config?: string, scope?: 'default' | 'global', signal?: AbortSignal) =>
+    http.post<{ ok: boolean; output?: string }>('/nginx/test', { config, scope }, signal),
   reload: () => http.post<{ message: string }>('/nginx/reload'),
 };
 
@@ -122,9 +126,14 @@ export const docker = {
 // ---- Files ----
 export const files = {
   browse: (path: string) =>
-    http.get<{ entries: FileEntry[] }>('/files', { path }).then((r) => r.entries ?? []),
+    http.get<FileListResponse>('/files', { path }).then((r) => ({ entries: r.entries ?? [], tools: r.tools ?? { unzip: false, tar: false, gzip: false } })),
   read: (path: string) =>
-    http.get<{ content: string }>('/files/content', { path }).then((r) => r.content),
+    http.get<FileContentResponse>('/files/content', { path }),
+  rawUrl: (path: string) => `${API_BASE}/files/raw?${new URLSearchParams({ path })}`,
+  save: (path: string, content: string) =>
+    http.put<{ message: string }>('/files/content', { path, content }),
+  batchSave: (items: Array<{ path: string; content: string }>) =>
+    http.post<{ message: string }>('/files/batch-save', { files: items }),
   createFile: (path: string, name: string, content = '') =>
     http.post<{ message: string }>('/files', { type: 'file', path, name, content }),
   createFolder: (path: string, name: string) =>
@@ -135,7 +144,14 @@ export const files = {
     form.append('file', file);
     return http.upload<{ message: string }>('/files', form);
   },
+  uploadMany: (path: string, uploadFiles: File[]) => {
+    const form = new FormData();
+    form.append('path', path);
+    for (const file of uploadFiles) form.append('files', file);
+    return http.upload<{ message: string; count?: number }>('/files', form);
+  },
   remove: (path: string) => http.del<{ message: string }>('/files', { path }),
+  batchDelete: (paths: string[]) => http.post<{ message: string }>('/files/batch-delete', { paths }),
   action: (action: string, path: string, extra: Record<string, unknown> = {}) =>
     http.post<{ message: string }>('/files/actions', { action, path, ...extra }),
 };
@@ -143,8 +159,7 @@ export const files = {
 // ---- Mounts ----
 export const mounts = {
   list: () => http.get<{ mounts: Mount[] }>('/mounts').then((r) => r.mounts ?? []),
-  create: (body: { device: string; dir: string; type: string; options?: string; dump?: string; fsck?: string }) =>
-    http.post<{ message: string }>('/mounts', body),
+  create: (body: Mount) => http.post<{ message: string }>('/mounts', body),
   update: (oldDevice: string, oldDir: string, entry: Mount) =>
     http.put<{ message: string }>('/mounts', { old_device: oldDevice, old_dir: oldDir, entry }),
   remove: (device: string, dir: string) => http.del<{ message: string }>('/mounts', { device, dir }),
@@ -179,21 +194,49 @@ export const database = {
     http.get<DatabaseTableData>(`/database/tables/${encodeURIComponent(name)}`, { limit, offset }),
 };
 
+export interface QueryPayload {
+  source: string;
+  q: string;
+  site?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface QueryStreamFrame {
+  type: 'ingesting' | 'meta' | 'event' | 'done' | 'error';
+  hits?: number;
+  event?: QueryEvent;
+  error?: { code?: string; message?: string };
+}
+
+function queryUrl(path: string, params: QueryPayload & { stream?: string }) {
+  const qs = new URLSearchParams();
+  qs.set('source', params.source);
+  if (params.q) qs.set('q', params.q);
+  if (params.site) qs.set('site', params.site);
+  if (params.from) qs.set('from', params.from);
+  if (params.to) qs.set('to', params.to);
+  if (params.limit) qs.set('limit', String(params.limit));
+  if (params.offset) qs.set('offset', String(params.offset));
+  if (params.stream) qs.set('stream', params.stream);
+  return `${API_BASE}${path}?${qs.toString()}`;
+}
+
 // ---- Observability (Splunk Lite) ----
 export const observability = {
   queryMeta: () => http.get<QueryMetaResponse>('/query/meta'),
-  query: (payload: {
-    source: string;
-    q: string;
-    site?: string;
-    from?: string;
-    to?: string;
-    limit?: number;
-    offset?: number;
-  }) => http.post<QueryResponse>('/query', payload),
-  tailUrl: (params: { source: string; site?: string; from?: string; to?: string }) => {
+  query: (payload: QueryPayload, signal?: AbortSignal) => {
+    const { source, q, site, from, to, limit, offset } = payload;
+    return http.get<QueryResponse>('/query', { source, q, site, from, to, limit, offset }, signal);
+  },
+  queryPost: (payload: QueryPayload) => http.post<QueryResponse>('/query', payload),
+  queryStreamUrl: (payload: QueryPayload, mode: 'sse' | 'ndjson' = 'sse') => queryUrl('/query', { ...payload, stream: mode }),
+  tailUrl: (params: { source: string; q?: string; site?: string; from?: string; to?: string }) => {
     const qs = new URLSearchParams();
     qs.set('source', params.source);
+    if (params.q) qs.set('q', params.q);
     if (params.site) qs.set('site', params.site);
     if (params.from) qs.set('from', params.from);
     if (params.to) qs.set('to', params.to);
@@ -203,9 +246,16 @@ export const observability = {
    * Open a Server-Sent Events stream to /query/tail. Each `data:` line is a
    * JSON-encoded `QueryEvent`. EventSource does not support custom headers, so
    * the cookie session auth is used (withCredentials: true).
+   *
+   * The browser's EventSource auto-reconnects on transient network errors and
+   * fires `onerror` while reconnecting. We only treat the stream as dead when
+   * the readyState is `CLOSED` (server sent no `retry:` hint and gave up, or
+   * we explicitly called `es.close()`). Mid-reconnect errors must NOT stop
+   * the tail — otherwise the UI shows the Stop button flipping back to Run
+   * while events are still flowing.
    * Returns a `stop()` function that closes the stream.
    */
-  startTail: (url: string, onEvent: (e: QueryEvent) => void, onError?: (e: Event) => void) => {
+  startTail: (url: string, onEvent: (e: QueryEvent) => void, onClosed?: () => void) => {
     const es = new EventSource(url, { withCredentials: true });
     es.onmessage = (event) => {
       try {
@@ -215,7 +265,33 @@ export const observability = {
         // ignore malformed payload; backend will close the stream if it errors
       }
     };
-    if (onError) es.onerror = onError;
+    es.onerror = () => {
+      // EventSource constants: 0 = CONNECTING (auto-reconnect in flight),
+      // 2 = CLOSED (gave up). Only the latter is terminal.
+      if (es.readyState === EventSource.CLOSED) {
+        onClosed?.();
+        es.close();
+      }
+      // Otherwise the browser is reconnecting; keep the tail alive.
+    };
+    return () => es.close();
+  },
+  startQueryStream: (payload: QueryPayload, onFrame: (frame: QueryStreamFrame) => void, onError?: (e: Event) => void) => {
+    const es = new EventSource(observability.queryStreamUrl(payload, 'sse'), { withCredentials: true });
+    es.onmessage = (event) => {
+      try {
+        onFrame(JSON.parse(event.data) as QueryStreamFrame);
+      } catch {
+        // ignore malformed frame
+      }
+    };
+    es.addEventListener('error', (event) => {
+      try {
+        onFrame(JSON.parse((event as MessageEvent).data) as QueryStreamFrame);
+      } catch {
+        onError?.(event);
+      }
+    });
     return () => es.close();
   },
   savedQueries: () =>
@@ -241,3 +317,36 @@ export const metrics = {
 
 export const rootHealth = (signal?: AbortSignal) => rootRequest<unknown>('/health', signal);
 export const health = rootHealth;
+
+// ---- Terminal (floating xterm) ----
+export interface TerminalSession {
+  id: string;
+  user_id: number;
+  shell: string;
+  cwd: string;
+  started_at: string;
+  last_attach: string;
+  last_input: string;
+  bytes: number;
+  first_seq: number;
+  end_seq: number;
+  active: boolean;
+  role: string;
+}
+
+export interface TerminalSnapshot {
+  session_id: string;
+  shell: string;
+  cwd: string;
+  started_at: string;
+  bytes: number;
+  first_seq: number;
+  end_seq: number;
+  data_b64: string;
+}
+
+export const terminalApi = {
+  list: () => http.get<{ sessions: TerminalSession[] }>('/terminal/sessions').then((r) => r.sessions ?? []),
+  snapshot: (id: string) => http.get<TerminalSnapshot>(`/terminal/sessions/${id}/snapshot`),
+  kill: (id: string) => http.del<{ message: string; session_id: string }>(`/terminal/sessions/${id}`),
+};

@@ -10,8 +10,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jahrulnr/gosite/internal/config"
 	"github.com/jahrulnr/gosite/internal/contracts"
-	"github.com/jahrulnr/gosite/internal/delivery/http/handler"
 	"github.com/jahrulnr/gosite/internal/delivery/http/frontend"
+	"github.com/jahrulnr/gosite/internal/delivery/http/handler"
 	"github.com/jahrulnr/gosite/internal/delivery/http/middleware"
 	"github.com/jahrulnr/gosite/internal/infra/commander"
 	dockerinfra "github.com/jahrulnr/gosite/internal/infra/docker"
@@ -32,6 +32,7 @@ import (
 	"github.com/jahrulnr/gosite/internal/service/system"
 	"github.com/jahrulnr/gosite/internal/service/uimeta"
 	"github.com/jahrulnr/gosite/internal/service/website"
+	"github.com/jahrulnr/gosite/internal/terminal"
 )
 
 // NewRouter wires the Gin engine with API routes.
@@ -55,40 +56,19 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 		cfg.Storage,
 	))
 
-	storage := cfg.Storage
-	webconfig := filepath.Join(storage, "webconfig")
-	nginxEtc := "/etc/nginx"
-	paths := nginx.Paths{
-		Storage:       storage,
-		SiteD:         filepath.Join(webconfig, "site.d"),
-		ActiveD:       filepath.Join(webconfig, "active.d"),
-		Backups:       filepath.Join(webconfig, "backups"),
-		StaticTpl:     filepath.Join(webconfig, "site.conf"),
-		ProxyTpl:      filepath.Join(webconfig, "site-proxy.conf"),
-		NginxConf:     filepath.Join(webconfig, "nginx.conf"),
-		GlobalConf:    filepath.Join(nginxEtc, "nginx.conf"),
-		DefaultConf:   filepath.Join(nginxEtc, "http.d/default.conf"),
-		SSLDefaultDir: filepath.Join(webconfig, "ssl/live/default"),
-	}
 	cmd := commander.NewExecRunner()
-	baseRunner := nginx.NewRunner(cmd, nginx.RunnerConfig{
-		SiteDDir:   paths.SiteD,
-		BackupsDir: paths.Backups,
-		NginxConf:  paths.NginxConf,
-	})
-	var runner contracts.NginxRunner = baseRunner
-	if cfg.AppEnv == "local" {
-		runner = nginx.NewNoopReloadRunner(baseRunner)
-	}
-	ngx := nginx.NewService(runner, cmd, paths)
+	ngx := nginx.NewServiceFromConfig(cfg, cmd)
 	websiteRepo := sqlite.NewWebsiteRepository(db)
 	jobRepo := sqlite.NewJobRepository(db)
+	worker := job.NewWorker(jobRepo, cmd, 32)
+	worker.Start(context.Background(), 2)
+
 	websiteSvc := website.NewService(websiteRepo, ngx, cfg.WebPath)
-	sslSvc := ssl.NewService(websiteRepo, jobRepo, ngx)
+	sslSvc := ssl.NewService(websiteRepo, jobRepo, ngx, worker)
 
 	websiteHandler := handler.NewWebsiteHandler(websiteSvc)
 	nginxHandler := handler.NewNginxHandler(ngx)
-	sslHandler := handler.NewSSLHandler(sslSvc)
+	sslHandler := handler.NewSSLHandler(sslSvc, worker)
 
 	auditRepo := sqlite.NewAuditRepository(db)
 	logRepo := sqlite.NewLogEventRepository(db)
@@ -96,7 +76,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	savedRepo := sqlite.NewSavedQueryRepository(db)
 	splunkSvc := splunklite.NewService(auditRepo, jobRepo, logRepo, savedRepo, cfg.AuditRetentionDays, cfg.LogEventsRetentionDays)
 	grafanaSvc := grafanalite.NewService(metricsRepo)
-	logDir := filepath.Join(storage, "laravel", "logs")
+	logDir := cfg.LogsDir()
 	logsSvc := logs.NewService(logDir, websiteRepo)
 	queryMetaSvc := splunklite.NewMetaService(logsSvc, logDir)
 	logIngestor := splunklite.NewLogIngestor(logRepo, logDir)
@@ -125,20 +105,35 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	dockerService := dockersvc.NewService(dockerSvc)
 	dockerHandler := handler.NewDockerHandler(dockerService)
 
-	fileRoots := []string{cfg.WebPath, cfg.Storage, "/tmp"}
+	fileRoots := []string{"/"}
 	filesSvc := filessvc.NewService(fileRoots, cfg.FilesAllowExecute, cmd)
 	filesHandler := handler.NewFilesHandler(filesSvc)
 
 	fstabPath := filepath.Join(cfg.EtcDir, "fstab")
-	mountSvc := mountsvc.NewService(fstabPath, cmd)
+	secretsDir := filepath.Join(cfg.Storage, "mount-secrets")
+	mountSvc := mountsvc.NewService(fstabPath, secretsDir, cmd)
 	mountHandler := handler.NewMountHandler(mountSvc)
-
-	worker := job.NewWorker(jobRepo, cmd, 32)
-	worker.Start(context.Background(), 2)
 
 	cronRepo := sqlite.NewCronJobRepository(db)
 	cronSvc := cronsvc.NewService(cronRepo, jobRepo, worker)
 	cronHandler := handler.NewCronHandler(cronSvc, worker)
+
+	terminalHub := terminal.NewHub(terminal.HubConfig{
+		StickyTTL:    cfg.TerminalStickyTTL,
+		DumpDir:      cfg.TerminalDumpDir,
+		DumpMax:      cfg.TerminalDumpMax,
+		PerUser:      cfg.TerminalPerUserMax,
+		DefaultShell: "/bin/bash",
+		DefaultCwd:   cfg.Storage,
+		DefaultEnv:   []string{"TERM=xterm-256color", "COLORTERM=truecolor", "LANG=C.UTF-8", "HOME=" + cfg.Storage},
+	})
+	if err := terminalHub.EnsureDumpDir(); err != nil {
+		slog.Warn("terminal dump dir could not be created", "err", err, "dir", cfg.TerminalDumpDir)
+	}
+	terminalHubCtx, terminalCancel := context.WithCancel(context.Background())
+	defer terminalCancel()
+	terminalHub.RunSweeper(terminalHubCtx, time.Minute)
+	terminalHandler := handler.NewTerminalHandler(terminalHub, splunklite.NewAuditWriter(auditRepo), authSvc)
 
 	engine := gin.New()
 	engine.Use(gin.Recovery())
@@ -176,6 +171,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	registerLogsRoutes(protected, logsHandler)
 	registerDatabaseRoutes(protected, databaseHandler)
 	registerUIMetaRoutes(protected, uimetaHandler)
+	registerTerminalRoutes(protected, terminalHandler)
 
 	if cfg.FEEmbed {
 		frontend.Register(engine, frontend.DistFS)
@@ -239,6 +235,7 @@ func registerWebsiteRoutes(api *gin.RouterGroup, h *handler.WebsiteHandler) {
 	api.PATCH("/websites/:id/toggle", gin.WrapF(h.Toggle))
 	api.GET("/websites/:id/nginx-config", gin.WrapF(h.GetNginxConfig))
 	api.PUT("/websites/:id/nginx-config", gin.WrapF(h.UpdateNginxConfig))
+	api.POST("/websites/:id/nginx-config/test", gin.WrapF(h.TestNginxConfig))
 }
 
 func registerNginxRoutes(api *gin.RouterGroup, h *handler.NginxHandler) {
@@ -267,8 +264,12 @@ func registerDockerRoutes(api *gin.RouterGroup, h *handler.DockerHandler) {
 func registerFilesRoutes(api *gin.RouterGroup, h *handler.FilesHandler) {
 	api.GET("/files", gin.WrapF(h.Browse))
 	api.GET("/files/content", gin.WrapF(h.Read))
+	api.GET("/files/raw", gin.WrapF(h.Raw))
+	api.PUT("/files/content", gin.WrapF(h.Save))
 	api.POST("/files", gin.WrapF(h.Create))
 	api.POST("/files/actions", gin.WrapF(h.Action))
+	api.POST("/files/batch-save", gin.WrapF(h.BatchSave))
+	api.POST("/files/batch-delete", gin.WrapF(h.BatchDelete))
 	api.DELETE("/files", gin.WrapF(h.Delete))
 }
 
@@ -291,6 +292,7 @@ func registerCronRoutes(api *gin.RouterGroup, h *handler.CronHandler) {
 
 func registerObservabilityRoutes(api *gin.RouterGroup, h *handler.ObservabilityHandler) {
 	api.GET("/query/meta", gin.WrapF(h.QueryMeta))
+	api.GET("/query", gin.WrapF(h.QueryGet))
 	api.POST("/query", gin.WrapF(h.Query))
 	api.GET("/query/tail", gin.WrapF(h.Tail))
 	api.GET("/query/saved", gin.WrapF(h.ListSavedQueries))
@@ -301,4 +303,11 @@ func registerObservabilityRoutes(api *gin.RouterGroup, h *handler.ObservabilityH
 	api.GET("/metrics/traffic/top-sites", gin.WrapF(h.TrafficTopSites))
 	api.GET("/metrics/traffic/status-codes", gin.WrapF(h.TrafficStatusCodes))
 	api.GET("/metrics/traffic/summary", gin.WrapF(h.TrafficSummary))
+}
+
+func registerTerminalRoutes(api *gin.RouterGroup, h *handler.TerminalHandler) {
+	api.GET("/terminal/ws", h.HandleWS)
+	api.GET("/terminal/sessions", h.ListSessions)
+	api.GET("/terminal/sessions/:id/snapshot", h.GetSnapshot)
+	api.DELETE("/terminal/sessions/:id", h.KillSession)
 }

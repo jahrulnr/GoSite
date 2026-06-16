@@ -115,6 +115,20 @@ func (r *JobRepository) MarkRunning(ctx context.Context, id int64) error {
 	return nil
 }
 
+// MarkRunningWithOutput sets status to running, records started_at, and
+// replaces the output atomically.
+func (r *JobRepository) MarkRunningWithOutput(ctx context.Context, id int64, output string) error {
+	now := time.Now().UTC()
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE job_runs SET status = ?, output = ?, started_at = ?, updated_at = ?
+		WHERE id = ?
+	`, JobStatusRunning, output, now, now, id)
+	if err != nil {
+		return fmt.Errorf("mark job running with output: %w", err)
+	}
+	return nil
+}
+
 // Complete marks a job finished with output and optional error message.
 func (r *JobRepository) Complete(ctx context.Context, id int64, status, output, errMsg string) error {
 	now := time.Now().UTC()
