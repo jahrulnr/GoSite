@@ -335,6 +335,7 @@ func (h *ObservabilityHandler) DeleteSavedQuery(w http.ResponseWriter, r *http.R
 func (h *ObservabilityHandler) Tail(w http.ResponseWriter, r *http.Request) {
 	source := r.URL.Query().Get("source")
 	site := r.URL.Query().Get("site")
+	query := r.URL.Query().Get("q")
 
 	flusher, _ := w.(http.Flusher)
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -379,7 +380,7 @@ func (h *ObservabilityHandler) Tail(w http.ResponseWriter, r *http.Request) {
 	ch := make(chan splunklite.QueryEvent, 64)
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- h.splunk.Tail(ctx, source, site, ch, resumeFrom)
+		errCh <- h.splunk.TailQuery(ctx, source, site, query, ch, resumeFrom)
 	}()
 
 	keepalive := time.NewTicker(15 * time.Second)

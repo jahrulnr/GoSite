@@ -65,11 +65,14 @@ func TestLogIngestorPersistsAccessLogEvents(t *testing.T) {
 	require.Equal(t, 200, status)
 
 	second := `127.0.0.1 - - [14/Jun/2026:08:00:01 +0000] "GET /two HTTP/1.1" 201 42 "-" "curl"`
+	info, err := os.Stat(path)
+	require.NoError(t, err)
 	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
 	require.NoError(t, err)
 	_, err = file.WriteString(second + "\n")
 	require.NoError(t, err)
 	require.NoError(t, file.Close())
+	require.NoError(t, os.Chtimes(path, info.ModTime(), info.ModTime()))
 	require.NoError(t, ingestor.Ingest(context.Background()))
 	require.NoError(t, db.QueryRow(`SELECT COUNT(1) FROM log_events`).Scan(&count))
 	require.Equal(t, 2, count)

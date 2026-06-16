@@ -540,3 +540,45 @@ func TestTail_StreamsEvents(t *testing.T) {
 		}
 	}
 }
+
+func TestTailQuery_FiltersEvents(t *testing.T) {
+	t.Parallel()
+
+	env := setupSplunk(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+
+	ch := make(chan splunklite.QueryEvent, 16)
+	tailErr := make(chan error, 1)
+	go func() { tailErr <- env.svc.TailQuery(ctx, "audit", "", "curl", ch, "") }()
+
+	time.Sleep(50 * time.Millisecond)
+
+	writer := splunklite.NewAuditWriter(env.audit)
+	require.NoError(t, writer.Write(ctx, contracts.AuditEntry{
+		Action:  "website.create",
+		Status:  "ok",
+		Message: "created by browser",
+	}))
+	require.NoError(t, writer.Write(ctx, contracts.AuditEntry{
+		Action:  "website.create",
+		Status:  "ok",
+		Message: "created by curl",
+	}))
+
+	var got []splunklite.QueryEvent
+	for {
+		select {
+		case ev := <-ch:
+			got = append(got, ev)
+		case <-ctx.Done():
+			select {
+			case <-tailErr:
+			case <-time.After(200 * time.Millisecond):
+			}
+			require.Len(t, got, 1)
+			assert.Contains(t, got[0].Message, "curl")
+			return
+		}
+	}
+}

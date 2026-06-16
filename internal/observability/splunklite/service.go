@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -543,10 +544,19 @@ func (s *Service) DeleteSavedQuery(ctx context.Context, id int64) error {
 // re-emitted. The id format is "source|ts|message"; only the timestamp is
 // used for resumption.
 func (s *Service) Tail(ctx context.Context, source, site string, ch chan<- QueryEvent, resumeFrom string) error {
+	return s.TailQuery(ctx, source, site, "", ch, resumeFrom)
+}
+
+// TailQuery is Tail with the same mini-query filter used by /query.
+func (s *Service) TailQuery(ctx context.Context, source, site, query string, ch chan<- QueryEvent, resumeFrom string) error {
 	if s.ingestor != nil {
 		if err := s.ingestor.Ingest(ctx); err != nil {
 			return err
 		}
+	}
+	clauses, err := ParseQuery(query)
+	if err != nil {
+		return apperror.Wrap(apperror.CodeQueryInvalid, err.Error(), err)
 	}
 	source = strings.ToLower(strings.TrimSpace(source))
 	if source == "" {
@@ -601,7 +611,7 @@ func (s *Service) Tail(ctx context.Context, source, site string, ch chan<- Query
 				s.tailMu.Lock()
 				since := s.tailCursor[tailKey(src, site)]
 				s.tailMu.Unlock()
-				maxTS, err := s.tailOne(ctx, src, site, since, ch)
+				maxTS, err := s.tailOne(ctx, src, site, since, clauses, ch)
 				if err != nil {
 					if ctx.Err() != nil {
 						return nil
@@ -648,11 +658,14 @@ const tailReconnectGap = 30 * time.Second
 
 // tailOne queries the named source for rows newer than `since`, maps them to
 // QueryEvents, sends them on ch, and returns the max ts observed.
-func (s *Service) tailOne(ctx context.Context, source, site string, since time.Time, ch chan<- QueryEvent) (time.Time, error) {
+func (s *Service) tailOne(ctx context.Context, source, site string, since time.Time, clauses []sqlite.FieldClause, ch chan<- QueryEvent) (time.Time, error) {
 	var maxTS time.Time
 	record := func(ev QueryEvent) bool {
 		if ev.TS.After(maxTS) {
 			maxTS = ev.TS
+		}
+		if !eventMatchesClauses(ev, clauses) {
+			return true
 		}
 		return sendCtx(ctx, ch, ev)
 	}
@@ -698,6 +711,68 @@ func (s *Service) tailOne(ctx context.Context, source, site string, since time.T
 		}
 	}
 	return maxTS, nil
+}
+
+func eventMatchesClauses(ev QueryEvent, clauses []sqlite.FieldClause) bool {
+	for _, clause := range clauses {
+		value, ok := eventFieldValue(ev, clause.Field)
+		if !ok {
+			return false
+		}
+		switch clause.Kind {
+		case sqlite.RegexpClauseKind:
+			matched, err := regexp.MatchString(clause.Value, value)
+			if err != nil || !matched {
+				return false
+			}
+		default:
+			if !matchTailPattern(value, clause.Value) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func eventFieldValue(ev QueryEvent, field string) (string, bool) {
+	field = strings.ToLower(strings.TrimSpace(field))
+	switch field {
+	case "_text":
+		parts := []string{ev.Source, ev.Action, ev.User, ev.Message}
+		for key, value := range ev.Meta {
+			parts = append(parts, key, fmt.Sprint(value))
+		}
+		return strings.Join(parts, " "), true
+	case "source":
+		return ev.Source, true
+	case "action", "job_type", "type":
+		return ev.Action, true
+	case "user", "email":
+		return ev.User, true
+	case "message", "output", "error", "name":
+		return ev.Message, true
+	default:
+		if ev.Meta == nil {
+			return "", false
+		}
+		value, ok := ev.Meta[field]
+		if !ok {
+			return "", false
+		}
+		return fmt.Sprint(value), true
+	}
+}
+
+func matchTailPattern(value, pattern string) bool {
+	value = strings.ToLower(value)
+	pattern = strings.ToLower(pattern)
+	if strings.Contains(pattern, "*") {
+		re := regexp.QuoteMeta(pattern)
+		re = strings.ReplaceAll(re, `\*`, ".*")
+		matched, err := regexp.MatchString("^"+re+"$", value)
+		return err == nil && matched
+	}
+	return value == pattern || strings.Contains(value, pattern)
 }
 
 // sendCtx pushes ev to ch or returns false if the context was cancelled.
