@@ -318,6 +318,14 @@ export interface PluginInstallSettings {
   allowed_hosts: string[];
 }
 
+export interface PluginInstallLogStep {
+  step: string;
+  at: string;
+  status: 'ok' | 'failed';
+  failure_class?: string;
+  detail?: string;
+}
+
 export interface PluginVersion {
   id: number;
   plugin_id: string;
@@ -342,6 +350,7 @@ export interface PluginVersion {
   install_path?: string;
   source_commit?: string;
   permissions_ack_at?: string;
+  install_log?: PluginInstallLogStep[];
   created_at: string;
   updated_at: string;
 }

@@ -2287,6 +2287,25 @@ code {
   margin-top: 4px;
 }
 
+.plugin-install-log {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.plugin-install-log li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.plugin-install-log li.failed {
+  color: var(--danger);
+}
+
 .plugin-route-fallback {
   min-height: 360px;
   display: grid;

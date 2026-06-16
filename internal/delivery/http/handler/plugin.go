@@ -24,6 +24,14 @@ func NewPluginHandler(svc *pluginsvc.Service, remoteSvc *remote.Service, remoteC
 	return &PluginHandler{svc: svc, remote: remoteSvc, remoteCfg: remoteCfg}
 }
 
+type installLogStepJSON struct {
+	Step         string `json:"step"`
+	At           string `json:"at"`
+	Status       string `json:"status"`
+	FailureClass string `json:"failure_class,omitempty"`
+	Detail       string `json:"detail,omitempty"`
+}
+
 type pluginJSON struct {
 	ID               int64          `json:"id"`
 	PluginID         string         `json:"plugin_id"`
@@ -48,6 +56,7 @@ type pluginJSON struct {
 	InstallPath      string         `json:"install_path,omitempty"`
 	SourceCommit     string         `json:"source_commit,omitempty"`
 	PermissionsAckAt *string        `json:"permissions_ack_at,omitempty"`
+	InstallLog       []installLogStepJSON `json:"install_log,omitempty"`
 	CreatedAt        string         `json:"created_at"`
 	UpdatedAt        string         `json:"updated_at"`
 }
@@ -318,7 +327,20 @@ func pluginDTO(plugin sqlite.PluginVersion) pluginJSON {
 		ts := plugin.PermissionsAckAt.UTC().Format("2006-01-02T15:04:05Z")
 		out.PermissionsAckAt = &ts
 	}
+	out.InstallLog = decodeInstallLog(plugin.InstallLog)
 	return out
+}
+
+func decodeInstallLog(raw string) []installLogStepJSON {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || raw == "[]" {
+		return nil
+	}
+	var steps []installLogStepJSON
+	if err := json.Unmarshal([]byte(raw), &steps); err != nil {
+		return nil
+	}
+	return steps
 }
 
 func decodeJSONObject(raw string) map[string]any {

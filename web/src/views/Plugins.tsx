@@ -587,6 +587,22 @@ function PluginDetailPanel({ rows }: Readonly<{ rows: PluginVersion[] }>) {
           </dl>
         </div>
       )}
+      {(selected.install_log?.length ?? 0) > 0 && (
+        <div class="plugin-detail-card">
+          <h3>Install log</h3>
+          <ol class="plugin-install-log">
+            {selected.install_log!.map((entry) => (
+              <li key={`${entry.step}-${entry.at}`} class={entry.status === 'failed' ? 'failed' : 'ok'}>
+                <span class="mono">{entry.step}</span>
+                {entry.status === 'failed' && entry.failure_class && (
+                  <Badge kind="danger">{entry.failure_class}</Badge>
+                )}
+                {entry.detail && <span class="dim">{entry.detail}</span>}
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
       <div class="plugin-detail-card">
         <h3>Hooks</h3>
         <div class="chip-row vertical">
