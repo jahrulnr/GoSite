@@ -1,0 +1,18 @@
+{
+  "id": "template/minimal",
+  "name": "Template Minimal (Tier 1)",
+  "version": "0.1.0",
+  "tier": 1,
+  "apiVersion": "gosite-plugin/1",
+  "minGoSiteVersion": "0.0.0",
+  "rpcVersion": "1",
+  "configVersion": "1",
+  "capabilities": {
+    "hooks": ["nginx.before_reload"],
+    "hookIsolation": "sequential"
+  },
+  "entrypoints": {
+    "validate": { "type": "go-plugin", "command": "plugin/validate" },
+    "runtime": { "type": "go-plugin", "command": "plugin/gosite" }
+  }
+}

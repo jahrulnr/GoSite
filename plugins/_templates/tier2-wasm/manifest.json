@@ -1,0 +1,17 @@
+{
+  "id": "template/wasm-stub",
+  "name": "Template WASM (Tier 2 — not installable)",
+  "version": "0.0.0",
+  "tier": 2,
+  "apiVersion": "gosite-plugin/2",
+  "minGoSiteVersion": "99.0.0",
+  "capabilities": {
+    "hooks": ["nginx.before_reload"],
+    "hookIsolation": "independent"
+  },
+  "entrypoints": {
+    "validate": { "type": "wasm", "command": "plugin/module.wasm" },
+    "runtime": { "type": "wasm", "command": "plugin/module.wasm" }
+  },
+  "_comment": "Tier 2 is deferred. Do not install — host rejects tier != 0,1."
+}
