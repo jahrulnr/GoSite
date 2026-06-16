@@ -57,4 +57,4 @@ Tier 1 plugins implement [`pkg/pluginrpc`](../../pkg/pluginrpc/contract.go):
 - `CallHook` — lifecycle event handler
 - `MigrateConfig` — version switch config migration
 
-See also the working reference: [`examples/plugins/hello-hook`](../../examples/plugins/hello-hook).
+See also the working reference: [`tier1-minimal/`](tier1-minimal/).

@@ -16,4 +16,4 @@ make install GOSITE_URL=http://127.0.0.1:8080
 Implements [`pkg/pluginrpc`](../../pkg/pluginrpc/contract.go) via
 [`_shared/rpcplugin`](../_shared/rpcplugin/serve.go).
 
-Working reference: [`examples/plugins/hello-hook`](../../examples/plugins/hello-hook).
+This folder is the canonical minimal tier-1 reference (replaces the former `examples/plugins/hello-hook`).
