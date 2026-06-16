@@ -187,6 +187,29 @@
   color: currentColor;
   opacity: 0.9;
 }
+a.nav-item {
+  text-decoration: none;
+}
+.nav-item--external .nav-item-label {
+  flex: 1;
+}
+.nav-external {
+  width: 14px;
+  height: 14px;
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  opacity: 0.85;
+}
+.nav-item--external:hover .nav-external {
+  color: var(--accent);
+  opacity: 1;
+}
+.sidebar-nav-footer {
+  padding: 0 12px 10px;
+  border-top: 1px solid var(--border);
+  background: oklch(100% 0 0 / 0.01);
+}
 
 /* ---------- Sidebar footer / user card ---------- */
 .sidebar-footer {
@@ -1461,6 +1484,15 @@ code {
     border-bottom: 1px solid var(--border);
   }
   .sidebar-brand, .sidebar-footer { display: none; }
+  .sidebar-nav-footer {
+    border-top: 0;
+    padding: 0 8px 8px;
+  }
+  .sidebar-nav-footer .nav-item {
+    width: auto;
+    flex: 0 0 auto;
+    padding: 7px 12px;
+  }
   .nav { flex-direction: row; overflow-x: auto; padding: 8px; }
   .nav > div { display: contents; }
   .nav-group { flex-direction: row; margin-top: 0; }

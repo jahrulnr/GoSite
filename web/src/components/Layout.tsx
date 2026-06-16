@@ -6,10 +6,12 @@ import { useIdleLock } from '../lib/idleLock';
 import {
   IconChart,
   IconClock,
+  IconBookmark,
   IconDashboard,
   IconDatabase,
   IconDisk,
   IconDocker,
+  IconExternal,
   IconFolder,
   IconGlobe,
   IconLock,
@@ -82,6 +84,8 @@ export const navItems: NavItem[] = [
   { path: '/mounts', label: 'Mounts', group: 'Runtime', icon: IconDisk, meta: 'fstab' },
   { path: '/plugins', label: 'Plugins', group: 'Runtime', icon: IconPlug, meta: 'extensions' },
 ];
+
+const GOSITE_WIKI_URL = 'https://github.com/jahrulnr/GoSite/wiki';
 
 function navFromMeta(meta: UiMetaResponse | undefined): NavItem[] {
   const items = meta?.navigation;
@@ -373,6 +377,18 @@ export function Shell() {
             </div>
           ))}
         </nav>
+        <div class="sidebar-nav-footer">
+          <a
+            class="nav-item nav-item--external"
+            href={GOSITE_WIKI_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <span class="ico"><IconBookmark /></span>
+            <span class="nav-item-label">Docs</span>
+            <span class="nav-external" aria-hidden="true"><IconExternal /></span>
+          </a>
+        </div>
         <div class="sidebar-footer">
           <div class="avatar">{initials(user?.name)}</div>
           <div class="truncate">
