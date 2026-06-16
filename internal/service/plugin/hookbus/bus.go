@@ -113,6 +113,19 @@ func (d *Dispatcher) Refresh(_ context.Context, plugins []sqlite.PluginVersion) 
 	return nil
 }
 
+// SetCaller swaps the underlying HookCaller. Used by the host after the
+// runtime manager is constructed so the dispatcher can route events to
+// HashiCorp go-plugin clients. Caller is safe to swap at runtime.
+func (d *Dispatcher) SetCaller(caller HookCaller) {
+	d.mu.Lock()
+	if caller == nil {
+		d.cfg.Caller = NoopCaller{}
+	} else {
+		d.cfg.Caller = caller
+	}
+	d.mu.Unlock()
+}
+
 // Disable removes one plugin from the enabled set.
 func (d *Dispatcher) Disable(_ context.Context, plugin sqlite.PluginVersion) error {
 	d.mu.Lock()

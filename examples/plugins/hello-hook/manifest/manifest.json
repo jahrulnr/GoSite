@@ -1,0 +1,22 @@
+{
+  "id": "acme/hello-hook",
+  "name": "Acme Hello Hook",
+  "version": "0.1.0",
+  "tier": 1,
+  "apiVersion": "gosite-plugin/1",
+  "minGoSiteVersion": "0.0.0",
+  "rpcVersion": "1",
+  "configVersion": "1",
+  "capabilities": {
+    "hooks": ["nginx.before_reload", "nginx.after_reload", "site.before_create"],
+    "hookIsolation": "sequential",
+    "uiSidebar": true,
+    "configSchema": true,
+    "loggingSink": true
+  },
+  "permissions": ["logs:read"],
+  "entrypoints": {
+    "validate": { "type": "go-plugin", "command": "plugin/validate" },
+    "runtime": { "type": "go-plugin", "command": "plugin/gosite" }
+  }
+}

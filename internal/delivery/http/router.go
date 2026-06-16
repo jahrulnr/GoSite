@@ -61,11 +61,12 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	cmd := commander.NewExecRunner()
 	auditRepo := sqlite.NewAuditRepository(db)
 	pluginRepo := sqlite.NewPluginRepository(db)
-	pluginRuntime := pluginsvc.NewProcessRuntimeManager()
+	pluginRuntime := pluginsvc.NewGoPluginRuntimeManager()
 	pluginDispatcher := hookbus.New(hookbus.Config{
 		MaxConcurrentHooks: cfg.PluginMaxConcurrentHooks,
 		HookTimeout:        cfg.PluginHookTimeout,
 		Audit:              splunklite.NewAuditWriter(auditRepo),
+		Caller:             pluginsvc.NewHookCallerAdapter(pluginRuntime),
 	})
 	ngx := nginx.NewServiceFromConfig(cfg, cmd, nginx.WithHookBus(pluginDispatcher))
 	websiteRepo := sqlite.NewWebsiteRepository(db)
