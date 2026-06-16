@@ -56,6 +56,7 @@ func RunServe(cfg config.Config) error {
 
 	go runMetricsCollector(ctx, collector)
 	go runRetentionPurge(ctx, splunkSvc, collector)
+	go runNginxWatchdog(ctx, cfg)
 
 	go func() {
 		sigCh := make(chan os.Signal, 1)

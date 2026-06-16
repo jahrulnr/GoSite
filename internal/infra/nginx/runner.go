@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/jahrulnr/gosite/internal/contracts"
@@ -18,6 +20,7 @@ type RunnerConfig struct {
 	BackupsDir  string
 	NginxConf   string
 	NginxBin    string
+	PIDFile     string
 }
 
 // Runner implements contracts.NginxRunner using a CommandRunner for exec.
@@ -31,7 +34,45 @@ func NewRunner(cmd contracts.CommandRunner, cfg RunnerConfig) *Runner {
 	if cfg.NginxBin == "" {
 		cfg.NginxBin = "nginx"
 	}
+	if cfg.PIDFile == "" {
+		cfg.PIDFile = "/var/run/nginx.pid"
+	}
 	return &Runner{cmd: cmd, cfg: cfg}
+}
+
+// IsRunning reports whether the nginx master process appears alive.
+func (r *Runner) IsRunning() bool {
+	data, err := os.ReadFile(r.cfg.PIDFile)
+	if err != nil {
+		return false
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || pid <= 0 {
+		return false
+	}
+	return syscall.Kill(pid, 0) == nil
+}
+
+// Start launches nginx when it is not already running.
+func (r *Runner) Start(ctx context.Context) error {
+	if r.IsRunning() {
+		return nil
+	}
+	result, err := r.cmd.Run(ctx, r.cfg.NginxBin, "-c", r.cfg.NginxConf)
+	if err != nil {
+		return apperror.Wrap(apperror.CodeNginxReloadFailed, "nginx start failed", err)
+	}
+	if result.ExitCode != 0 {
+		msg := strings.TrimSpace(result.Stderr)
+		if msg == "" {
+			msg = strings.TrimSpace(result.Stdout)
+		}
+		if msg == "" {
+			msg = "nginx start failed"
+		}
+		return apperror.Wrap(apperror.CodeNginxReloadFailed, msg, nil)
+	}
+	return nil
 }
 
 // Test validates the main nginx configuration.

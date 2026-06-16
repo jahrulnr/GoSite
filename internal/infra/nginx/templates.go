@@ -75,13 +75,20 @@ func ParseCertPaths(config string) (certPath, keyPath string, ok bool) {
 			continue
 		}
 		if strings.HasPrefix(trimmed, "ssl_certificate ") && !strings.HasPrefix(trimmed, "ssl_certificate_key") {
-			certPath = strings.TrimSuffix(strings.TrimPrefix(trimmed, "ssl_certificate "), ";")
-			certPath = strings.TrimSpace(certPath)
+			certPath = parseDirectiveValue(strings.TrimPrefix(trimmed, "ssl_certificate "))
 		}
 		if strings.HasPrefix(trimmed, "ssl_certificate_key ") {
-			keyPath = strings.TrimSuffix(strings.TrimPrefix(trimmed, "ssl_certificate_key "), ";")
-			keyPath = strings.TrimSpace(keyPath)
+			keyPath = parseDirectiveValue(strings.TrimPrefix(trimmed, "ssl_certificate_key "))
 		}
 	}
 	return certPath, keyPath, certPath != "" && keyPath != ""
+}
+
+// parseDirectiveValue strips trailing semicolons and inline comments from an nginx directive value.
+func parseDirectiveValue(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if idx := strings.Index(raw, "#"); idx >= 0 {
+		raw = strings.TrimSpace(raw[:idx])
+	}
+	return strings.TrimSpace(strings.TrimSuffix(raw, ";"))
 }

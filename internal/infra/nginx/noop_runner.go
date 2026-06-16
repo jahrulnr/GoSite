@@ -35,3 +35,9 @@ func (n *NoopReloadRunner) ReadSiteConfig(ctx context.Context, domain string) (s
 func (n *NoopReloadRunner) BackupSiteConfig(ctx context.Context, domain string) (string, error) {
 	return n.inner.BackupSiteConfig(ctx, domain)
 }
+
+// InnerRunner exposes the wrapped runner when it supports config repair.
+func (n *NoopReloadRunner) InnerRunner() (*Runner, bool) {
+	r, ok := n.inner.(*Runner)
+	return r, ok
+}

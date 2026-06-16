@@ -62,6 +62,17 @@ func TestParseCertPaths(t *testing.T) {
 	assert.Equal(t, "/a/key.pem", key)
 }
 
+func TestParseCertPaths_StripsCertbotInlineComment(t *testing.T) {
+	t.Parallel()
+
+	cfg := `ssl_certificate /etc/letsencrypt/live/example.com/fullchain.pem; # managed by Certbot
+ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem; # managed by Certbot`
+	cert, key, ok := nginx.ParseCertPaths(cfg)
+	assert.True(t, ok)
+	assert.Equal(t, "/etc/letsencrypt/live/example.com/fullchain.pem", cert)
+	assert.Equal(t, "/etc/letsencrypt/live/example.com/privkey.pem", key)
+}
+
 func TestNginxService_EnableDisableSite(t *testing.T) {
 	stack := testutil.SetupTestStack(t)
 	ctx := context.Background()
@@ -94,6 +105,37 @@ func TestNginxConfig_BackupCreated(t *testing.T) {
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "example.test")
+}
+
+func TestNginxService_TestDefaultConfig_DoesNotWriteDefaultConf(t *testing.T) {
+	stack := testutil.SetupTestStack(t)
+	ctx := context.Background()
+
+	content, err := stack.Nginx.ReadDefaultConfig()
+	require.NoError(t, err)
+
+	original, err := os.ReadFile(stack.Nginx.Paths().DefaultConf)
+	require.NoError(t, err)
+
+	require.NoError(t, stack.Nginx.TestDefaultConfig(ctx, content))
+
+	got, err := os.ReadFile(stack.Nginx.Paths().DefaultConf)
+	require.NoError(t, err)
+	assert.Equal(t, string(original), string(got), "TestDefaultConfig must not write default.conf")
+}
+
+func TestNginxService_TestConfig_DoesNotWriteSiteD(t *testing.T) {
+	stack := testutil.SetupTestStack(t)
+	ctx := context.Background()
+
+	domain := "dry-run.test"
+	sitePath := filepath.Join(stack.Nginx.Paths().SiteD, domain+".conf")
+	content := testutil.SampleNginxSiteConfig
+
+	require.NoError(t, stack.Nginx.TestConfig(ctx, domain, content))
+
+	_, err := os.Stat(sitePath)
+	assert.True(t, os.IsNotExist(err), "TestConfig must not write site.d")
 }
 
 func TestNginxService_UpdateSiteConfig_RollbackOnTestFail(t *testing.T) {

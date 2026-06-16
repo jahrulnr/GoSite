@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"context"
 	"database/sql"
 	"io"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/jahrulnr/gosite/internal/infra/job"
 	"github.com/jahrulnr/gosite/internal/infra/nginx"
 	"github.com/jahrulnr/gosite/internal/repository/sqlite"
 	"github.com/jahrulnr/gosite/internal/service/ssl"
@@ -26,6 +28,7 @@ type TestStack struct {
 	Cmd         *MockCommander
 	Nginx       *nginx.Service
 	Runner      *nginx.Runner
+	Worker      *job.Worker
 	WebsiteSvc  *website.Service
 	SSLSvc      *ssl.Service
 }
@@ -87,6 +90,10 @@ func SetupTestStack(t *testing.T) *TestStack {
 	websiteRepo := sqlite.NewWebsiteRepository(db)
 	jobRepo := sqlite.NewJobRepository(db)
 
+	worker := job.NewWorker(jobRepo, cmd, 32)
+	worker.Start(context.Background(), 1)
+	t.Cleanup(worker.Stop)
+
 	return &TestStack{
 		Root:        root,
 		Storage:     storage,
@@ -97,8 +104,9 @@ func SetupTestStack(t *testing.T) *TestStack {
 		Cmd:         cmd,
 		Nginx:       ngx,
 		Runner:      runner,
+		Worker:      worker,
 		WebsiteSvc:  website.NewService(websiteRepo, ngx, webRoot),
-		SSLSvc:      ssl.NewService(websiteRepo, jobRepo, ngx),
+		SSLSvc:      ssl.NewService(websiteRepo, jobRepo, ngx, worker),
 	}
 }
 
