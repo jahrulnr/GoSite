@@ -41,6 +41,9 @@ if [ ! -f "$DEFAULT_SSL_DIR/cert.pem" ] || [ ! -f "$DEFAULT_SSL_DIR/key.pem" ]; 
         >> "$STARTUP_LOG" 2>&1
 fi
 
+echo "--- Repair nginx config if needed ---"
+/usr/local/bin/gosite nginx-repair >> "$STARTUP_LOG" 2>&1 || echo "WARN: nginx-repair failed, see bootstrap.log" >> "$STARTUP_LOG"
+
 if [ ! -f /www/default/index.html ]; then
     echo "--- Generate default /www ---"
     mkdir -p /www/default/
@@ -70,5 +73,10 @@ fi
 echo "--- Mounting FSTAB ---"
 /run/fstab_mounter.sh
 
-echo "--- Start Server ---"
-exec supervisord -n -c /etc/supervisord.conf
+echo "--- Start nginx ---"
+if ! /usr/sbin/nginx -c /etc/nginx/nginx.conf >> "$STARTUP_LOG" 2>&1; then
+    echo "WARN: nginx start failed, see bootstrap.log" >> "$STARTUP_LOG"
+fi
+
+echo "--- Start gosite ---"
+exec /usr/local/bin/gosite serve

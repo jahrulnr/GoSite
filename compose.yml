@@ -14,23 +14,48 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: gosite
+    privileged: true
     restart: unless-stopped
     depends_on:
       - nfs
+    cpus: 0.5
+    mem_limit: 512m
+    devices:
+      - /dev/fuse
+    cap_add:
+      - SYS_PTRACE
+      - NET_ADMIN
+    ulimits:
+      nofile:
+        soft: "65536"
+        hard: "65536"
     ports:
       - "8080:8080"
       - "80:80"
       - "443:443"
       - "443:443/udp"
     volumes:
+      - /etc/hosts:/etc/hosts
       - ./data:/storage
       - /var/run/docker.sock:/var/run/docker.sock
+      # /tmp is host-mounted so the rolling terminal dumps survive
+      # container restarts. Without this the sweeper can only restore
+      # sessions across restarts when the underlying /tmp is not tmpfs.
+      - /tmp:/tmp
     environment:
+      TZ: Asia/Jakarta
       STORAGE_PATH: /storage
       DB_DATABASE: /storage/db.sqlite
-      WEB_PATH: /www
+      WEB_PATH: /storage/www
       LISTEN_ADDR: ":8080"
       TEMPLATES_DIR: /var/setup
       MIGRATIONS_DIR: /app/migrations
       FE_EMBED: "true"
       TLS_ENABLE: "true"
+      # Terminal (floating xterm) configuration. The sticky TTL is 12h
+      # by default; override TERMINAL_STICKY_TTL to a smaller value
+      # (e.g. "30s") when running integration tests.
+      TERMINAL_DUMP_DIR: /tmp
+      TERMINAL_DUMP_MAX: "262144"
+      TERMINAL_STICKY_TTL: 12h
+      TERMINAL_PER_USER_MAX: "8"
