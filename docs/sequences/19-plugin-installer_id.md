@@ -2,21 +2,23 @@
 
 RND/Desain untuk bagaimana GoSite harus meng-install, memvalidasi, mengaktifkan/nonaktifkan, dan menjalankan “plugin” (gaya extensibility seperti Krakend) sambil menjaga kompatibilitas antar upgrade GoSite.
 
-**Status:** Terimplementasi sebagian
+**Status:** Implementasi siap (phase A–F selesai)
 
 Sudah ada di kode saat ini:
 
 - P1 registry/lifecycle/API/UI: SQLite `plugin_versions`, install/enable/disable/switch/uninstall/purge, metadata failure, signature/keyring, startup reconcile, dan admin UI.
 - Core hook bus Phase A: dispatch enabled-set, urutan deterministik, strict `*.before_*` yang bisa memblokir, lenient continuation, timeout per hook, batas concurrency untuk isolation `independent`, circuit breaker, dan audit logging untuk error hook.
 - Call site hook awal: nginx reload, website create/enable/config change, SSL issue/manual renew, job run/failure, cron trigger, dan aksi container Docker.
+- Phase B runtime tier-1: kontrak Go-native gRPC `pkg/pluginrpc` dan `GoPluginRuntimeManager` yang menjalankan subprocess HashiCorp go-plugin (transport net/rpc), men-dispense typed client, dan mengekspos `Health`/`CallHook`/`MigrateConfig` lewat kabel. Reference plugin di `examples/plugins/hello-hook` membangun artifact portabel.
+- Phase C config & secrets: tabel `plugin_configs`, cipher AES-256-GCM (`pkg/secrets`), `ConfigService` (mask secret di response API, hanya runtime yang boleh reveal), `ConfigMigrator` dipanggil saat `Switch` untuk memvalidasi dan persist konfigurasi termigrasi, endpoint admin keyring per-version.
+- Phase D webhook tier 0: entri `webhooks[]` di manifest, `Tier0Caller` POST payload event dengan header `X-Gosite-Webhook-Event` + `X-Gosite-Webhook-Secret`, dan `LoggingSink` untuk plugin yang mendeklarasikan `capabilities.loggingSink`.
+- Phase E supervisor self-healing: `HealthSupervisor` mem-poll plugin tier-1 yang enabled, restart dengan exponential backoff (dibatasi `PLUGIN_RESTART_BACKOFF_CAP`), auto-disable setelah `PLUGIN_RESTART_MAX_ATTEMPTS` gagal berturutan dalam `PLUGIN_RESTART_WINDOW`.
+- Phase F polish lifecycle: `Disable` failure kembali ke `installed` dengan `failure_class=stop_failed` sesuai spec, switch pakai kontrak Migrate + persist config termigrasi, keyring CRUD (add/replace + revoke) terbuka.
 
-Masih pending:
+Ditunda ke gelombang berikutnya:
 
-- Runtime HashiCorp go-plugin gRPC dan reference plugin.
-- Storage config plugin, secret terenkripsi, RPC config migration, dan renderer form config di UI.
-- Transport webhook Tier 0 dan scoped plugin token.
-- Self-healing health/restart supervisor.
-- Tier 2 WASM tetap out of scope untuk gelombang implementasi ini.
+- Scoped plugin API token dan egress policy (cuma UI scaffolding).
+- Tier 2 WASM dan tier 3 `.so` tetap out of scope untuk gelombang implementasi ini.
 
 ## Tujuan
 

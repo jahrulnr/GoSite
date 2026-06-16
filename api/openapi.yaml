@@ -2123,6 +2123,133 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
+  /plugins/{vendor}/{name}/versions/{version}/config:
+    get:
+      tags: [Plugins]
+      summary: Get plugin configuration
+      description: |
+        Returns the per-version configuration. Secret fields are
+        hidden from the response and are only revealed to the plugin
+        runtime via internal channels.
+      operationId: getPluginConfig
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/PluginVendor"
+        - $ref: "#/components/parameters/PluginName"
+        - $ref: "#/components/parameters/PluginVersion"
+      responses:
+        "200":
+          description: Configuration view
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PluginConfigResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Plugins]
+      summary: Persist plugin configuration
+      description: |
+        Stores non-secret values in the registry and encrypts secret
+        fields with AES-256-GCM under PLUGIN_CONFIG_KEY. Replaces
+        the existing row for the given (plugin_id, version).
+      operationId: putPluginConfig
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/PluginVendor"
+        - $ref: "#/components/parameters/PluginName"
+        - $ref: "#/components/parameters/PluginVersion"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginConfigRequest"
+      responses:
+        "200":
+          description: Configuration updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PluginConfigResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /plugins/keyring:
+    get:
+      tags: [Plugins]
+      summary: List trusted vendor signing keys
+      operationId: getPluginKeyring
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "200":
+          description: Trusted keys (revoked entries included)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PluginKeyringResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Plugins]
+      summary: Add or replace a trusted signing key
+      operationId: postPluginKeyring
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginKeyringEntry"
+      responses:
+        "201":
+          description: Key registered
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    delete:
+      tags: [Plugins]
+      summary: Revoke a trusted signing key
+      operationId: revokePluginKeyring
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - name: vendor
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: keyId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Key revoked
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
 components:
   securitySchemes:
     sessionCookie:
@@ -3359,6 +3486,67 @@ components:
       properties:
         version:
           type: string
+
+    PluginConfigRequest:
+      type: object
+      required: [version, values]
+      properties:
+        version:
+          type: string
+        configVersion:
+          type: string
+        values:
+          type: object
+          additionalProperties: true
+        secrets:
+          type: object
+          additionalProperties: true
+          description: |
+            Map of secret field name to plaintext value. Encrypted with
+            AES-256-GCM under PLUGIN_CONFIG_KEY at rest, and never
+            included in API responses.
+
+    PluginConfigResponse:
+      type: object
+      properties:
+        plugin_id:
+          type: string
+        version:
+          type: string
+        config_version:
+          type: string
+        values:
+          type: object
+          additionalProperties: true
+        updated_at:
+          type: string
+          format: date-time
+
+    PluginKeyringEntry:
+      type: object
+      required: [vendor, keyId, publicKey]
+      properties:
+        vendor:
+          type: string
+        keyId:
+          type: string
+        publicKey:
+          type: string
+          description: base64-encoded ed25519 public key
+        createdAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: string
+          format: date-time
+
+    PluginKeyringResponse:
+      type: object
+      properties:
+        keys:
+          type: array
+          items:
+            $ref: "#/components/schemas/PluginKeyringEntry"
 
     MessageResponse:
       type: object

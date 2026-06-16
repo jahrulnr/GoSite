@@ -1,6 +1,6 @@
 # ADR: Plugin platform
 
-**Status:** Partially implemented
+**Status:** Implemented (tier 0 + tier 1; tier 2 WASM deferred)
 **Date:** 2026-06-16  
 **Research:** dev-docs `go-plugin-platform` — see [plugin architecture](https://github.com/jahrulnr/dev-docs/blob/main/docs/best-practices/architecture/patterns/plugin-architecture_en.md) (or local dev-docs corpus)
 

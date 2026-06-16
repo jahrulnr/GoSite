@@ -2,21 +2,23 @@
 
 Design/RND for how GoSite should install, validate, enable/disable, and run “plugins” (in the spirit of Krakend behavior/extensibility) while keeping compatibility across GoSite upgrades.
 
-**Status:** Partially implemented
+**Status:** Implementation-ready (phases A–F implemented)
 
 Implemented as of the current code:
 
 - P1 registry/lifecycle/API/UI: SQLite `plugin_versions`, install/enable/disable/switch/uninstall/purge, failure metadata, signature/keyring checks, startup reconcile, and admin UI.
-- Phase A hook bus core: enabled-set dispatch, deterministic ordering, strict `*.before_*` blocking, lenient continuation, per-hook timeout, independent concurrent dispatch cap, circuit breaker, and audit logging for hook errors.
+- Phase A hook bus: enabled-set dispatch, deterministic ordering, strict `*.before_*` blocking, lenient continuation, per-hook timeout, independent concurrent dispatch cap, circuit breaker, and audit logging for hook errors.
 - Initial hook call sites: nginx reload, website create/enable/config change, SSL issue/manual renew, job run/failure, cron trigger, and Docker container actions.
+- Phase B tier-1 runtime: `pkg/pluginrpc` Go-native gRPC contract and `GoPluginRuntimeManager` that launches HashiCorp go-plugin subprocesses (net/rpc transport), dispenses the typed client, and exposes `Health`/`CallHook`/`MigrateConfig` over the wire. Reference plugin in `examples/plugins/hello-hook` builds a host-portable artifact and exercises the full lifecycle.
+- Phase C config & secrets: `plugin_configs` table, AES-256-GCM secret cipher (`pkg/secrets`), `ConfigService` (mask secrets in API responses, reveal to runtime only), `ConfigMigrator` invoked during `Switch` to validate and persist migrated config, and per-version keyring admin endpoints.
+- Phase D tier 0 webhooks: manifest `webhooks[]` entries, `Tier0Caller` that POSTs the event payload with `X-Gosite-Webhook-Event` + `X-Gosite-Webhook-Secret` headers, plus `LoggingSink` for `capabilities.loggingSink` plugins.
+- Phase E self-healing supervisor: `HealthSupervisor` polls enabled tier-1 plugins, restarts with exponential backoff (bounded by `PLUGIN_RESTART_BACKOFF_CAP`), and auto-disables after `PLUGIN_RESTART_MAX_ATTEMPTS` consecutive failures within `PLUGIN_RESTART_WINDOW`.
+- Phase F lifecycle polish: `Disable` failure mode reverts to `installed` (not `installed`) with `failure_class=stop_failed` per the spec, switch uses Migrate contract + persists migrated config, keyring CRUD (add/replace + revoke) is exposed.
 
-Still pending:
+Deferred to a future wave:
 
-- HashiCorp go-plugin gRPC runtime and reference plugin.
-- Plugin config storage, encrypted secrets, config migration RPC, and UI config form renderer.
-- Tier 0 webhook transport and scoped plugin tokens.
-- Self-healing health/restart supervisor.
-- Tier 2 WASM remains explicitly out of scope for this implementation wave.
+- Scoped plugin API tokens and egress policies (UI scaffolding only).
+- Tier 2 WASM and tier 3 `.so` remain explicitly out of scope for this implementation wave.
 
 ## Goals
 
