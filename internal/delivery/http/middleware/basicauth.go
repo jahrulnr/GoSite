@@ -47,6 +47,12 @@ func BasicAuth(cfg config.Config) gin.HandlerFunc {
 }
 
 func isStreamRequest(c *gin.Context) bool {
+	// WebSocket upgrades carry an Upgrade header. Browser WebSockets
+	// cannot set custom headers (notably Authorization) so the basic-auth
+	// gate has to be skipped and the session cookie must do the auth.
+	if strings.EqualFold(c.GetHeader("Upgrade"), "websocket") {
+		return true
+	}
 	if strings.HasPrefix(c.Request.URL.Path, "/api/v1/query/tail") {
 		return true
 	}
