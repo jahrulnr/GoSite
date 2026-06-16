@@ -19,6 +19,9 @@ const bucketDuration = 5 * time.Minute
 var (
 	combinedLogRE = regexp.MustCompile(`"[^"]*"\s+(\d{3})\s+(\d+|-)\s+"`)
 	nginxTimeRE   = regexp.MustCompile(`\[([^\]]+)\]`)
+	kvTimeRE      = regexp.MustCompile(`\btime_local="([^"]+)"`)
+	kvStatusRE    = regexp.MustCompile(`\bstatus="(\d{3})"`)
+	kvBytesOutRE  = regexp.MustCompile(`\bbytes_out="(\d+)"`)
 )
 
 // OffsetState tracks byte offsets per access log file.
@@ -77,23 +80,13 @@ func (c *Collector) Collect(ctx context.Context) error {
 	buckets := map[bucketKey]*sqlite.TrafficBucket{}
 
 	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		if !strings.HasPrefix(name, "access") || !strings.HasSuffix(name, ".log") {
-			continue
-		}
-		path := filepath.Join(c.logDir, name)
-		site := siteFromAccessLogName(name)
-		offset := offsets.Files[name]
-
-		newOffset, parsed, err := c.readFromOffset(path, offset, site, buckets)
+		newOffset, err := c.collectEntry(entry, offsets.Files, buckets)
 		if err != nil {
 			return err
 		}
-		offsets.Files[name] = newOffset
-		_ = parsed
+		if newOffset != nil {
+			offsets.Files[entry.Name()] = *newOffset
+		}
 	}
 
 	for _, b := range buckets {
@@ -106,6 +99,25 @@ func (c *Collector) Collect(ctx context.Context) error {
 		return err
 	}
 	return c.purgeRetention(ctx)
+}
+
+func (c *Collector) collectEntry(entry os.DirEntry, offsets map[string]int64, buckets map[bucketKey]*sqlite.TrafficBucket) (*int64, error) {
+	if entry.IsDir() {
+		return nil, nil
+	}
+	name := entry.Name()
+	if !strings.HasPrefix(name, "access") || !strings.HasSuffix(name, ".log") {
+		return nil, nil
+	}
+	path := filepath.Join(c.logDir, name)
+	site := siteFromAccessLogName(name)
+	offset := offsets[name]
+
+	newOffset, _, err := c.readFromOffset(path, offset, site, buckets)
+	if err != nil {
+		return nil, err
+	}
+	return &newOffset, nil
 }
 
 type bucketKey struct {
@@ -138,33 +150,9 @@ func (c *Collector) readFromOffset(path string, offset int64, site string, bucke
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	parsed := 0
 	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.TrimSpace(line) == "" {
-			continue
+		if c.consumeLine(scanner.Text(), site, buckets) {
+			parsed++
 		}
-		ts, status, bytes, ok := parseAccessLine(line)
-		if !ok {
-			continue
-		}
-		key := bucketKey{ts: truncateBucket(ts), site: site}
-		b := buckets[key]
-		if b == nil {
-			b = &sqlite.TrafficBucket{BucketTS: key.ts, Site: site}
-			buckets[key] = b
-		}
-		b.Requests++
-		b.Bytes += bytes
-		switch {
-		case status >= 200 && status < 300:
-			b.S2xx++
-		case status >= 300 && status < 400:
-			b.S3xx++
-		case status >= 400 && status < 500:
-			b.S4xx++
-		case status >= 500:
-			b.S5xx++
-		}
-		parsed++
 	}
 	if err := scanner.Err(); err != nil {
 		return offset, parsed, err
@@ -177,23 +165,78 @@ func (c *Collector) readFromOffset(path string, offset int64, site string, bucke
 }
 
 func parseAccessLine(line string) (ts time.Time, status, bytes int, ok bool) {
-	m := nginxTimeRE.FindStringSubmatch(line)
-	if len(m) < 2 {
+	// Accept both:
+	// - classic nginx combined/CLF fragments (for backwards compatibility)
+	// - GoSite's agreed key="value" format (time_local/status/bytes_out)
+
+	// 1) time: try [time_local] style first
+	if m := nginxTimeRE.FindStringSubmatch(line); len(m) >= 2 {
+		if parsedTS, err := time.Parse("02/Jan/2006:15:04:05 -0700", m[1]); err == nil {
+			ts = parsedTS
+		}
+	}
+	// 2) time: fallback to time_local="..."
+	if ts.IsZero() {
+		if m := kvTimeRE.FindStringSubmatch(line); len(m) >= 2 {
+			if parsedTS, err := time.Parse("02/Jan/2006:15:04:05 -0700", m[1]); err == nil {
+				ts = parsedTS
+			}
+		}
+	}
+	if ts.IsZero() {
 		return time.Time{}, 0, 0, false
 	}
-	parsedTS, err := time.Parse("02/Jan/2006:15:04:05 -0700", m[1])
-	if err != nil {
-		return time.Time{}, 0, 0, false
+
+	// 3) status/bytes: try combined fragment first
+	if sm := combinedLogRE.FindStringSubmatch(line); len(sm) >= 3 {
+		status = atoi(sm[1])
+		if sm[2] != "-" {
+			bytes = atoi(sm[2])
+		}
+		return ts, status, bytes, true
 	}
-	sm := combinedLogRE.FindStringSubmatch(line)
-	if len(sm) < 3 {
-		return parsedTS, 0, 0, true
+
+	// 4) status/bytes: key="value" format
+	if m := kvStatusRE.FindStringSubmatch(line); len(m) >= 2 {
+		status = atoi(m[1])
 	}
-	status = atoi(sm[1])
-	if sm[2] != "-" {
-		bytes = atoi(sm[2])
+	if m := kvBytesOutRE.FindStringSubmatch(line); len(m) >= 2 {
+		bytes = atoi(m[1])
 	}
-	return parsedTS, status, bytes, true
+	return ts, status, bytes, true
+}
+
+func (c *Collector) consumeLine(line, site string, buckets map[bucketKey]*sqlite.TrafficBucket) bool {
+	if strings.TrimSpace(line) == "" {
+		return false
+	}
+	ts, status, bytes, ok := parseAccessLine(line)
+	if !ok {
+		return false
+	}
+	key := bucketKey{ts: truncateBucket(ts), site: site}
+	b := buckets[key]
+	if b == nil {
+		b = &sqlite.TrafficBucket{BucketTS: key.ts, Site: site}
+		buckets[key] = b
+	}
+	b.Requests++
+	b.Bytes += bytes
+	applyStatusFamily(b, status)
+	return true
+}
+
+func applyStatusFamily(b *sqlite.TrafficBucket, status int) {
+	switch {
+	case status >= 200 && status < 300:
+		b.S2xx++
+	case status >= 300 && status < 400:
+		b.S3xx++
+	case status >= 400 && status < 500:
+		b.S4xx++
+	case status >= 500:
+		b.S5xx++
+	}
 }
 
 func truncateBucket(ts time.Time) time.Time {

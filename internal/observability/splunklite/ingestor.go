@@ -21,6 +21,9 @@ import (
 
 var nginxAccessPattern = regexp.MustCompile(`^(\S+) \S+ \S+ \[([^\]]+)\] "([^"]*)" (\d{3}) (\d+|-)`)
 var nginxErrorPattern = regexp.MustCompile(`^(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})`)
+var nginxAccessKVTime = regexp.MustCompile(`\btime_local="([^"]+)"`)
+var nginxAccessKVStatus = regexp.MustCompile(`\bstatus="(\d{3})"`)
+var nginxAccessKVBytes = regexp.MustCompile(`\bbytes_out="(\d+)"`)
 
 // logIngestCooldown caps how often a full ingest pass runs when nothing
 // changed. It satisfies the "buffer output + caching pake file cache selama
@@ -78,7 +81,7 @@ func (i *LogIngestor) Ingest(ctx context.Context) error {
 
 	i.mu.Lock()
 	last := i.lastIngest
-	changed := i.hasNewerFile(entries, now)
+	changed := i.hasChangedFile(entries)
 	cooldownActive := !last.IsZero() && now.Sub(last) < logIngestCooldown
 	if cooldownActive && !changed {
 		i.mu.Unlock()
@@ -131,11 +134,14 @@ func (i *LogIngestor) Ingest(ctx context.Context) error {
 	return nil
 }
 
-// hasNewerFile reports whether any file in entries has a ModTime newer than
-// the last successful ingest. The caller must hold i.mu.
-func (i *LogIngestor) hasNewerFile(entries []os.DirEntry, now time.Time) bool {
+// hasChangedFile reports whether any log file changed since the last
+// successful ingest. The caller must hold i.mu.
+func (i *LogIngestor) hasChangedFile(entries []os.DirEntry) bool {
 	if i.lastIngest.IsZero() {
 		return true
+	}
+	if len(i.cursors) == 0 && i.cursorF != "" {
+		i.loadCursorsLocked()
 	}
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".log") {
@@ -148,7 +154,9 @@ func (i *LogIngestor) hasNewerFile(entries []os.DirEntry, now time.Time) bool {
 		if err != nil {
 			continue
 		}
-		if info.ModTime().After(i.lastIngest) {
+		path := filepath.Join(i.logDir, entry.Name())
+		cur, ok := i.cursors[path]
+		if !ok || info.Size() != cur.Size || info.ModTime().After(cur.ModTime) {
 			return true
 		}
 	}
@@ -334,19 +342,7 @@ func parseLogLine(line, source, site string) sqlite.LogEvent {
 		RawPreview: preview(line),
 	}
 	if source == sqlite.LogSourceAccess {
-		if matches := nginxAccessPattern.FindStringSubmatch(line); len(matches) == 6 {
-			if ts, err := time.Parse("02/Jan/2006:15:04:05 -0700", matches[2]); err == nil {
-				ev.Timestamp = ts.UTC()
-			}
-			if status, err := strconv.Atoi(matches[4]); err == nil {
-				ev.StatusCode = &status
-			}
-			if matches[5] != "-" {
-				if b, err := strconv.Atoi(matches[5]); err == nil {
-					ev.Bytes = &b
-				}
-			}
-		}
+		applyAccessFields(&ev, line)
 		return ev
 	}
 	if matches := nginxErrorPattern.FindStringSubmatch(line); len(matches) == 2 {
@@ -355,6 +351,42 @@ func parseLogLine(line, source, site string) sqlite.LogEvent {
 		}
 	}
 	return ev
+}
+
+func applyAccessFields(ev *sqlite.LogEvent, line string) {
+	// Accept both classic access log and GoSite's key="value" format.
+	if ev == nil {
+		return
+	}
+	if matches := nginxAccessPattern.FindStringSubmatch(line); len(matches) == 6 {
+		if ts, err := time.Parse("02/Jan/2006:15:04:05 -0700", matches[2]); err == nil {
+			ev.Timestamp = ts.UTC()
+		}
+		if status, err := strconv.Atoi(matches[4]); err == nil {
+			ev.StatusCode = &status
+		}
+		if matches[5] != "-" {
+			if b, err := strconv.Atoi(matches[5]); err == nil {
+				ev.Bytes = &b
+			}
+		}
+		return
+	}
+	if m := nginxAccessKVTime.FindStringSubmatch(line); len(m) == 2 {
+		if ts, err := time.Parse("02/Jan/2006:15:04:05 -0700", m[1]); err == nil {
+			ev.Timestamp = ts.UTC()
+		}
+	}
+	if m := nginxAccessKVStatus.FindStringSubmatch(line); len(m) == 2 {
+		if status, err := strconv.Atoi(m[1]); err == nil {
+			ev.StatusCode = &status
+		}
+	}
+	if m := nginxAccessKVBytes.FindStringSubmatch(line); len(m) == 2 {
+		if b, err := strconv.Atoi(m[1]); err == nil {
+			ev.Bytes = &b
+		}
+	}
 }
 
 func logSourceAndSite(name string) (string, string, bool) {
