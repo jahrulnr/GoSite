@@ -100,13 +100,14 @@ describe('plugin endpoints', () => {
       }),
     );
 
-    await plugins.installRemote({ type: 'github-release', repo: 'acme/foo', tag: 'v1.0.0' }, true);
+    await plugins.installRemote({ type: 'github-release', repo: 'acme/foo', tag: 'v1.0.0' }, true, 'tok123');
 
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/plugins/install', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({
         source: { type: 'github-release', repo: 'acme/foo', tag: 'v1.0.0' },
         permissions_ack: true,
+        resolveToken: 'tok123',
       }),
     }));
   });

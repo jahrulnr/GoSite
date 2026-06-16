@@ -198,8 +198,12 @@ export const plugins = {
   installSettings: () => http.get<PluginInstallSettings>('/plugins/install/settings'),
   resolveInstall: (source: PluginInstallSource) =>
     http.post<{ preview: PluginResolvePreview }>('/plugins/install/resolve', { source }),
-  installRemote: (source: PluginInstallSource, permissionsAck: boolean) =>
-    http.post<{ plugin: PluginVersion }>('/plugins/install', { source, permissions_ack: permissionsAck }),
+  installRemote: (source: PluginInstallSource, permissionsAck: boolean, resolveToken?: string) =>
+    http.post<{ plugin: PluginVersion }>('/plugins/install', {
+      source,
+      permissions_ack: permissionsAck,
+      ...(resolveToken ? { resolveToken } : {}),
+    }),
   installFile: (file: File, sha256?: string) => {
     const form = new FormData();
     form.append('artifact', file);

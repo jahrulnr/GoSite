@@ -38,12 +38,12 @@ Companion to [20-plugin-remote-distribution.md](./20-plugin-remote-distribution.
 - [x] Enable gate for remote installs without ack
 - [x] Panel: capability list + ack checkbox
 
-## PR-4 — Lifecycle hardening (partial)
+## PR-4 — Lifecycle hardening
 
-- [x] `OpLock` wired into install/enable/disable
+- [x] `OpLock` wired into install/enable/disable/switch/uninstall
 - [x] `409 operation_in_progress` (`failure_class=operation_in_progress`)
-- [ ] Install operation log steps (column exists; minimal JSON placeholder)
-- [ ] TOCTOU: `resolveToken` TTL
+- [x] Install operation log steps (`installlog.go` + `SetInstallLog`)
+- [x] TOCTOU: `resolveToken` TTL cache + panel passes token on install
 
 ## PR-5 — UI polish
 

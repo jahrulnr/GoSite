@@ -3,6 +3,7 @@ package remote
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/jahrulnr/gosite/internal/service/plugin/remote/fetch"
 	"github.com/jahrulnr/gosite/internal/service/plugin/remote/failures"
@@ -16,6 +17,7 @@ type Service struct {
 	cfg      types.Config
 	resolver *resolver.Registry
 	fetcher  *fetch.Fetcher
+	cache    *ResolveCache
 }
 
 // NewService returns a remote install orchestrator.
@@ -29,6 +31,7 @@ func NewService(cfg types.Config) *Service {
 			Timeout:      cfg.Timeout,
 			MaxRedirects: cfg.MaxRedirects,
 		}),
+		cache: NewResolveCache(cfg.ResolveTokenTTL),
 	}
 }
 
@@ -37,13 +40,19 @@ func (s *Service) Resolve(ctx context.Context, source types.Source) (types.Resol
 	if !s.cfg.Enabled {
 		return types.ResolvePreview{}, apperror.New(apperror.CodeInvalidInput, failures.RemoteInstallDisabled)
 	}
-	_, preview, err := s.resolver.Resolve(ctx, source)
+	plan, preview, err := s.resolver.Resolve(ctx, source)
 	if err != nil {
 		return types.ResolvePreview{}, err
 	}
 	if size, err := s.fetcher.HeadSize(ctx, preview.URL); err == nil && size > 0 {
 		preview.Size = size
 	}
+	token, expires, err := s.cache.Issue(source, plan)
+	if err != nil {
+		return types.ResolvePreview{}, apperror.Wrap(apperror.CodePluginOperation, failures.ResolveFailed, err)
+	}
+	preview.ResolveToken = token
+	preview.ResolveExpiresAt = expires.Format(time.RFC3339)
 	return preview, nil
 }
 
@@ -56,16 +65,37 @@ func (s *Service) Fetch(ctx context.Context, plan types.FetchPlan) ([]byte, erro
 }
 
 // ResolveAndFetch resolves source then downloads bytes.
-func (s *Service) ResolveAndFetch(ctx context.Context, source types.Source) (types.FetchPlan, []byte, error) {
-	plan, _, err := s.resolver.Resolve(ctx, source)
-	if err != nil {
-		return types.FetchPlan{}, nil, err
+func (s *Service) ResolveAndFetch(ctx context.Context, source types.Source, resolveToken string) (types.FetchPlan, []byte, error) {
+	var plan types.FetchPlan
+	var err error
+	if strings.TrimSpace(resolveToken) != "" {
+		cachedSource, cachedPlan, err := s.cache.Consume(resolveToken)
+		if err != nil {
+			return types.FetchPlan{}, nil, err
+		}
+		if !sameSource(cachedSource, source) {
+			return types.FetchPlan{}, nil, apperror.New(apperror.CodeInvalidInput, failures.ResolveStale)
+		}
+		plan = cachedPlan
+	} else {
+		plan, _, err = s.resolver.Resolve(ctx, source)
+		if err != nil {
+			return types.FetchPlan{}, nil, err
+		}
 	}
 	data, err := s.Fetch(ctx, plan)
 	if err != nil {
 		return plan, nil, err
 	}
 	return plan, data, nil
+}
+
+func sameSource(a, b types.Source) bool {
+	return strings.EqualFold(strings.TrimSpace(a.Type), strings.TrimSpace(b.Type)) &&
+		strings.TrimSpace(a.URL) == strings.TrimSpace(b.URL) &&
+		strings.TrimSpace(a.Repo) == strings.TrimSpace(b.Repo) &&
+		strings.TrimSpace(a.Tag) == strings.TrimSpace(b.Tag) &&
+		strings.EqualFold(strings.TrimSpace(a.SHA256), strings.TrimSpace(b.SHA256))
 }
 
 // SourceType normalizes source type string.

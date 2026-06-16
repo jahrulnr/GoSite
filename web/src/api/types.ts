@@ -308,6 +308,8 @@ export interface PluginResolvePreview {
   sourceRepository?: string;
   permissions: string[];
   hooks: string[];
+  resolveToken?: string;
+  resolveExpiresAt?: string;
 }
 
 export interface PluginInstallSettings {

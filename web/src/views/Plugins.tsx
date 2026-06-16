@@ -234,11 +234,19 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
       } else if (mode === 'url') {
         if (!preview) throw new Error('Resolve the URL before installing');
         if (!permissionsAck) throw new Error('Acknowledge plugin permissions first');
-        await installRemote.run({ type: 'url', url: url.trim(), sha256: urlSha256.trim() }, true);
+        await installRemote.run(
+          { type: 'url', url: url.trim(), sha256: urlSha256.trim() },
+          true,
+          preview.resolveToken,
+        );
       } else {
         if (!preview) throw new Error('Resolve the release before installing');
         if (!permissionsAck) throw new Error('Acknowledge plugin permissions first');
-        await installRemote.run({ type: 'github-release', repo: repo.trim(), tag: tag.trim() }, true);
+        await installRemote.run(
+          { type: 'github-release', repo: repo.trim(), tag: tag.trim() },
+          true,
+          preview.resolveToken,
+        );
       }
       toast('Plugin installed');
       onInstalled();

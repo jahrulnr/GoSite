@@ -232,6 +232,7 @@ func (h *PluginHandler) readInstallInput(r *http.Request) (pluginsvc.InstallInpu
 		Content        json.RawMessage `json:"content"`
 		Source         *remote.Source  `json:"source"`
 		PermissionsAck bool            `json:"permissions_ack"`
+		ResolveToken   string          `json:"resolveToken"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		return pluginsvc.InstallInput{}, err
@@ -240,7 +241,11 @@ func (h *PluginHandler) readInstallInput(r *http.Request) (pluginsvc.InstallInpu
 		if h.remote == nil {
 			return pluginsvc.InstallInput{}, apperror.New(apperror.CodeInvalidInput, remote.FailureRemoteInstallDisabled)
 		}
-		plan, data, err := h.remote.ResolveAndFetch(r.Context(), *body.Source)
+		source := *body.Source
+		if strings.TrimSpace(body.ResolveToken) != "" {
+			source.ResolveToken = strings.TrimSpace(body.ResolveToken)
+		}
+		plan, data, err := h.remote.ResolveAndFetch(r.Context(), source, source.ResolveToken)
 		if err != nil {
 			return pluginsvc.InstallInput{}, err
 		}

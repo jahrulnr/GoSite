@@ -319,6 +319,19 @@ func (r *PluginRepository) DeleteUninstalled(ctx context.Context, pluginID, vers
 	return nil
 }
 
+// SetInstallLog updates the install audit log for a plugin version.
+func (r *PluginRepository) SetInstallLog(ctx context.Context, pluginID, version, installLog string) (PluginVersion, error) {
+	now := time.Now().UTC()
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE plugin_versions SET install_log = ?, updated_at = ?
+		WHERE plugin_id = ? AND version = ?
+	`, installLog, now, pluginID, version)
+	if err != nil {
+		return PluginVersion{}, fmt.Errorf("set install log: %w", err)
+	}
+	return r.Find(ctx, pluginID, version)
+}
+
 func (r *PluginRepository) setState(ctx context.Context, pluginID, version, state, failureClass, failureMessage string, failureAt *time.Time) (PluginVersion, error) {
 	now := time.Now().UTC()
 	_, err := r.db.ExecContext(ctx, `
