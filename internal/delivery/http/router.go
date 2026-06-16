@@ -34,6 +34,7 @@ import (
 	"github.com/jahrulnr/gosite/internal/service/system"
 	"github.com/jahrulnr/gosite/internal/service/uimeta"
 	"github.com/jahrulnr/gosite/internal/service/website"
+	"github.com/jahrulnr/gosite/pkg/secrets"
 	"github.com/jahrulnr/gosite/internal/terminal"
 )
 
@@ -128,6 +129,15 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	cronSvc := cronsvc.NewService(cronRepo, jobRepo, worker, cronsvc.WithHookBus(pluginDispatcher))
 	cronHandler := handler.NewCronHandler(cronSvc, worker)
 
+	pluginConfigRepo := sqlite.NewPluginConfigRepository(db)
+	pluginCipher, err := secrets.NewCipher(secrets.NewDerivedSource(cfg.Storage))
+	if err != nil {
+		slog.Warn("plugin secret cipher disabled", "err", err)
+	}
+	pluginConfigSvc := pluginsvc.NewConfigService(
+		pluginConfigRepo,
+		pluginsvc.WithCipher(pluginCipher),
+	)
 	pluginSvc := pluginsvc.NewService(
 		pluginRepo,
 		cfg.Storage,
@@ -136,11 +146,14 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 		pluginsvc.WithAllowUnsigned(cfg.PluginAllowUnsigned),
 		pluginsvc.WithKeyringPath(cfg.PluginKeyringPath),
 		pluginsvc.WithHostVersion(cfg.AppVersion),
+		pluginsvc.WithConfigRepo(pluginConfigRepo),
 	)
 	if err := pluginSvc.Reconcile(context.Background()); err != nil {
 		slog.Warn("plugin reconcile failed", "err", err)
 	}
 	pluginHandler := handler.NewPluginHandler(pluginSvc)
+	pluginConfigHandler := handler.NewConfigHandler(pluginConfigSvc)
+	pluginKeyringHandler := handler.NewKeyringHandler(cfg.PluginKeyringPath)
 
 	terminalHub := terminal.NewHub(terminal.HubConfig{
 		StickyTTL:    cfg.TerminalStickyTTL,
@@ -196,7 +209,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	registerDatabaseRoutes(protected, databaseHandler)
 	registerUIMetaRoutes(protected, uimetaHandler)
 	registerTerminalRoutes(protected, terminalHandler)
-	registerPluginRoutes(protected, pluginHandler)
+	registerPluginRoutes(protected, pluginHandler, pluginConfigHandler, pluginKeyringHandler)
 
 	if cfg.FEEmbed {
 		frontend.Register(engine, frontend.DistFS)
@@ -315,13 +328,20 @@ func registerCronRoutes(api *gin.RouterGroup, h *handler.CronHandler) {
 	api.GET("/cronjobs/:id/run/stream", gin.WrapF(h.RunStream))
 }
 
-func registerPluginRoutes(api *gin.RouterGroup, h *handler.PluginHandler) {
+func registerPluginRoutes(api *gin.RouterGroup, h *handler.PluginHandler, configH *handler.ConfigHandler, keyH *handler.KeyringHandler) {
 	api.GET("/plugins", gin.WrapF(h.List))
 	api.POST("/plugins/install", gin.WrapF(h.Install))
 	api.POST("/plugins/:vendor/:name/enable", gin.WrapF(h.Enable))
 	api.POST("/plugins/:vendor/:name/disable", gin.WrapF(h.Disable))
 	api.POST("/plugins/:vendor/:name/switch", gin.WrapF(h.Switch))
 	api.DELETE("/plugins/:vendor/:name/versions/:version", gin.WrapF(h.Uninstall))
+
+	api.GET("/plugins/:vendor/:name/versions/:version/config", gin.WrapF(configH.Get))
+	api.PUT("/plugins/:vendor/:name/versions/:version/config", gin.WrapF(configH.Put))
+
+	api.GET("/plugins/keyring", gin.WrapF(keyH.List))
+	api.POST("/plugins/keyring", gin.WrapF(keyH.Add))
+	api.DELETE("/plugins/keyring", gin.WrapF(keyH.Revoke))
 }
 
 func registerObservabilityRoutes(api *gin.RouterGroup, h *handler.ObservabilityHandler) {

@@ -58,14 +58,18 @@ func (d *dispatcherStub) Disable(_ context.Context, p sqlite.PluginVersion) erro
 
 type migratorStub struct {
 	err    error
+	out    string
 	calls  []string
 	states []string
 }
 
-func (m *migratorStub) Validate(_ context.Context, current sqlite.PluginVersion, next sqlite.PluginVersion) error {
+func (m *migratorStub) Migrate(_ context.Context, current sqlite.PluginVersion, currentConfig string, next sqlite.PluginVersion) (plugin.MigrateResult, error) {
 	m.calls = append(m.calls, current.PluginID+"@"+current.Version+"->"+next.Version)
 	m.states = append(m.states, current.State+"->"+next.State)
-	return m.err
+	if m.err != nil {
+		return plugin.MigrateResult{}, m.err
+	}
+	return plugin.MigrateResult{OK: true, MigratedConfig: m.out}, nil
 }
 
 func setupPluginService(t *testing.T, runtime plugin.RuntimeManager, dispatcher plugin.HookDispatcher) (*plugin.Service, *sqlite.PluginRepository) {

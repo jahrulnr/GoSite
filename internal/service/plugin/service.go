@@ -135,9 +135,17 @@ type HookDispatcher interface {
 	Disable(ctx context.Context, plugin sqlite.PluginVersion) error
 }
 
-// ConfigMigrator validates config compatibility before switching versions.
+// MigrateResult is the outcome of a config migration attempt.
+type MigrateResult struct {
+	OK             bool
+	MigratedConfig string
+	Error          string
+}
+
+// ConfigMigrator validates and (optionally) migrates plugin configuration
+// between two versions during a switch.
 type ConfigMigrator interface {
-	Validate(ctx context.Context, current sqlite.PluginVersion, next sqlite.PluginVersion) error
+	Migrate(ctx context.Context, current sqlite.PluginVersion, currentConfig string, next sqlite.PluginVersion) (MigrateResult, error)
 }
 
 // NoopRuntimeManager is the initial lifecycle boundary before subprocess execution exists.
@@ -153,11 +161,11 @@ type NoopHookDispatcher struct{}
 func (NoopHookDispatcher) Refresh(context.Context, []sqlite.PluginVersion) error { return nil }
 func (NoopHookDispatcher) Disable(context.Context, sqlite.PluginVersion) error   { return nil }
 
-// NoopConfigMigrator is used until plugin config storage is implemented.
+// NoopConfigMigrator accepts every migration as a no-op.
 type NoopConfigMigrator struct{}
 
-func (NoopConfigMigrator) Validate(context.Context, sqlite.PluginVersion, sqlite.PluginVersion) error {
-	return nil
+func (NoopConfigMigrator) Migrate(_ context.Context, _ sqlite.PluginVersion, currentConfig string, _ sqlite.PluginVersion) (MigrateResult, error) {
+	return MigrateResult{OK: true, MigratedConfig: currentConfig}, nil
 }
 
 // MemoryHookDispatcher is the concrete enabled-set boundary used by lifecycle operations.
@@ -295,6 +303,7 @@ func (m *ProcessRuntimeManager) EnsureStopped(ctx context.Context, plugin sqlite
 // Service manages plugin install and lifecycle operations.
 type Service struct {
 	repo          *sqlite.PluginRepository
+	configRepo    *sqlite.PluginConfigRepository
 	storageDir    string
 	runtime       RuntimeManager
 	dispatcher    HookDispatcher
@@ -323,6 +332,16 @@ func WithHostVersion(version string) Option {
 	return func(s *Service) {
 		if strings.TrimSpace(version) != "" {
 			s.hostVersion = version
+		}
+	}
+}
+
+// WithConfigRepo attaches the plugin config repository so switch-time
+// migrations can read the previous version's config.
+func WithConfigRepo(repo *sqlite.PluginConfigRepository) Option {
+	return func(s *Service) {
+		if repo != nil {
+			s.configRepo = repo
 		}
 	}
 }
@@ -471,6 +490,9 @@ func (s *Service) Purge(ctx context.Context, pluginID, version string) error {
 		}
 		return apperror.Wrap(apperror.CodeDatabase, "purge plugin failed", err)
 	}
+	if s.configRepo != nil {
+		_ = s.configRepo.Delete(ctx, pluginID, version)
+	}
 	return nil
 }
 
@@ -578,9 +600,39 @@ func (s *Service) SwitchEnabledVersion(ctx context.Context, pluginID, version st
 		if target.State != sqlite.PluginStateInstalled && target.State != sqlite.PluginStateEnableFailed {
 			return sqlite.PluginVersion{}, apperror.New(apperror.CodeConflict, "plugin is not installable")
 		}
-		if err := s.migrator.Validate(ctx, current, target); err != nil {
+		var currentConfig string
+		if s.configRepo != nil {
+			if cfg, err := s.configRepo.Get(ctx, current.PluginID, current.Version); err == nil {
+				currentConfig = cfg.ConfigJSON
+			} else if !errors.Is(err, sqlite.ErrPluginConfigNotFound) {
+				return sqlite.PluginVersion{}, apperror.Wrap(apperror.CodeDatabase, "load plugin config failed", err)
+			}
+		}
+		result, err := s.migrator.Migrate(ctx, current, currentConfig, target)
+		if err != nil {
 			failed, _ := s.repo.SetFailure(ctx, target.PluginID, target.Version, sqlite.PluginStateInstalled, FailureConfigMigration, err.Error())
-			return failed, apperror.Wrap(apperror.CodePluginOperation, "validate plugin config migration failed", err)
+			return failed, apperror.Wrap(apperror.CodePluginOperation, "migrate plugin config failed", err)
+		}
+		if !result.OK {
+			msg := result.Error
+			if msg == "" {
+				msg = "config migration rejected"
+			}
+			failed, _ := s.repo.SetFailure(ctx, target.PluginID, target.Version, sqlite.PluginStateInstalled, FailureConfigMigration, msg)
+			return failed, apperror.New(apperror.CodePluginOperation, "migrate plugin config failed: "+msg)
+		}
+		if result.MigratedConfig != "" && s.configRepo != nil {
+			if _, err := s.configRepo.Upsert(ctx, sqlite.PluginConfig{
+				PluginID:      target.PluginID,
+				Version:       target.Version,
+				ConfigVersion: target.ConfigVersion,
+				ConfigJSON:    result.MigratedConfig,
+			}); err != nil {
+				return sqlite.PluginVersion{}, apperror.Wrap(apperror.CodeDatabase, "save migrated config failed", err)
+			}
+		}
+		if _, err := s.Disable(ctx, pluginID); err != nil {
+			return sqlite.PluginVersion{}, err
 		}
 		if _, err := s.Disable(ctx, pluginID); err != nil {
 			return sqlite.PluginVersion{}, err
