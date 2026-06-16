@@ -53,4 +53,61 @@ describe('plugin endpoints', () => {
     expect(init).toEqual(expect.objectContaining({ method: 'POST' }));
     expect(init?.body).toBeInstanceOf(FormData);
   });
+
+  it('fetches remote install settings', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({
+        remote_install_enabled: true,
+        trust_mode: 'strict',
+        allowed_hosts: ['github.com'],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    const settings = await plugins.installSettings();
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/plugins/install/settings', expect.objectContaining({ method: 'GET' }));
+    expect(settings.remote_install_enabled).toBe(true);
+    expect(settings.trust_mode).toBe('strict');
+  });
+
+  it('resolves remote install source', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({
+        preview: { plugin_id: 'acme/foo', version: '1.0.0', tier: 1, signed: true, sha256: 'abc', size: 100, url: 'https://x', source_type: 'url', source_ref: 'x', install_path: 'release', permissions: [], hooks: [] },
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    const result = await plugins.resolveInstall({ type: 'url', url: 'https://example.com/p.tgz', sha256: 'abc' });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/plugins/install/resolve', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ source: { type: 'url', url: 'https://example.com/p.tgz', sha256: 'abc' } }),
+    }));
+    expect(result.preview.plugin_id).toBe('acme/foo');
+  });
+
+  it('installs from remote source with permissions ack', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ plugin: { id: 2, plugin_id: 'acme/foo' } }), {
+        status: 201,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    await plugins.installRemote({ type: 'github-release', repo: 'acme/foo', tag: 'v1.0.0' }, true);
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/plugins/install', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        source: { type: 'github-release', repo: 'acme/foo', tag: 'v1.0.0' },
+        permissions_ack: true,
+      }),
+    }));
+  });
 });

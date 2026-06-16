@@ -152,8 +152,9 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	if err := pluginSvc.Reconcile(context.Background()); err != nil {
 		slog.Warn("plugin reconcile failed", "err", err)
 	}
-	pluginRemoteSvc := pluginremote.NewService(pluginremote.ConfigFromApp(cfg))
-	pluginHandler := handler.NewPluginHandler(pluginSvc, pluginRemoteSvc)
+	pluginRemoteCfg := pluginremote.ConfigFromApp(cfg)
+	pluginRemoteSvc := pluginremote.NewService(pluginRemoteCfg)
+	pluginHandler := handler.NewPluginHandler(pluginSvc, pluginRemoteSvc, pluginRemoteCfg)
 	pluginConfigHandler := handler.NewConfigHandler(pluginConfigSvc)
 	pluginKeyringHandler := handler.NewKeyringHandler(cfg.PluginKeyringPath)
 
@@ -345,6 +346,7 @@ func registerCronRoutes(api *gin.RouterGroup, h *handler.CronHandler) {
 
 func registerPluginRoutes(api *gin.RouterGroup, h *handler.PluginHandler, configH *handler.ConfigHandler, keyH *handler.KeyringHandler) {
 	api.GET("/plugins", gin.WrapF(h.List))
+	api.GET("/plugins/install/settings", gin.WrapF(h.InstallSettings))
 	api.POST("/plugins/install/resolve", gin.WrapF(h.Resolve))
 	api.POST("/plugins/install", gin.WrapF(h.Install))
 	api.POST("/plugins/:vendor/:name/enable", gin.WrapF(h.Enable))

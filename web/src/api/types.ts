@@ -283,6 +283,39 @@ export interface PluginManifest {
   [k: string]: unknown;
 }
 
+export interface PluginInstallSource {
+  type: 'url' | 'github-release';
+  url?: string;
+  sha256?: string;
+  repo?: string;
+  tag?: string;
+}
+
+export interface PluginResolvePreview {
+  plugin_id: string;
+  version: string;
+  tier: number;
+  signed: boolean;
+  keyId?: string;
+  sha256: string;
+  size: number;
+  url: string;
+  minGoSiteVersion?: string;
+  source_type: string;
+  source_ref: string;
+  install_path: string;
+  sourceCommit?: string;
+  sourceRepository?: string;
+  permissions: string[];
+  hooks: string[];
+}
+
+export interface PluginInstallSettings {
+  remote_install_enabled: boolean;
+  trust_mode: 'strict' | 'community' | 'dev';
+  allowed_hosts: string[];
+}
+
 export interface PluginVersion {
   id: number;
   plugin_id: string;
@@ -301,6 +334,12 @@ export interface PluginVersion {
   manifest: PluginManifest;
   capabilities: PluginCapabilities;
   ui: PluginUIContribution;
+  source_type?: string;
+  source_ref?: string;
+  resolved_url?: string;
+  install_path?: string;
+  source_commit?: string;
+  permissions_ack_at?: string;
   created_at: string;
   updated_at: string;
 }

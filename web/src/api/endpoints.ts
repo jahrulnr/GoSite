@@ -16,6 +16,9 @@ import type {
   LogTailResponse,
   Mount,
   NetworkTraffic,
+  PluginInstallSettings,
+  PluginInstallSource,
+  PluginResolvePreview,
   PluginVersion,
   QueryEvent,
   QueryMetaResponse,
@@ -188,8 +191,15 @@ function pluginPath(pluginID: string) {
   return `/plugins/${encodeURIComponent(vendor)}/${encodeURIComponent(name)}`;
 }
 
+export type { PluginInstallSource, PluginResolvePreview };
+
 export const plugins = {
   list: () => http.get<{ plugins: PluginVersion[] }>('/plugins').then((r) => r.plugins ?? []),
+  installSettings: () => http.get<PluginInstallSettings>('/plugins/install/settings'),
+  resolveInstall: (source: PluginInstallSource) =>
+    http.post<{ preview: PluginResolvePreview }>('/plugins/install/resolve', { source }),
+  installRemote: (source: PluginInstallSource, permissionsAck: boolean) =>
+    http.post<{ plugin: PluginVersion }>('/plugins/install', { source, permissions_ack: permissionsAck }),
   installFile: (file: File, sha256?: string) => {
     const form = new FormData();
     form.append('artifact', file);

@@ -2283,6 +2283,10 @@ code {
   min-height: 280px;
 }
 
+.plugin-install-preview {
+  margin-top: 4px;
+}
+
 .plugin-route-fallback {
   min-height: 360px;
   display: grid;

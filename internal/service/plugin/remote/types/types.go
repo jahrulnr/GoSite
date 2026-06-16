@@ -23,6 +23,8 @@ type FetchPlan struct {
 	SourceRef      string `json:"source_ref"`
 	InstallPath    string `json:"install_path"`
 	ResolvedDigest string `json:"resolved_digest"`
+	SourceCommit   string `json:"source_commit,omitempty"`
+	SourceRepository string `json:"source_repository,omitempty"`
 }
 
 // ResolvePreview is returned by POST /plugins/install/resolve.

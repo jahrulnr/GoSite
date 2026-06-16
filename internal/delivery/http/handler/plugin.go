@@ -14,13 +14,14 @@ import (
 
 // PluginHandler serves plugin installer and lifecycle endpoints.
 type PluginHandler struct {
-	svc    *pluginsvc.Service
-	remote *remote.Service
+	svc       *pluginsvc.Service
+	remote    *remote.Service
+	remoteCfg remote.Config
 }
 
 // NewPluginHandler returns a plugin handler.
-func NewPluginHandler(svc *pluginsvc.Service, remoteSvc *remote.Service) *PluginHandler {
-	return &PluginHandler{svc: svc, remote: remoteSvc}
+func NewPluginHandler(svc *pluginsvc.Service, remoteSvc *remote.Service, remoteCfg remote.Config) *PluginHandler {
+	return &PluginHandler{svc: svc, remote: remoteSvc, remoteCfg: remoteCfg}
 }
 
 type pluginJSON struct {
@@ -41,6 +42,12 @@ type pluginJSON struct {
 	Manifest         map[string]any `json:"manifest"`
 	Capabilities     map[string]any `json:"capabilities"`
 	UI               map[string]any `json:"ui"`
+	SourceType       string         `json:"source_type,omitempty"`
+	SourceRef        string         `json:"source_ref,omitempty"`
+	ResolvedURL      string         `json:"resolved_url,omitempty"`
+	InstallPath      string         `json:"install_path,omitempty"`
+	SourceCommit     string         `json:"source_commit,omitempty"`
+	PermissionsAckAt *string        `json:"permissions_ack_at,omitempty"`
 	CreatedAt        string         `json:"created_at"`
 	UpdatedAt        string         `json:"updated_at"`
 }
@@ -93,6 +100,15 @@ func (h *PluginHandler) Resolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"preview": preview})
+}
+
+// InstallSettings handles GET /plugins/install/settings.
+func (h *PluginHandler) InstallSettings(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"remote_install_enabled": h.remoteCfg.Enabled,
+		"trust_mode":             h.remoteCfg.TrustMode,
+		"allowed_hosts":          h.remoteCfg.AllowedHosts,
+	})
 }
 
 // Enable handles POST /plugins/{vendor}/{name}/enable.
@@ -211,10 +227,11 @@ func (h *PluginHandler) readInstallInput(r *http.Request) (pluginsvc.InstallInpu
 	}
 
 	var body struct {
-		Name    string          `json:"name"`
-		SHA256  string          `json:"sha256"`
-		Content json.RawMessage `json:"content"`
-		Source  *remote.Source  `json:"source"`
+		Name           string          `json:"name"`
+		SHA256         string          `json:"sha256"`
+		Content        json.RawMessage `json:"content"`
+		Source         *remote.Source  `json:"source"`
+		PermissionsAck bool            `json:"permissions_ack"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		return pluginsvc.InstallInput{}, err
@@ -235,6 +252,16 @@ func (h *PluginHandler) readInstallInput(r *http.Request) (pluginsvc.InstallInpu
 			Name:           name,
 			Content:        data,
 			ExpectedSHA256: plan.SHA256,
+			PermissionsAck: body.PermissionsAck,
+			Provenance: &pluginsvc.InstallProvenance{
+				SourceType:       plan.SourceType,
+				SourceRef:        plan.SourceRef,
+				ResolvedURL:      plan.URL,
+				ResolvedDigest:   plan.ResolvedDigest,
+				SourceCommit:     plan.SourceCommit,
+				SourceRepository: plan.SourceRepository,
+				InstallPath:      plan.InstallPath,
+			},
 		}, nil
 	}
 
@@ -270,12 +297,21 @@ func pluginDTO(plugin sqlite.PluginVersion) pluginJSON {
 		Manifest:         manifest,
 		Capabilities:     capabilities,
 		UI:               ui,
+		SourceType:       plugin.SourceType,
+		SourceRef:        plugin.SourceRef,
+		ResolvedURL:      plugin.ResolvedURL,
+		InstallPath:      plugin.InstallPath,
+		SourceCommit:     plugin.SourceCommit,
 		CreatedAt:        plugin.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 		UpdatedAt:        plugin.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 	}
 	if plugin.FailureAt != nil {
 		ts := plugin.FailureAt.UTC().Format("2006-01-02T15:04:05Z")
 		out.FailureAt = &ts
+	}
+	if plugin.PermissionsAckAt != nil {
+		ts := plugin.PermissionsAckAt.UTC().Format("2006-01-02T15:04:05Z")
+		out.PermissionsAckAt = &ts
 	}
 	return out
 }

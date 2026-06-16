@@ -54,9 +54,12 @@ type Registry struct {
 	resolvers []Resolver
 }
 
-// NewRegistry returns a resolver registry with G1 URL support.
-func NewRegistry(extra ...Resolver) *Registry {
-	base := []Resolver{URLResolver{}}
+// NewRegistry returns a resolver registry with G1 URL + G2 GitHub support.
+func NewRegistry(cfg types.Config, extra ...Resolver) *Registry {
+	base := []Resolver{
+		URLResolver{},
+		GitHubResolver{Token: cfg.GitHubToken, Timeout: cfg.Timeout},
+	}
 	return &Registry{resolvers: append(base, extra...)}
 }
 

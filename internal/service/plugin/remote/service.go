@@ -22,7 +22,7 @@ type Service struct {
 func NewService(cfg types.Config) *Service {
 	return &Service{
 		cfg:      cfg,
-		resolver: resolver.NewRegistry(),
+		resolver: resolver.NewRegistry(cfg),
 		fetcher: fetch.New(fetch.Config{
 			AllowedHosts: cfg.AllowedHosts,
 			MaxBytes:     cfg.MaxBytes,
