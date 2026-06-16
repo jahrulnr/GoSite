@@ -20,6 +20,19 @@ Deferred to a future wave:
 - Scoped plugin API tokens and egress policies (UI scaffolding only).
 - Tier 2 WASM and tier 3 `.so` remain explicitly out of scope for this implementation wave.
 
+## Developer templates
+
+Start from [`plugins/_templates/README.md`](../../plugins/_templates/README.md):
+
+| Template | Tier | Use case |
+|----------|------|----------|
+| `tier0-webhook/` | 0 | Manifest + HTTP webhooks only |
+| `tier1-minimal/` | 1 | Smallest go-plugin (canonical reference) |
+| `tier1-full/` | 1 | Hooks, config migration, UI contributions |
+| `tier2-wasm/`, `tier3-native-so/` | 2–3 | Deferred stubs / vendor-only notes |
+
+See also the ADR: [`docs/architecture/plugin-platform.md`](../architecture/plugin-platform.md).
+
 ## Goals
 
 - Safe install/uninstall with rollback guarantees (no half-enabled plugins).

@@ -20,6 +20,19 @@ Ditunda ke gelombang berikutnya:
 - Scoped plugin API token dan egress policy (cuma UI scaffolding).
 - Tier 2 WASM dan tier 3 `.so` tetap out of scope untuk gelombang implementasi ini.
 
+## Template pengembang
+
+Mulai dari [`plugins/_templates/README.md`](../../plugins/_templates/README.md):
+
+| Template | Tier | Kapan dipakai |
+|----------|------|----------------|
+| `tier0-webhook/` | 0 | Manifest + webhook HTTP saja |
+| `tier1-minimal/` | 1 | go-plugin minimal (referensi utama) |
+| `tier1-full/` | 1 | Hook lengkap, migrasi config, kontribusi UI |
+| `tier2-wasm/`, `tier3-native-so/` | 2–3 | Stub ditunda / catatan vendor-only |
+
+Lihat juga ADR: [`docs/architecture/plugin-platform.md`](../architecture/plugin-platform.md).
+
 ## Tujuan
 
 - Install/uninstall yang aman dengan jaminan rollback (tidak ada plugin “setengah aktif”).

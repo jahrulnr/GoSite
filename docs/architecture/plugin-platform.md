@@ -52,11 +52,11 @@ Rollback on failed nginx reload (existing pattern in `website.Toggle`) applies t
 
 ## Phased delivery
 
-1. **P0** — Hook bus core is implemented for enabled plugin dispatch, strict/lenient behavior, per-hook timeout, circuit breaker, audit error writes, and initial call sites across nginx, website, SSL, jobs, cron, and Docker. Tier 0 webhook transport is still pending.
-2. **P1** — Plugin registry (SQLite), manifest, checksum/signature verify, lifecycle API, purge, reconcile, and admin UI are implemented.
-3. **P2** — go-plugin SDK + reference plugin are pending.
-4. **P3** — Host-rendered plugin admin UI exists; richer catalog/config UI is pending.
-5. **P4+** — WASM sandbox, marketplace publishing, encrypted config storage, and full network isolation remain future security-review work.
+1. **P0 — Hook bus** — Implemented: enabled-set dispatch, strict/lenient rules, per-hook timeout, circuit breaker, audit logging, and call sites across nginx, website, SSL, jobs, cron, and Docker.
+2. **P1 — Registry** — Implemented: SQLite `plugin_versions`, install/enable/disable/switch/uninstall, signature/keyring checks, reconcile, and admin UI.
+3. **P2 — Tier 1 runtime** — Implemented: `pkg/pluginrpc`, HashiCorp go-plugin subprocess manager, health supervisor, and developer templates under `plugins/_templates/`.
+4. **P3 — Tier 0 + config** — Implemented: HTTP webhooks (`Tier0Caller`), encrypted plugin config (`plugin_configs`), host-rendered sidebar/config forms.
+5. **P4+ — Deferred** — WASM sandbox (tier 2), scoped API tokens/egress policies, marketplace publishing, and tier 3 `.so` community support.
 
 ## Alternatives considered
 

@@ -13,6 +13,9 @@ RAW="https://raw.githubusercontent.com/${REPO}/${BRANCH}"
 
 mkdir -p "$OUT"
 
+# Drop stale pages so removed topics do not linger in wiki-export (see dev-docs export-wiki.mjs).
+find "$OUT" -maxdepth 1 -name '*.md' -delete
+
 copy_page() {
   local src="$1"
   local dst="$2"
@@ -113,7 +116,16 @@ rewrite_links() {
     -e "s|](\\./14-settings\\.md)|](Operations${suf})|g" \
     -e "s|](\\./15-logs\\.md)|](Operations${suf})|g" \
     -e "s|](\\./16-database-viewer\\.md)|](Operations${suf})|g" \
-    -e "s|](\\./sequences/17-splunk-lite\\.md)|](Observability${suf})|g" \
+    -e "s|](\\./sequences/19-plugin-installer\\.md)|](Plugin-installer${suf})|g" \
+    -e "s|](\\./sequences/19-plugin-installer_id\\.md)|](Plugin-installer-id)|g" \
+    -e "s|](\\./19-plugin-installer\\.md)|](Plugin-installer${suf})|g" \
+    -e "s|](\\./19-plugin-installer_id\\.md)|](Plugin-installer-id)|g" \
+    -e "s|](\\./architecture/plugin-platform\\.md)|](Plugin-platform${suf})|g" \
+    -e "s|](\\../architecture/plugin-platform\\.md)|](Plugin-platform${suf})|g" \
+    -e "s|](docs/architecture/plugin-platform\\.md)|](Plugin-platform${suf})|g" \
+    -e "s|](\\../../plugins/_templates/[^)]*)|](${BLOB}/plugins/_templates/)|g" \
+    -e "s|](\\../architecture/plugin-platform\\.md)|](Plugin-platform${suf})|g" \
+    -e "s|](plugins/_templates/)|](${BLOB}/plugins/_templates/)|g" \
     -e "s|](\\./sequences/18-grafana-lite\\.md)|](Observability${suf})|g" \
     -e "s|](\\./17-splunk-lite\\.md)|](Observability${suf})|g" \
     -e "s|](\\./18-grafana-lite\\.md)|](Observability${suf})|g" \
@@ -239,7 +251,7 @@ wiki_sanitize() {
       sed -i '/^$/N;/^\n$/d' "$file"
       strip_leading_blank "$file"
       ;;
-    Architecture|Domain-model|Nginx-auto-repair|Container-startup|Panel-routing|Authentication|Dashboard|Website-create|Website-enable-disable|Website-nginx-config|Website-delete|SSL-and-Certbot|Sequences-index)
+    Architecture|Domain-model|Nginx-auto-repair|Container-startup|Panel-routing|Authentication|Dashboard|Website-create|Website-enable-disable|Website-nginx-config|Website-delete|SSL-and-Certbot|Sequences-index|Plugin-installer|Plugin-platform)
       strip_leading_h1 "$file"
       ;;
     Migration|Operations|Observability|Development)
@@ -281,6 +293,7 @@ build_home() {
       echo "| Architecture | [Architecture](Architecture) · [Container-startup](Container-startup) · [Panel-routing](Panel-routing) |"
       echo "| Website & SSL | [Website-create](Website-create) · [Nginx-auto-repair](Nginx-auto-repair) · [SSL-and-Certbot](SSL-and-Certbot) |"
       echo "| Operations | [Operations](Operations) · [Observability](Observability) · [Dashboard](Dashboard) |"
+      echo "| Extensions | [Plugin-installer](Plugin-installer) · [Plugin-platform](Plugin-platform) · [templates](${BLOB}/plugins/_templates/) |"
       echo "| Reference | [API-reference](API-reference) · [Sequences-index](Sequences-index) · [Migration](Migration) |"
     } > "$out"
   else
@@ -300,6 +313,7 @@ build_home() {
       echo "| Arsitektur | [Architecture-id](Architecture-id) · [Container-startup-id](Container-startup-id) · [Panel-routing-id](Panel-routing-id) |"
       echo "| Website & SSL | [Website-create-id](Website-create-id) · [Nginx-auto-repair-id](Nginx-auto-repair-id) · [SSL-and-Certbot-id](SSL-and-Certbot-id) |"
       echo "| Operasi | [Operations-id](Operations-id) · [Observability-id](Observability-id) · [Dashboard-id](Dashboard-id) |"
+      echo "| Ekstensi | [Plugin-installer-id](Plugin-installer-id) · [Plugin-platform-id](Plugin-platform-id) · [template](${BLOB}/plugins/_templates/) |"
       echo "| Referensi | [API-reference-id](API-reference-id) · [Sequences-index-id](Sequences-index-id) · [Migration-id](Migration-id) |"
     } > "$out"
   fi
@@ -325,6 +339,8 @@ export_lang() {
   copy_page "$(seq_path 08-website-ssl.md "$lang")" "$OUT/SSL-and-Certbot${suf}.md"
   copy_page "$(seq_path 09-website-delete.md "$lang")" "$OUT/Website-delete${suf}.md"
   copy_page "$(seq_path 01-container-startup.md "$lang")" "$OUT/Container-startup${suf}.md"
+  copy_page "$(seq_path 19-plugin-installer.md "$lang")" "$OUT/Plugin-installer${suf}.md"
+  copy_page "$DOCS/architecture/plugin-platform.md" "$OUT/Plugin-platform${suf}.md"
   if [[ "$lang" == id ]]; then
     copy_page "$DOCS/sequences/README_id.md" "$OUT/Sequences-index${suf}.md"
   else
@@ -366,7 +382,7 @@ export_lang() {
 }
 
 write_sidebars() {
-  cat > "$OUT/_Sidebar.md" <<'EOF'
+  cat > "$OUT/_Sidebar.md" <<EOF
 ### English · [ID](_Sidebar-id)
 
 **[Home](Home)**
@@ -392,13 +408,18 @@ write_sidebars() {
 - [Operations](Operations)
 - [Observability](Observability)
 
+### Extensions
+- [Plugin-installer](Plugin-installer)
+- [Plugin-platform](Plugin-platform)
+- [Plugin templates](${BLOB}/plugins/_templates/)
+
 ### Other
 - [Migration](Migration)
 - [Development](Development)
 - [Sequences-index](Sequences-index)
 EOF
 
-  cat > "$OUT/_Sidebar-id.md" <<'EOF'
+  cat > "$OUT/_Sidebar-id.md" <<EOF
 ### [EN](_Sidebar) · Bahasa Indonesia
 
 **[Home](Home-id)**
@@ -423,6 +444,11 @@ EOF
 - [Dashboard](Dashboard-id)
 - [Operations](Operations-id)
 - [Observability](Observability-id)
+
+### Ekstensi
+- [Plugin-installer](Plugin-installer-id)
+- [Plugin-platform](Plugin-platform-id)
+- [Template plugin](${BLOB}/plugins/_templates/)
 
 ### Lainnya
 - [Migration](Migration-id)

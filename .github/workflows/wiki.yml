@@ -1,0 +1,41 @@
+name: Sync GitHub Wiki
+
+on:
+  push:
+    branches: [master, main, dev]
+    paths:
+      - 'docs/**'
+      - '!docs/wiki-export/**'
+      - 'docs/export-wiki.sh'
+      - 'scripts/push-wiki.sh'
+      - 'Makefile'
+      - '.github/workflows/wiki.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wiki-${{ github.repository }}
+  cancel-in-progress: true
+
+jobs:
+  wiki:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Export wiki markdown
+        run: make wiki-export
+        env:
+          GOSITE_REPO: ${{ github.repository }}
+          GOSITE_BRANCH: ${{ github.ref_name }}
+
+      - name: Push to GitHub Wiki
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WIKI_TOKEN: ${{ secrets.WIKI_TOKEN }}
+          GITHUB_SHA: ${{ github.sha }}
+          GOSITE_REPO: ${{ github.repository }}
+        run: bash scripts/push-wiki.sh

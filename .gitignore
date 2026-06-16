@@ -22,6 +22,9 @@ web/tsconfig.tsbuildinfo
 .env
 .env.*
 
+# Generated GitHub wiki export (source: docs/ → make wiki-export)
+docs/wiki-export/
+
 # Local deploy (never commit — may contain host/IP/credentials)
 scripts/*.local.sh
 deploy.local.env

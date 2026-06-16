@@ -17,11 +17,11 @@ GoSite docs and wiki are **bilingual**:
 ## Commands
 
 ```bash
-make wiki-export   # builds docs/wiki-export/ (EN + ID pages)
+make wiki-export   # builds docs/wiki-export/ (gitignored EN + ID pages)
 ```
 
 ## Adding a new page
 
 1. Write `topic.md` in English.
 2. Add `topic_id.md` in Indonesian.
-3. Run `make wiki-export` and push the wiki repo if needed.
+3. Run `make wiki-export` (artifact is gitignored; CI syncs the wiki on push to `dev`/`master`).
