@@ -89,12 +89,10 @@ func (w *Worker) process(ctx context.Context, id int64) {
 		return
 	}
 
-	if err := w.jobs.MarkRunning(ctx, id); err != nil {
+	output := fmt.Sprintf("$ %s\n", command)
+	if err := w.jobs.MarkRunningWithOutput(ctx, id, output); err != nil {
 		return
 	}
-
-	output := fmt.Sprintf("$ %s\n", command)
-	_ = w.jobs.AppendOutput(ctx, id, output)
 
 	var res contracts.CommandResult
 	var runErr error
@@ -155,6 +153,11 @@ func (w *Worker) StreamSSE(ctx context.Context, rw http.ResponseWriter, jobID in
 		job, err := w.jobs.FindByID(ctx, jobID)
 		if err != nil {
 			return apperror.Wrap(apperror.CodeNotFound, "job not found", err)
+		}
+
+		if job.Status == sqlite.JobStatusPending {
+			time.Sleep(20 * time.Millisecond)
+			continue
 		}
 
 		if len(job.Output) > lastLen {
