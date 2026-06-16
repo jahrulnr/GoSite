@@ -99,7 +99,7 @@ func defaultsFor(code Code) (int, string) {
 		CodeQueryInvalid, CodeTimeRangeInvalid:
 		return http.StatusBadRequest, "invalid request"
 	case CodeNginxTestFailed, CodeNginxReloadFailed, CodeSSLExpired, CodeMountFailed,
-		CodeJobFailed, CodeFileExecuteDisabled:
+		CodeJobFailed, CodeFileExecuteDisabled, CodePluginInvalid, CodePluginOperation:
 		return http.StatusUnprocessableEntity, "operation failed"
 	case CodeDatabase:
 		return http.StatusInternalServerError, "database error"

@@ -272,6 +272,7 @@ Plugins declare a `manifest.json` (stored and parsed during install). Recommende
 - `rpcVersion` must match (go-plugin contract version).
 - Capabilities are validated against what the current GoSite build supports.
 - `configVersion` (optional): schema version for plugin config; used during upgrade config migration.
+- `artifact.sha256` is the lowercase hex SHA-256 digest of the exact uploaded artifact bytes. Production signatures are Ed25519 signatures over that digest string and are base64-encoded in `signatures[].sig`.
 
 ### UI contributions (sidebar items, configuration forms)
 
@@ -372,6 +373,7 @@ Minimum viable approach:
 - Host maintains a **trusted vendor keyring** (admin-managed).
 - Each key has: `vendor`, `keyId`, `publicKey`, `createdAt`, `revokedAt`.
 - Install requires signature by a non-revoked key for that vendor (or explicit “allow unsigned” in dev mode).
+- The signature payload is the lowercase hex SHA-256 digest string for the uploaded artifact; public keys and signatures are base64-encoded Ed25519 values.
 
 ## Success criteria for this RND
 

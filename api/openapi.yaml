@@ -31,6 +31,7 @@ tags:
   - name: Files
   - name: Mounts
   - name: Cronjobs
+  - name: Plugins
   - name: Observability
   - name: Metrics
 
@@ -1929,6 +1930,199 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /plugins:
+    get:
+      tags: [Plugins]
+      summary: List plugin versions
+      operationId: getPlugins
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "200":
+          description: Plugin registry entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PluginListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /plugins/install:
+    post:
+      tags: [Plugins]
+      summary: Install a plugin artifact
+      description: |
+        Installs a plugin artifact, parses `manifest.json`, checks host
+        compatibility, stores the artifact by digest, and leaves it in
+        `installed` state. The implementation accepts multipart upload field
+        `artifact` or a JSON string body for manifest-only/dev installs.
+        Re-installing the same `(plugin_id, version)` is accepted only when the
+        existing registry row is `install_failed`; other duplicate versions
+        return `409`.
+      operationId: postPluginInstall
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [artifact]
+              properties:
+                artifact:
+                  type: string
+                  format: binary
+                sha256:
+                  type: string
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginInstallJSONRequest"
+      responses:
+        "201":
+          description: Plugin installed and ready to enable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PluginResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /plugins/{vendor}/{name}/enable:
+    post:
+      tags: [Plugins]
+      summary: Enable an installed plugin version
+      operationId: postPluginEnable
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/PluginVendor"
+        - $ref: "#/components/parameters/PluginName"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginVersionRequest"
+      responses:
+        "200":
+          description: Plugin enabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PluginResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /plugins/{vendor}/{name}/disable:
+    post:
+      tags: [Plugins]
+      summary: Disable the enabled plugin version
+      operationId: postPluginDisable
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/PluginVendor"
+        - $ref: "#/components/parameters/PluginName"
+      responses:
+        "200":
+          description: Plugin disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PluginResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /plugins/{vendor}/{name}/switch:
+    post:
+      tags: [Plugins]
+      summary: Switch the enabled version of a plugin
+      operationId: postPluginSwitch
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/PluginVendor"
+        - $ref: "#/components/parameters/PluginName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginVersionRequest"
+      responses:
+        "200":
+          description: Enabled version switched
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PluginResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /plugins/{vendor}/{name}/versions/{version}:
+    delete:
+      tags: [Plugins]
+      summary: Uninstall a stable plugin version
+      operationId: deletePluginVersion
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/PluginVendor"
+        - $ref: "#/components/parameters/PluginName"
+        - $ref: "#/components/parameters/PluginVersion"
+        - name: purge
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Hard-delete an already-uninstalled registry record.
+      responses:
+        "200":
+          description: Plugin version uninstalled or purged
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/PluginResponse"
+                  - $ref: "#/components/schemas/MessageResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
 components:
   securitySchemes:
     sessionCookie:
@@ -1970,6 +2164,27 @@ components:
       schema:
         type: string
       description: Whitelisted SQLite table name
+    PluginVendor:
+      name: vendor
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Plugin id vendor namespace, e.g. `acme` in `acme/logger`
+    PluginName:
+      name: name
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Plugin id name, e.g. `logger` in `acme/logger`
+    PluginVersion:
+      name: version
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Plugin manifest version
     Range:
       name: range
       in: query
@@ -3018,6 +3233,132 @@ components:
           type: integer
         bytes:
           type: integer
+
+    PluginVersion:
+      type: object
+      required:
+        - id
+        - plugin_id
+        - version
+        - name
+        - tier
+        - api_version
+        - artifact_digest
+        - state
+        - manifest
+        - capabilities
+        - ui
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: integer
+          format: int64
+        plugin_id:
+          type: string
+          description: Namespaced plugin id, e.g. `acme/logger`
+        version:
+          type: string
+        name:
+          type: string
+        tier:
+          type: integer
+          enum: [0, 1]
+        api_version:
+          type: string
+          example: gosite-plugin/1
+        min_gosite_version:
+          type: string
+        rpc_version:
+          type: string
+        config_version:
+          type: string
+        artifact_digest:
+          type: string
+        state:
+          type: string
+          enum:
+            - installing
+            - installed
+            - install_failed
+            - enabling
+            - enabled
+            - enable_failed
+            - disabling
+            - uninstalling
+            - uninstalled
+        failure_class:
+          type: string
+          enum:
+            - validate_timeout
+            - start_failed
+            - hook_refresh_failed
+            - db_failed
+            - compensation_failed
+            - stop_failed
+            - fs_delete_failed
+            - config_migration_failed
+            - unknown
+            - ""
+        failure_message:
+          type: string
+        failure_at:
+          type: string
+          format: date-time
+          nullable: true
+        manifest:
+          type: object
+          additionalProperties: true
+          description: Immutable manifest snapshot parsed during install.
+        capabilities:
+          type: object
+          additionalProperties: true
+          description: Declared host capabilities from the manifest.
+        ui:
+          type: object
+          additionalProperties: true
+          description: Data-only UI contribution definitions rendered by the host.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PluginResponse:
+      type: object
+      required: [plugin]
+      properties:
+        plugin:
+          $ref: "#/components/schemas/PluginVersion"
+
+    PluginListResponse:
+      type: object
+      required: [plugins]
+      properties:
+        plugins:
+          type: array
+          items:
+            $ref: "#/components/schemas/PluginVersion"
+
+    PluginInstallJSONRequest:
+      type: object
+      required: [content]
+      properties:
+        name:
+          type: string
+        sha256:
+          type: string
+        content:
+          type: string
+          description: Manifest JSON string for development/testing clients.
+
+    PluginVersionRequest:
+      type: object
+      required: [version]
+      properties:
+        version:
+          type: string
 
     MessageResponse:
       type: object

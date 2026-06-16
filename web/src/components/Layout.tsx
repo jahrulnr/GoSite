@@ -14,6 +14,7 @@ import {
   IconGlobe,
   IconLock,
   IconLogout,
+  IconPlug,
   IconSearch,
   IconServer,
   IconSettings,
@@ -37,6 +38,7 @@ import { LogsView } from '../views/Logs';
 import { MetricsView } from '../views/Metrics';
 import { MountsView } from '../views/Mounts';
 import { NginxView } from '../views/Nginx';
+import { PluginContributionView, PluginsView } from '../views/Plugins';
 import { SettingsView } from '../views/Settings';
 import { WebsitesView } from '../views/Websites';
 
@@ -52,6 +54,7 @@ const iconByKey: Record<string, Icon> = {
   docker: IconDocker,
   clock: IconClock,
   disk: IconDisk,
+  plug: IconPlug,
   server: IconServer,
   settings: IconSettings,
 };
@@ -77,6 +80,7 @@ export const navItems: NavItem[] = [
   { path: '/docker', label: 'Docker', group: 'Runtime', icon: IconDocker, meta: 'containers' },
   { path: '/cron', label: 'Cron', group: 'Runtime', icon: IconClock, meta: 'jobs' },
   { path: '/mounts', label: 'Mounts', group: 'Runtime', icon: IconDisk, meta: 'fstab' },
+  { path: '/plugins', label: 'Plugins', group: 'Runtime', icon: IconPlug, meta: 'extensions' },
 ];
 
 function navFromMeta(meta: UiMetaResponse | undefined): NavItem[] {
@@ -241,6 +245,9 @@ export function BootGate({ children }: Readonly<{ children: ComponentChildren }>
 }
 
 function RouteView({ path, params }: Readonly<{ path: string; params: Record<string, string> }>) {
+  if (path.startsWith('/plugins/')) {
+    return <PluginContributionView path={path} />;
+  }
   switch (path) {
     case '/websites':
       return <WebsitesView />;
@@ -262,13 +269,15 @@ function RouteView({ path, params }: Readonly<{ path: string; params: Record<str
       return <NginxView />;
     case '/settings':
       return <SettingsView />;
+    case '/plugins':
+      return <PluginsView />;
     default:
       return <DashboardView />;
   }
 }
 
 function TopbarCrumb({ path }: Readonly<{ path: string }>) {
-  const item = navItems.find((it) => it.path === path);
+  const item = path.startsWith('/plugins/') ? navItems.find((it) => it.path === '/plugins') : navItems.find((it) => it.path === path);
   if (!item) {
     return (
       <div class="topbar-crumb">
@@ -345,11 +354,12 @@ export function Shell() {
               <div class="nav-group-label">{group}</div>
               {items.map((item) => {
                 const IconCmp = item.icon;
+                const active = route.path === item.path || (item.path === '/plugins' && route.path.startsWith('/plugins/'));
                 return (
                   <button
                     type="button"
                     key={item.path}
-                    class={`nav-item ${route.path === item.path ? 'active' : ''}`}
+                    class={`nav-item ${active ? 'active' : ''}`}
                     onClick={() => navigate(item.path)}
                   >
                     <span class="ico"><IconCmp /></span>

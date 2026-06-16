@@ -271,6 +271,7 @@ Rekomendasi field:
 - `rpcVersion` harus match (versi kontrak go-plugin).
 - Capabilities divalidasi terhadap fitur yang didukung GoSite build saat itu.
 - `configVersion` (opsional): versi schema config plugin; dipakai saat migrasi config pada upgrade.
+- `artifact.sha256` adalah digest SHA-256 lowercase hex dari byte artifact upload persis. Signature production adalah signature Ed25519 atas string digest tersebut dan di-base64 pada `signatures[].sig`.
 
 ### Kontribusi UI (sidebar items, konfigurasi form)
 
@@ -372,6 +373,7 @@ Minimum viable approach:
 - Host menyimpan **trusted vendor keyring** (di-manage admin).
 - Setiap key punya: `vendor`, `keyId`, `publicKey`, `createdAt`, `revokedAt`.
 - Install mensyaratkan signature oleh key yang tidak revoked untuk vendor tersebut (atau “allow unsigned” khusus dev mode).
+- Payload signature adalah string digest SHA-256 lowercase hex dari artifact upload; public key dan signature memakai base64 Ed25519.
 
 ## Success criteria untuk RND ini
 

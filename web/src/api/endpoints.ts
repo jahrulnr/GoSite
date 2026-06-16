@@ -16,6 +16,7 @@ import type {
   LogTailResponse,
   Mount,
   NetworkTraffic,
+  PluginVersion,
   QueryEvent,
   QueryMetaResponse,
   QueryResponse,
@@ -178,6 +179,33 @@ export const cron = {
   run: (id: number) => http.post<JobAcceptedResponse>(`/cronjobs/${id}/run`),
   runStreamUrl: (id: number, jobId: number) =>
     `${API_BASE}/cronjobs/${id}/run/stream?job_id=${jobId}`,
+};
+
+// ---- Plugins ----
+function pluginPath(pluginID: string) {
+  const [vendor, name] = pluginID.split('/');
+  if (!vendor || !name) throw new Error('Plugin id must be vendor/name');
+  return `/plugins/${encodeURIComponent(vendor)}/${encodeURIComponent(name)}`;
+}
+
+export const plugins = {
+  list: () => http.get<{ plugins: PluginVersion[] }>('/plugins').then((r) => r.plugins ?? []),
+  installFile: (file: File, sha256?: string) => {
+    const form = new FormData();
+    form.append('artifact', file);
+    if (sha256) form.append('sha256', sha256);
+    return http.upload<{ plugin: PluginVersion }>('/plugins/install', form);
+  },
+  installManifest: (content: string, sha256?: string) =>
+    http.post<{ plugin: PluginVersion }>('/plugins/install', { content, sha256 }),
+  enable: (pluginID: string, version?: string) =>
+    http.post<{ plugin: PluginVersion }>(`${pluginPath(pluginID)}/enable`, version ? { version } : undefined),
+  disable: (pluginID: string) =>
+    http.post<{ plugin: PluginVersion }>(`${pluginPath(pluginID)}/disable`),
+  switchVersion: (pluginID: string, version: string) =>
+    http.post<{ plugin: PluginVersion }>(`${pluginPath(pluginID)}/switch`, { version }),
+  uninstall: (pluginID: string, version: string) =>
+    http.del<{ plugin: PluginVersion }>(`${pluginPath(pluginID)}/versions/${encodeURIComponent(version)}`),
 };
 
 // ---- Logs ----

@@ -27,6 +27,7 @@ import (
 	filessvc "github.com/jahrulnr/gosite/internal/service/files"
 	"github.com/jahrulnr/gosite/internal/service/logs"
 	mountsvc "github.com/jahrulnr/gosite/internal/service/mount"
+	pluginsvc "github.com/jahrulnr/gosite/internal/service/plugin"
 	"github.com/jahrulnr/gosite/internal/service/settings"
 	"github.com/jahrulnr/gosite/internal/service/ssl"
 	"github.com/jahrulnr/gosite/internal/service/system"
@@ -118,6 +119,23 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	cronSvc := cronsvc.NewService(cronRepo, jobRepo, worker)
 	cronHandler := handler.NewCronHandler(cronSvc, worker)
 
+	pluginRepo := sqlite.NewPluginRepository(db)
+	pluginRuntime := pluginsvc.NewProcessRuntimeManager()
+	pluginDispatcher := pluginsvc.NewMemoryHookDispatcher(cfg.PluginMaxConcurrentHooks)
+	pluginSvc := pluginsvc.NewService(
+		pluginRepo,
+		cfg.Storage,
+		pluginRuntime,
+		pluginDispatcher,
+		pluginsvc.WithAllowUnsigned(cfg.PluginAllowUnsigned),
+		pluginsvc.WithKeyringPath(cfg.PluginKeyringPath),
+		pluginsvc.WithHostVersion(cfg.AppVersion),
+	)
+	if err := pluginSvc.Reconcile(context.Background()); err != nil {
+		slog.Warn("plugin reconcile failed", "err", err)
+	}
+	pluginHandler := handler.NewPluginHandler(pluginSvc)
+
 	terminalHub := terminal.NewHub(terminal.HubConfig{
 		StickyTTL:    cfg.TerminalStickyTTL,
 		DumpDir:      cfg.TerminalDumpDir,
@@ -172,6 +190,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	registerDatabaseRoutes(protected, databaseHandler)
 	registerUIMetaRoutes(protected, uimetaHandler)
 	registerTerminalRoutes(protected, terminalHandler)
+	registerPluginRoutes(protected, pluginHandler)
 
 	if cfg.FEEmbed {
 		frontend.Register(engine, frontend.DistFS)
@@ -288,6 +307,15 @@ func registerCronRoutes(api *gin.RouterGroup, h *handler.CronHandler) {
 	api.DELETE("/cronjobs/:id", gin.WrapF(h.Delete))
 	api.POST("/cronjobs/:id/run", gin.WrapF(h.Run))
 	api.GET("/cronjobs/:id/run/stream", gin.WrapF(h.RunStream))
+}
+
+func registerPluginRoutes(api *gin.RouterGroup, h *handler.PluginHandler) {
+	api.GET("/plugins", gin.WrapF(h.List))
+	api.POST("/plugins/install", gin.WrapF(h.Install))
+	api.POST("/plugins/:vendor/:name/enable", gin.WrapF(h.Enable))
+	api.POST("/plugins/:vendor/:name/disable", gin.WrapF(h.Disable))
+	api.POST("/plugins/:vendor/:name/switch", gin.WrapF(h.Switch))
+	api.DELETE("/plugins/:vendor/:name/versions/:version", gin.WrapF(h.Uninstall))
 }
 
 func registerObservabilityRoutes(api *gin.RouterGroup, h *handler.ObservabilityHandler) {

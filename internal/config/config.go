@@ -6,14 +6,17 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jahrulnr/gosite/internal/buildinfo"
 )
 
 // Config holds runtime settings loaded from environment variables.
 type Config struct {
-	AppEnv   string
-	Storage  string
-	WebPath  string
-	Database string
+	AppEnv     string
+	AppVersion string
+	Storage    string
+	WebPath    string
+	Database   string
 
 	AuthEnable bool
 	AuthUser   string
@@ -29,6 +32,10 @@ type Config struct {
 	LogEventsRetentionDays int
 	AuditRetentionDays     int
 
+	PluginAllowUnsigned      bool
+	PluginKeyringPath        string
+	PluginMaxConcurrentHooks int
+
 	ListenAddr string
 	TLSCert    string
 	TLSKey     string
@@ -38,10 +45,10 @@ type Config struct {
 	EtcDir         string
 	LetsEncryptDir string
 
-	FEEmbed              bool
-	SessionCookieSecure  bool
-	TLSEnable            bool
-	CORSOrigins          []string
+	FEEmbed             bool
+	SessionCookieSecure bool
+	TLSEnable           bool
+	CORSOrigins         []string
 
 	// Terminal (xterm.js floating window).
 	TerminalStickyTTL  time.Duration
@@ -64,6 +71,7 @@ func (c Config) StorageLayout() []string {
 		filepath.Join(c.Storage, "webconfig", "active.d"),
 		filepath.Join(c.Storage, "webconfig", "ssl", "live", "default"),
 		filepath.Join(c.Storage, "mount-secrets"),
+		filepath.Join(c.Storage, "plugins"),
 	}
 }
 
@@ -71,12 +79,14 @@ func (c Config) StorageLayout() []string {
 func Load() Config {
 	storage := envOr("STORAGE_PATH", "/storage")
 	dbPath := envOr("DB_DATABASE", filepath.Join(storage, "db.sqlite"))
+	appEnv := envOr("APP_ENV", "production")
 
 	return Config{
-		AppEnv:   envOr("APP_ENV", "production"),
-		Storage:  storage,
-		WebPath:  envOr("WEB_PATH", "/www"),
-		Database: dbPath,
+		AppEnv:     appEnv,
+		AppVersion: envOr("APP_VERSION", buildinfo.Version),
+		Storage:    storage,
+		WebPath:    envOr("WEB_PATH", "/www"),
+		Database:   dbPath,
 
 		AuthEnable: envBool("AUTH_ENABLE", true),
 		AuthUser:   envOr("AUTH_USER", "admin"),
@@ -91,6 +101,10 @@ func Load() Config {
 
 		LogEventsRetentionDays: envInt("LOG_EVENTS_RETENTION_DAYS", 14),
 		AuditRetentionDays:     envInt("AUDIT_RETENTION_DAYS", 90),
+
+		PluginAllowUnsigned:      envBool("PLUGIN_ALLOW_UNSIGNED", appEnv != "production"),
+		PluginKeyringPath:        envOr("PLUGIN_KEYRING_PATH", filepath.Join(storage, "plugins", "keyring.json")),
+		PluginMaxConcurrentHooks: envInt("PLUGIN_MAX_CONCURRENT_HOOKS", 10),
 
 		ListenAddr: envOr("LISTEN_ADDR", ":8080"),
 		TLSCert:    envOr("TLS_CERT", filepath.Join(storage, "webconfig/ssl/live/default/cert.pem")),

@@ -1,5 +1,7 @@
 BINARY := bin/gosite
 PKG := ./...
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+LDFLAGS := -X github.com/jahrulnr/gosite/internal/buildinfo.Version=$(VERSION)
 
 .PHONY: build test test-cover clean up down dev dev-api dev-fe build-fe build-docker dev-api-setup contract-check wiki-export
 
@@ -10,7 +12,7 @@ build-fe:
 	cd web && npm ci && npm run build
 
 build: build-fe
-	go build -o $(BINARY) ./cmd/gosite
+	go build -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/gosite
 
 DEV_STORAGE := /tmp/gosite-qa/storage
 

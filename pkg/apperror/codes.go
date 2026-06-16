@@ -4,25 +4,25 @@ package apperror
 type Code string
 
 const (
-	CodeInternal           Code = "INTERNAL_ERROR"
-	CodeValidation         Code = "VALIDATION_FAILED"
-	CodeInvalidInput       Code = "INVALID_INPUT"
-	CodeUnauthorized       Code = "UNAUTHORIZED"
-	CodeForbidden          Code = "FORBIDDEN"
-	CodeNotFound           Code = "NOT_FOUND"
-	CodeConflict           Code = "CONFLICT"
-	CodeDatabase           Code = "DATABASE_ERROR"
-	CodeConfig             Code = "CONFIG_ERROR"
+	CodeInternal     Code = "INTERNAL_ERROR"
+	CodeValidation   Code = "VALIDATION_FAILED"
+	CodeInvalidInput Code = "INVALID_INPUT"
+	CodeUnauthorized Code = "UNAUTHORIZED"
+	CodeForbidden    Code = "FORBIDDEN"
+	CodeNotFound     Code = "NOT_FOUND"
+	CodeConflict     Code = "CONFLICT"
+	CodeDatabase     Code = "DATABASE_ERROR"
+	CodeConfig       Code = "CONFIG_ERROR"
 
 	CodeAuthInvalidCredentials Code = "AUTH_INVALID_CREDENTIALS"
 	CodeBasicAuthRequired      Code = "BASIC_AUTH_REQUIRED"
 	CodeSessionExpired         Code = "SESSION_EXPIRED"
 
-	CodeDomainInvalid  Code = "DOMAIN_INVALID"
-	CodePathInvalid    Code = "PATH_INVALID"
-	CodePathDuplicate  Code = "PATH_DUPLICATE"
-	CodePathIsFile     Code = "PATH_IS_FILE"
-	CodePathTraversal  Code = "PATH_TRAVERSAL"
+	CodeDomainInvalid Code = "DOMAIN_INVALID"
+	CodePathInvalid   Code = "PATH_INVALID"
+	CodePathDuplicate Code = "PATH_DUPLICATE"
+	CodePathIsFile    Code = "PATH_IS_FILE"
+	CodePathTraversal Code = "PATH_TRAVERSAL"
 
 	CodeNginxTestFailed   Code = "NGINX_TEST_FAILED"
 	CodeNginxReloadFailed Code = "NGINX_RELOAD_FAILED"
@@ -41,4 +41,7 @@ const (
 
 	CodeQueryInvalid     Code = "QUERY_INVALID"
 	CodeTimeRangeInvalid Code = "TIME_RANGE_INVALID"
+
+	CodePluginInvalid   Code = "PLUGIN_INVALID"
+	CodePluginOperation Code = "PLUGIN_OPERATION_FAILED"
 )

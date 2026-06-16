@@ -7,6 +7,7 @@ COPY web/ ./web/
 RUN cd web && npm run build
 
 FROM golang:1.26.4-bookworm AS gobuilder
+ARG VERSION=dev
 
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -14,7 +15,7 @@ RUN go mod download
 
 COPY . .
 COPY --from=webbuilder /src/internal/delivery/http/frontend/dist ./internal/delivery/http/frontend/dist
-RUN CGO_ENABLED=0 go build -o /out/gosite ./cmd/gosite
+RUN CGO_ENABLED=0 go build -ldflags "-X github.com/jahrulnr/gosite/internal/buildinfo.Version=${VERSION}" -o /out/gosite ./cmd/gosite
 
 FROM nginx:1.30.2-trixie
 
