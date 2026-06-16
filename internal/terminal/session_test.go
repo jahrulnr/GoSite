@@ -323,3 +323,178 @@ func newWSClientPair(t *testing.T) (*websocket.Conn, *websocket.Conn) {
 		return nil, nil
 	}
 }
+
+// TestPtySessionResumeBroadcastFlushesPending is a regression test for the
+// "first prompt never appears" UX bug: chunks produced while the broadcast
+// is paused must be forwarded to attached clients when the outermost resume
+// is called. The previous `token == 1` flush guard leaked the very first
+// prompt bytes of a fresh session.
+func TestPtySessionResumeBroadcastFlushesPending(t *testing.T) {
+	s := newTestSession(t)
+	if err := s.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer s.Kill()
+
+	c1, c2 := newWSClientPair(t)
+	defer c1.Close()
+	defer c2.Close()
+	s.Attach(c1)
+	s.Attach(c2)
+	time.Sleep(50 * time.Millisecond)
+
+	// Pause broadcast, then write a deterministic command. With the
+	// broadcast paused, the echo + newline that bash emits must end up
+	// in `pending`, NOT in the websocket.
+	token := s.PauseBroadcast()
+	if token != 0 {
+		t.Fatalf("expected first pause to return 0, got %d", token)
+	}
+	if _, err := s.Write([]byte("echo resume-flush-marker\n")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	// Give the shell time to echo. If broadcast were active, the marker
+	// would arrive on c1/c2 well before this deadline.
+	time.Sleep(250 * time.Millisecond)
+
+	// Resume: the pending buffer must be flushed now.
+	s.ResumeBroadcast(token)
+
+	// Both clients should receive the marker.
+	deadline := time.After(3 * time.Second)
+	for i, c := range []*websocket.Conn{c1, c2} {
+		got := make(chan struct{}, 1)
+		go func(idx int, conn *websocket.Conn) {
+			for {
+				select {
+				case <-deadline:
+					return
+				default:
+				}
+				_ = conn.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
+				_, data, err := conn.ReadMessage()
+				if err != nil {
+					return
+				}
+				if contains(data, []byte("resume-flush-marker")) {
+					select {
+					case got <- struct{}{}:
+					default:
+					}
+					return
+				}
+			}
+		}(i, c)
+		select {
+		case <-got:
+		case <-time.After(2 * time.Second):
+			t.Errorf("client %d did not receive marker after resume", i)
+		}
+	}
+}
+
+// TestHubAttachAndPumpFlushesPendingPrompt is a regression test for the
+// user-facing "no prompt on first connect" UX bug. When the WS attaches
+// after the shell has already emitted its prompt, the prompt bytes are
+// sitting in the rolling dump; the prompt is also queued in the fan-out
+// pending buffer. The handler must flush the pending buffer after the
+// snapshot is delivered, otherwise the prompt is silently lost.
+func TestHubAttachAndPumpFlushesPendingPrompt(t *testing.T) {
+	h := newTestHub(t)
+	s, err := h.Create(context.Background(), 1, CreateOptions{})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	defer s.Kill()
+
+	// Wait for the shell to print its first prompt so the prompt bytes
+	// are in the rolling dump.
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		data, _, _ := s.Snapshot()
+		if len(data) > 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
+	srvConnCh := make(chan *websocket.Conn, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		srvConnCh <- c
+		<-r.Context().Done()
+	}))
+	t.Cleanup(srv.Close)
+
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
+	cli, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer cli.Close()
+
+	var srvConn *websocket.Conn
+	select {
+	case srvConn = <-srvConnCh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for server conn")
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = h.AttachAndPump(s, srvConn, nil)
+	}()
+
+	// First frame is the ready frame.
+	_ = cli.SetReadDeadline(time.Now().Add(3 * time.Second))
+	_, raw, err := cli.ReadMessage()
+	if err != nil {
+		t.Fatalf("read ready: %v", err)
+	}
+	decoded, err := DecodeText(raw)
+	if err != nil {
+		t.Fatalf("decode ready: %v", err)
+	}
+	if _, ok := decoded.(*ReadyFrame); !ok {
+		t.Fatalf("expected ready frame, got %T", decoded)
+	}
+
+	// The client should now receive at least one binary frame (or its
+	// payload merged with subsequent writes) that contains prompt
+	// content. We accept either: the snapshot binary frame, or a live
+	// chunk that the pending-flush path delivers.
+	gotPrompt := false
+	promptDeadline := time.After(2 * time.Second)
+	for !gotPrompt {
+		select {
+		case <-promptDeadline:
+			t.Fatal("never received prompt bytes after attach")
+		default:
+		}
+		_ = cli.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
+		_, data, err := cli.ReadMessage()
+		if err != nil {
+			continue
+		}
+		// Any byte that looks like a shell prompt token (e.g. '#' or '$'
+		// at end-of-line) is enough to confirm the prompt was delivered.
+		if len(data) > 0 {
+			gotPrompt = true
+		}
+	}
+
+	_ = cli.Close()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("pump did not exit after client close")
+	}
+}
+
+

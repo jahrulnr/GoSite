@@ -41,9 +41,24 @@ export class TerminalClient {
   private closed = false;
   private attempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private lastReceivedSeq = 0;
+  // Position (seq) of the last PTY byte the client has actually written
+  // to xterm. Initialized to -1 so the first chunk is always accepted.
+  // We deliberately do NOT seed this from the `ready` frame's end_seq:
+  // the snapshot binary frame that the server sends next carries the
+  // authoritative range, and the pending flush can carry bytes whose
+  // seq is < end_seq. Tracking the last *byte* (not the next seq)
+  // makes the dedup correct for both the initial snapshot and live
+  // chunks, while still dropping true duplicates on reconnect.
+  private lastReceivedEnd = -1;
   private currentRole: Role = 'none';
   private currentSession: TerminalClientOptions;
+  // Keystrokes that arrive before the socket is open *and* the server has
+  // confirmed the writer role are buffered here. They are flushed in order
+  // once both conditions are met. Without this queue the very first
+  // character typed on a freshly opened terminal is silently dropped
+  // (return false from sendInput), which is the source of the "1
+  // character lost" UX bug.
+  private pendingInput: Uint8Array[] = [];
 
   constructor(opts: TerminalClientOptions) {
     this.currentSession = opts;
@@ -62,15 +77,37 @@ export class TerminalClient {
     }
     this.ws?.close();
     this.ws = null;
+    this.pendingInput = [];
     this.currentSession.onConnectionChange('closed');
   }
 
   sendInput(bytes: Uint8Array) {
-    if (this.currentRole !== 'writer') return false;
-    if (this.ws?.readyState !== WebSocket.OPEN) return false;
-    const frame = { type: 'input', data: bytesToBase64(bytes) };
-    this.ws.send(JSON.stringify(frame));
+    if (this.currentRole !== 'writer') {
+      this.pendingInput.push(bytes);
+      return true;
+    }
+    if (this.ws?.readyState !== WebSocket.OPEN) {
+      this.pendingInput.push(bytes);
+      return true;
+    }
+    this.flushInput(bytes);
     return true;
+  }
+
+  private flushInput(bytes: Uint8Array) {
+    const frame = { type: 'input', data: bytesToBase64(bytes) };
+    this.ws?.send(JSON.stringify(frame));
+  }
+
+  private flushPendingInput() {
+    if (this.pendingInput.length === 0) return;
+    if (this.currentRole !== 'writer') return;
+    if (this.ws?.readyState !== WebSocket.OPEN) return;
+    const queued = this.pendingInput;
+    this.pendingInput = [];
+    for (const chunk of queued) {
+      this.flushInput(chunk);
+    }
   }
 
   sendResize(cols: number, rows: number) {
@@ -97,7 +134,7 @@ export class TerminalClient {
   }
 
   lastSeq(): number {
-    return this.lastReceivedSeq;
+    return this.lastReceivedEnd;
   }
 
   private connect() {
@@ -116,6 +153,10 @@ export class TerminalClient {
     socket.onopen = () => {
       this.attempt = 0;
       this.currentSession.onConnectionChange('connected');
+      // The socket is now writable. If keystrokes were buffered before
+      // the connect completed (and the role is already 'writer' from a
+      // previous session's `ready` frame in a re-attach) flush them.
+      this.flushPendingInput();
     };
     socket.onmessage = (ev) => {
       if (typeof ev.data === 'string') {
@@ -145,9 +186,14 @@ export class TerminalClient {
     }
     if (parsed.type === 'ready') {
       this.currentRole = parsed.role;
-      this.lastReceivedSeq = parsed.end_seq;
       this.currentSession.sessionId = parsed.session_id;
       this.currentSession.onRole(parsed.role);
+      // The ready frame is the first authoritative signal that the
+      // server has accepted us as a writer. Flush any keystrokes that
+      // arrived in the meantime.
+      this.flushPendingInput();
+      // We intentionally do NOT seed `lastReceivedEnd` from
+      // `parsed.end_seq` here — see the field docstring.
     }
     this.currentSession.onText(parsed);
   }
@@ -156,12 +202,16 @@ export class TerminalClient {
     if (buf.byteLength < 8) return;
     const view = new DataView(buf);
     const seq = Number(view.getBigUint64(0, false));
-    if (seq <= this.lastReceivedSeq) {
-      // Duplicate or out-of-order frame; drop.
+    const payload = new Uint8Array(buf, 8);
+    // Byte-level dedup: drop the chunk iff the first byte of the
+    // payload was already covered by a previously received chunk.
+    // This makes the initial snapshot binary frame (seq = firstSeq)
+    // and the subsequent pending-flush chunks (which can have seq
+    // values that overlap with the snapshot) cooperate correctly.
+    if (seq <= this.lastReceivedEnd) {
       return;
     }
-    this.lastReceivedSeq = seq;
-    const payload = new Uint8Array(buf, 8);
+    this.lastReceivedEnd = seq + payload.length - 1;
     this.currentSession.onData(payload);
   }
 
