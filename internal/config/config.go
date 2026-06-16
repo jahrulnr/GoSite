@@ -43,6 +43,15 @@ type Config struct {
 	PluginRestartBackoffMax  time.Duration
 	PluginWebhookSecret      string
 
+	PluginRemoteInstall      bool
+	PluginInstallAllowedHosts []string
+	PluginFetchMaxBytes      int64
+	PluginFetchTimeout       time.Duration
+	PluginFetchMaxRedirects    int
+	PluginTrustMode          string
+	GitHubToken              string
+	GitLabToken              string
+
 	ListenAddr string
 	TLSCert    string
 	TLSKey     string
@@ -119,6 +128,15 @@ func Load() Config {
 		PluginRestartBackoffMin:  envDuration("PLUGIN_RESTART_BACKOFF_INITIAL", 1*time.Second),
 		PluginRestartBackoffMax:  envDuration("PLUGIN_RESTART_BACKOFF_CAP", 2*time.Minute),
 		PluginWebhookSecret:      envOr("PLUGIN_WEBHOOK_SECRET", ""),
+
+		PluginRemoteInstall:       envBool("PLUGIN_REMOTE_INSTALL", true),
+		PluginInstallAllowedHosts: splitCSV(envOr("PLUGIN_INSTALL_ALLOWED_HOSTS", "github.com,gitlab.com,objects.githubusercontent.com,*.githubusercontent.com")),
+		PluginFetchMaxBytes:       int64(envInt("PLUGIN_FETCH_MAX_BYTES", 64<<20)),
+		PluginFetchTimeout:        envDuration("PLUGIN_FETCH_TIMEOUT", 120*time.Second),
+		PluginFetchMaxRedirects:   envInt("PLUGIN_FETCH_MAX_REDIRECTS", 3),
+		PluginTrustMode:           envOr("PLUGIN_TRUST_MODE", ""),
+		GitHubToken:               envOr("GITHUB_TOKEN", ""),
+		GitLabToken:               envOr("GITLAB_TOKEN", ""),
 
 		ListenAddr: envOr("LISTEN_ADDR", ":8080"),
 		TLSCert:    envOr("TLS_CERT", filepath.Join(storage, "webconfig/ssl/live/default/cert.pem")),
