@@ -19,7 +19,7 @@ make wiki-export
 # sidebar: _Sidebar.md (EN), _Sidebar-id.md (ID)
 ```
 
-Saat push ke `master`, `main`, atau `dev` (perubahan `docs/`), workflow [`.github/workflows/wiki.yml`](../.github/workflows/wiki.yml) menjalankan export + push ke `GoSite.wiki`.
+Saat push/PR mengubah `docs/`, workflow [`.github/workflows/wiki.yml`](../.github/workflows/wiki.yml) menjalankan `make wiki-export` dan memvalidasi hasilnya. **Publish** ke `GoSite.wiki` hanya saat perubahan masuk **`master`** (atau `main`), atau lewat workflow manual dengan opsi **publish**.
 
 **Setup wiki (sekali):** aktifkan Wiki di Settings, buat halaman manual pertama (mis. `Home`), tambah secret **`WIKI_TOKEN`** jika `GITHUB_TOKEN` ditolak.
 

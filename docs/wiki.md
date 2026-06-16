@@ -19,7 +19,7 @@ make wiki-export
 # sidebars: _Sidebar.md (EN), _Sidebar-id.md (ID)
 ```
 
-On push to `master`, `main`, or `dev` (when `docs/` changes), [`.github/workflows/wiki.yml`](../.github/workflows/wiki.yml) runs `make wiki-export` and `scripts/push-wiki.sh` to sync `GoSite.wiki`.
+On push or pull request that touches `docs/`, [`.github/workflows/wiki.yml`](../.github/workflows/wiki.yml) runs `make wiki-export` and validates the output. **Publishing** to `GoSite.wiki` happens only when changes land on **`master`** (or `main`), or when you run the workflow manually with **publish** enabled.
 
 **Wiki setup (once):**
 
