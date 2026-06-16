@@ -41,6 +41,7 @@ Diagram alur fitur GoSite. Bagian **Legacy BangunSite** (jika ada) disimpan seba
 | 16 | [16-database-viewer.md](Operations-id) | SQLite read-only | ✅ |
 | 17 | [17-splunk-lite.md](Observability-id) | Audit + log query | ✅ |
 | 18 | [18-grafana-lite.md](Observability-id) | Traffic metrics | ✅ |
+| 19 | [19-plugin-installer.md](Plugin-installer-id) | Plugin installer + compatibility contract | ✅ |
 
 ## Wiki GitHub
 
