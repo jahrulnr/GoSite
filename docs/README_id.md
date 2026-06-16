@@ -9,7 +9,8 @@ Dokumentasi runtime, API, dan migrasi dari **BangunSite (Laravel)** ke **GoSite 
 | Kategori | Status |
 |----------|--------|
 | Arsitektur & domain model | ✅ Selaras implementasi |
-| Semua sequence (01–18) + nginx-repair | ✅ Diperbarui ke GoSite |
+| Semua sequence (01–19) + nginx-repair | ✅ Diperbarui ke GoSite |
+| Template plugin | `plugins/_templates/` (scaffold tier 0–3) |
 | `api/openapi.yaml` | Sumber kontrak API terbaru |
 | `migration/` | Referensi legacy + status fase implementasi |
 

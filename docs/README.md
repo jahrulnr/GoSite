@@ -11,7 +11,8 @@ Runtime, API, and migration docs for **GoSite** (Go + Preact hosting panel).
 | Category | Status |
 |----------|--------|
 | Architecture & domain model | Aligned with implementation |
-| All sequences (01–18) + nginx-repair | Updated for GoSite |
+| All sequences (01–19) + nginx-repair | Updated for GoSite |
+| Plugin templates | `plugins/_templates/` (tier 0–3 scaffolds) |
 | `api/openapi.yaml` | Canonical API contract |
 | `migration/` | Legacy reference + module map |
 
@@ -36,12 +37,13 @@ Runtime, API, and migration docs for **GoSite** (Go + Preact hosting panel).
 | [nginx-repair.md](./nginx-repair.md) | `nginx -t` fallback + auto-fix |
 | [wiki.md](./wiki.md) | GitHub wiki export guide |
 | [sequences/](./sequences/) | Mermaid flow diagrams per feature |
+| [plugins/_templates/](../plugins/_templates/) | Plugin development scaffolds |
 | [migration/](./migration/) | BangunSite migration notes |
 
 ## Wiki export
 
 ```bash
-make wiki-export   # → docs/wiki-export/ (English + *-id Indonesian pages)
+make wiki-export   # → docs/wiki-export/ (gitignored; EN + *-id pages)
 ```
 
 ## Build Docker on restricted DNS networks

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Template Full settings",
+  "type": "object",
+  "properties": {
+    "endpoint": {
+      "type": "string",
+      "format": "uri",
+      "title": "Webhook endpoint"
+    },
+    "apiToken": {
+      "type": "string",
+      "title": "API token",
+      "writeOnly": true
+    },
+    "notifyOnFailure": {
+      "type": "boolean",
+      "default": true,
+      "title": "Notify on job failure"
+    }
+  },
+  "required": ["endpoint"]
+}

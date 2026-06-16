@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/jahrulnr/gosite/internal/contracts"
 	"github.com/jahrulnr/gosite/internal/infra/nginx"
 	"github.com/jahrulnr/gosite/internal/repository/sqlite"
 	"github.com/jahrulnr/gosite/pkg/apperror"
@@ -19,11 +20,28 @@ type Service struct {
 	repo    *sqlite.WebsiteRepository
 	nginx   *nginx.Service
 	webRoot string
+	hooks   contracts.HookBus
+}
+
+// Option configures website service dependencies.
+type Option func(*Service)
+
+// WithHookBus dispatches website lifecycle events to plugins.
+func WithHookBus(hooks contracts.HookBus) Option {
+	return func(s *Service) {
+		if hooks != nil {
+			s.hooks = hooks
+		}
+	}
 }
 
 // NewService returns a website service.
-func NewService(repo *sqlite.WebsiteRepository, ngx *nginx.Service, webRoot string) *Service {
-	return &Service{repo: repo, nginx: ngx, webRoot: webRoot}
+func NewService(repo *sqlite.WebsiteRepository, ngx *nginx.Service, webRoot string, opts ...Option) *Service {
+	svc := &Service{repo: repo, nginx: ngx, webRoot: webRoot, hooks: contracts.NoopHookBus{}}
+	for _, opt := range opts {
+		opt(svc)
+	}
+	return svc
 }
 
 // CreateInput holds fields for website creation.
@@ -69,6 +87,15 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (sqlite.Website, e
 		siteType = sqlite.WebsiteTypeStatic
 	}
 	if err := s.validateCreateUpdate(ctx, in.Domain, in.Path, siteType, in.Upstream, 0); err != nil {
+		return sqlite.Website{}, err
+	}
+	if _, err := s.hooks.Dispatch(ctx, "site.before_create", map[string]any{
+		"domain":   in.Domain,
+		"path":     in.Path,
+		"type":     siteType,
+		"upstream": in.Upstream,
+		"active":   in.Active,
+	}); err != nil {
 		return sqlite.Website{}, err
 	}
 
@@ -150,6 +177,13 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (sqlite.
 	}
 
 	if err := s.writeRenderedConfig(ctx, site); err != nil {
+		return sqlite.Website{}, err
+	}
+	if _, err := s.hooks.Dispatch(ctx, "site.config_changed", map[string]any{
+		"id":     site.ID,
+		"domain": site.Domain,
+		"type":   site.Type,
+	}); err != nil {
 		return sqlite.Website{}, err
 	}
 
@@ -239,6 +273,12 @@ func (s *Service) Toggle(ctx context.Context, id int64) (sqlite.Website, error) 
 		return sqlite.Website{}, apperror.Wrap(apperror.CodeDatabase, "update active flag", err)
 	}
 	s.syncSSLFromConfig(ctx, &updated)
+	if !prevActive && updated.Active {
+		_, _ = s.hooks.Dispatch(ctx, "site.after_enable", map[string]any{
+			"id":     updated.ID,
+			"domain": updated.Domain,
+		})
+	}
 	return updated, nil
 }
 
@@ -328,6 +368,13 @@ func (s *Service) UpdateNginxConfig(ctx context.Context, id int64, config string
 	}
 	config = strings.ReplaceAll(config, "\r", "")
 	if err := s.nginx.UpdateSiteConfig(ctx, site.Domain, config); err != nil {
+		return err
+	}
+	if _, err := s.hooks.Dispatch(ctx, "site.config_changed", map[string]any{
+		"id":     site.ID,
+		"domain": site.Domain,
+		"raw":    true,
+	}); err != nil {
 		return err
 	}
 	if err := s.nginx.Reload(ctx); err != nil {

@@ -154,6 +154,7 @@ func (s *Service) Get() Response {
 			{Path: "/docker", Label: "Docker", Group: "Runtime", Icon: "docker"},
 			{Path: "/cron", Label: "Cron", Group: "Runtime", Icon: "clock"},
 			{Path: "/mounts", Label: "Mounts", Group: "Runtime", Icon: "disk"},
+			{Path: "/plugins", Label: "Plugins", Group: "Runtime", Icon: "plug"},
 			{Path: "/nginx", Label: "Nginx", Group: "Config", Icon: "server"},
 			{Path: "/settings", Label: "Settings", Group: "Config", Icon: "settings"},
 		},

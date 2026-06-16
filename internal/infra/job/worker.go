@@ -17,22 +17,40 @@ import (
 type Worker struct {
 	jobs   *sqlite.JobRepository
 	cmd    contracts.CommandRunner
+	hooks  contracts.HookBus
 	queue  chan int64
 	stopCh chan struct{}
 	wg     sync.WaitGroup
 }
 
+// Option configures job worker dependencies.
+type Option func(*Worker)
+
+// WithHookBus dispatches job lifecycle events to plugins.
+func WithHookBus(hooks contracts.HookBus) Option {
+	return func(w *Worker) {
+		if hooks != nil {
+			w.hooks = hooks
+		}
+	}
+}
+
 // NewWorker returns a job worker.
-func NewWorker(jobs *sqlite.JobRepository, cmd contracts.CommandRunner, buffer int) *Worker {
+func NewWorker(jobs *sqlite.JobRepository, cmd contracts.CommandRunner, buffer int, opts ...Option) *Worker {
 	if buffer <= 0 {
 		buffer = 32
 	}
-	return &Worker{
+	worker := &Worker{
 		jobs:   jobs,
 		cmd:    cmd,
+		hooks:  contracts.NoopHookBus{},
 		queue:  make(chan int64, buffer),
 		stopCh: make(chan struct{}),
 	}
+	for _, opt := range opts {
+		opt(worker)
+	}
+	return worker
 }
 
 // Start launches background workers.
@@ -93,6 +111,14 @@ func (w *Worker) process(ctx context.Context, id int64) {
 	if err := w.jobs.MarkRunningWithOutput(ctx, id, output); err != nil {
 		return
 	}
+	if _, err := w.hooks.Dispatch(ctx, "job.before_run", map[string]any{
+		"id":       job.ID,
+		"job_type": job.JobType,
+		"name":     job.Name,
+	}); err != nil {
+		_ = w.jobs.Complete(ctx, id, sqlite.JobStatusFailed, output, err.Error())
+		return
+	}
 
 	var res contracts.CommandResult
 	var runErr error
@@ -125,9 +151,20 @@ func (w *Worker) process(ctx context.Context, id int64) {
 			msg = runErr.Error()
 		}
 		_ = w.jobs.Complete(ctx, id, sqlite.JobStatusFailed, output, msg)
+		_, _ = w.hooks.Dispatch(ctx, "job.on_failure", map[string]any{
+			"id":       job.ID,
+			"job_type": job.JobType,
+			"name":     job.Name,
+			"error":    msg,
+		})
 		return
 	}
 	_ = w.jobs.Complete(ctx, id, sqlite.JobStatusOK, output, "")
+	_, _ = w.hooks.Dispatch(ctx, "job.after_run", map[string]any{
+		"id":       job.ID,
+		"job_type": job.JobType,
+		"name":     job.Name,
+	})
 }
 
 // StreamSSE writes job output as server-sent events until completion.

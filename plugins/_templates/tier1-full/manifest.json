@@ -1,0 +1,42 @@
+{
+  "id": "template/full",
+  "name": "Template Full (Tier 1)",
+  "version": "0.1.0",
+  "tier": 1,
+  "apiVersion": "gosite-plugin/1",
+  "minGoSiteVersion": "0.0.0",
+  "rpcVersion": "1",
+  "configVersion": "2",
+  "capabilities": {
+    "hooks": [
+      "site.before_create",
+      "site.after_enable",
+      "site.config_changed",
+      "ssl.before_issue",
+      "ssl.after_renew",
+      "nginx.before_reload",
+      "nginx.after_reload",
+      "job.before_run",
+      "job.after_run",
+      "job.on_failure",
+      "cron.before_trigger",
+      "container.before_action",
+      "logging.on_event"
+    ],
+    "hookIsolation": "sequential",
+    "uiSidebar": true,
+    "configSchema": true,
+    "loggingSink": true,
+    "rulesAndRoles": "declarative"
+  },
+  "permissions": ["logs:read"],
+  "entrypoints": {
+    "validate": { "type": "go-plugin", "command": "plugin/validate" },
+    "runtime": { "type": "go-plugin", "command": "plugin/gosite" }
+  },
+  "ui": {
+    "sidebar": [
+      { "label": "Full plugin", "route": "/plugins/template/full/settings" }
+    ]
+  }
+}

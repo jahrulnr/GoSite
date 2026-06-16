@@ -117,6 +117,15 @@ export const IconShield = (p: P) => (
   </Svg>
 );
 
+export const IconPlug = (p: P) => (
+  <Svg {...p}>
+    <path d="M9 6V3M15 6V3" />
+    <path d="M7 6h10v5a5 5 0 0 1-10 0z" />
+    <path d="M12 16v5" />
+    <path d="M8 21h8" />
+  </Svg>
+);
+
 export const IconServer = (p: P) => (
   <Svg {...p}>
     <rect x="3" y="4" width="18" height="7" rx="1" />

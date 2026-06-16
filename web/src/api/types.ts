@@ -219,6 +219,92 @@ export interface JobAcceptedResponse {
   message: string;
 }
 
+// ---- Plugins ----
+
+export type PluginState =
+  | 'installing'
+  | 'installed'
+  | 'install_failed'
+  | 'enabling'
+  | 'enabled'
+  | 'enable_failed'
+  | 'disabling'
+  | 'uninstalling'
+  | 'uninstalled';
+
+export type PluginFailureClass =
+  | 'validate_timeout'
+  | 'start_failed'
+  | 'hook_refresh_failed'
+  | 'db_failed'
+  | 'compensation_failed'
+  | 'stop_failed'
+  | 'fs_delete_failed'
+  | 'config_migration_failed'
+  | 'unknown'
+  | '';
+
+export interface PluginCapabilities {
+  hooks?: string[];
+  hookIsolation?: 'sequential' | 'independent' | string;
+  uiSidebar?: boolean;
+  configSchema?: boolean;
+  loggingSink?: boolean;
+  rulesAndRoles?: string;
+  [k: string]: unknown;
+}
+
+export interface PluginSidebarEntry {
+  label?: string;
+  route?: string;
+}
+
+export interface PluginUIContribution {
+  sidebar?: PluginSidebarEntry[];
+  configSchema?: Record<string, unknown>;
+  [k: string]: unknown;
+}
+
+export interface PluginManifest {
+  id?: string;
+  name?: string;
+  version?: string;
+  tier?: number;
+  apiVersion?: string;
+  minGoSiteVersion?: string;
+  rpcVersion?: string;
+  configVersion?: string;
+  capabilities?: PluginCapabilities;
+  permissions?: string[];
+  entrypoints?: Record<string, { type?: string; command?: string }>;
+  artifact?: { sha256?: string };
+  signatures?: Array<{ keyId?: string; sig?: string }>;
+  ui?: PluginUIContribution;
+  [k: string]: unknown;
+}
+
+export interface PluginVersion {
+  id: number;
+  plugin_id: string;
+  version: string;
+  name: string;
+  tier: number;
+  api_version: string;
+  min_gosite_version?: string;
+  rpc_version?: string;
+  config_version?: string;
+  artifact_digest: string;
+  state: PluginState;
+  failure_class?: PluginFailureClass;
+  failure_message?: string;
+  failure_at?: string;
+  manifest: PluginManifest;
+  capabilities: PluginCapabilities;
+  ui: PluginUIContribution;
+  created_at: string;
+  updated_at: string;
+}
+
 // ---- Logs ----
 
 export interface LogSite {

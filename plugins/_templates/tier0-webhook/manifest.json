@@ -1,0 +1,25 @@
+{
+  "id": "template/webhook",
+  "name": "Template Webhook (Tier 0)",
+  "version": "0.1.0",
+  "tier": 0,
+  "apiVersion": "gosite-plugin/1",
+  "minGoSiteVersion": "0.0.0",
+  "capabilities": {
+    "hooks": ["nginx.before_reload", "site.after_enable"],
+    "hookIsolation": "sequential"
+  },
+  "webhooks": [
+    {
+      "event": "nginx.before_reload",
+      "url": "http://127.0.0.1:9191/gosite",
+      "method": "POST"
+    },
+    {
+      "event": "site.after_enable",
+      "url": "http://127.0.0.1:9191/gosite",
+      "method": "POST"
+    }
+  ],
+  "permissions": []
+}
