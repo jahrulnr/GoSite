@@ -8,6 +8,7 @@ import (
 
 	"github.com/jahrulnr/gosite/internal/repository/sqlite"
 	pluginsvc "github.com/jahrulnr/gosite/internal/service/plugin"
+	"github.com/jahrulnr/gosite/internal/service/plugin/catalog"
 	"github.com/jahrulnr/gosite/internal/service/plugin/remote"
 	"github.com/jahrulnr/gosite/pkg/apperror"
 )
@@ -17,11 +18,12 @@ type PluginHandler struct {
 	svc       *pluginsvc.Service
 	remote    *remote.Service
 	remoteCfg remote.Config
+	catalog   *catalog.Service
 }
 
 // NewPluginHandler returns a plugin handler.
-func NewPluginHandler(svc *pluginsvc.Service, remoteSvc *remote.Service, remoteCfg remote.Config) *PluginHandler {
-	return &PluginHandler{svc: svc, remote: remoteSvc, remoteCfg: remoteCfg}
+func NewPluginHandler(svc *pluginsvc.Service, remoteSvc *remote.Service, remoteCfg remote.Config, catalogSvc *catalog.Service) *PluginHandler {
+	return &PluginHandler{svc: svc, remote: remoteSvc, remoteCfg: remoteCfg, catalog: catalogSvc}
 }
 
 type installLogStepJSON struct {
@@ -120,6 +122,7 @@ func (h *PluginHandler) InstallSettings(w http.ResponseWriter, r *http.Request) 
 		"allow_unsigned":          h.remoteCfg.AllowUnsigned,
 		"github_token_configured": h.remoteCfg.GitHubTokenConfigured,
 		"gitlab_token_configured": h.remoteCfg.GitLabTokenConfigured,
+		"build_enabled":           h.remoteCfg.BuildEnabled,
 	})
 }
 

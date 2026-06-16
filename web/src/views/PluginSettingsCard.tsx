@@ -24,6 +24,7 @@ export function PluginSettingsCard() {
             <KeyValue label="GitHub token" mono>{tokenBadge(settings.github_token_configured)}</KeyValue>
             <KeyValue label="GitLab token" mono>{tokenBadge(settings.gitlab_token_configured)}</KeyValue>
             <KeyValue label="Allow unsigned" mono>{settings.allow_unsigned ? 'yes' : 'no'}</KeyValue>
+            <KeyValue label="Docker build (G2b)" mono>{settings.build_enabled ? 'enabled' : 'disabled'}</KeyValue>
           </div>
           {settings.allowed_hosts.length > 0 && (
             <>

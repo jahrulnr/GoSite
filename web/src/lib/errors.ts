@@ -35,8 +35,11 @@ export function humanizeError(error: Error, meta?: UiMetaResponse): string {
   if (lower.includes('platform_unsupported') || lower.includes('platform unsupported')) {
     return 'No build for this server OS/architecture.';
   }
-  if (lower.includes('remote_install_disabled') || lower.includes('remote install disabled')) {
-    return 'Remote install is disabled on this host. Use Artifact or Manifest JSON upload.';
+  if (lower.includes('build_disabled') || lower.includes('build disabled')) {
+    return 'Docker build path is disabled on this host. Set PLUGIN_BUILD_ENABLED or install a release artifact.';
+  }
+  if (lower.includes('build_failed') || lower.includes('build failed')) {
+    return 'Plugin build failed in the Docker sandbox. Check docker, git, and repository build config.';
   }
 
   return msg.replace(/_/g, ' ');

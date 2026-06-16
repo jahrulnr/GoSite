@@ -1,17 +1,20 @@
 # Sequence 20 — Implementation plan (wave G)
 
-Companion to [20-plugin-remote-distribution.md](./20-plugin-remote-distribution.md). **Status:** First ship complete (G1+G2+G1c)
+Companion to [20-plugin-remote-distribution.md](./20-plugin-remote-distribution.md). **Status:** Wave G complete
 
-## First ship scope
+## Scope
 
 | Phase | Status | Notes |
 |-------|--------|-------|
 | **G1** URL + fetcher + provenance | Done | |
-| **G2** GitHub + `gosite.plugin.json` | Done | `github-release` resolver |
+| **G2** GitHub + `gosite.plugin.json` | Done | prefer-release + dual-path build fallback |
 | **G1c** Permission install prompt | Done | API + panel |
 | **G1b** Keyring UI | Done | Registry + `/plugins/keyring` tab |
-| **G2b** Docker builder | Deferred | Per plan |
-| **G3–G6** | Deferred | GitLab, catalog, CLI |
+| **G2b** Docker builder | Done | `PLUGIN_BUILD_*`, `github-build` / `gitlab-build`, dual path |
+| **G3** GitLab resolver | Done | `gitlab-release` + panel tab |
+| **G4** Catalog | Done | bundled JSON + API + install catalog tab |
+| **G5** git-ref tier-0 | Done | `git-ref` resolver |
+| **G6** CLI | Done | `gosite plugin list|resolve|install|catalog` |
 
 ## PR-1 — Foundation
 
@@ -47,7 +50,7 @@ Companion to [20-plugin-remote-distribution.md](./20-plugin-remote-distribution.
 
 ## PR-5 — UI polish
 
-- [x] Install hub wizard (URL + GitHub tabs)
+- [x] Install hub wizard (URL + GitHub + GitLab + Catalog tabs)
 - [x] Provenance column in registry table
 - [x] Distribution card in detail panel
 - [x] Install log in detail panel
@@ -55,11 +58,40 @@ Companion to [20-plugin-remote-distribution.md](./20-plugin-remote-distribution.
 - [x] `GET /plugins/install/settings`
 - [x] Settings page token status (read-only; host env `GITHUB_TOKEN`)
 
+## G2b — Docker builder
+
+- [x] `distribution.build` in index parser
+- [x] `remote/build/docker.go` — git clone + `docker run` golang image
+- [x] Dual path: release asset preferred, build fallback when `PLUGIN_BUILD_ENABLED`
+- [x] Source types `github-build`, `gitlab-build`
+
+## G3 — GitLab
+
+- [x] `remote/resolver/gitlab.go`
+- [x] Panel GitLab tab
+- [x] `GITLAB_TOKEN` host env
+
+## G4 — Catalog
+
+- [x] `internal/service/plugin/catalog/` — bundled `catalog.json` + override path
+- [x] `GET /plugins/catalog`, `GET /plugins/catalog/:vendor/:name`
+- [x] Install modal catalog tab
+
+## G5 — git-ref
+
+- [x] `remote/resolver/gitref.go` — tier-0 manifest zip inline artifact
+
+## G6 — CLI
+
+- [x] `gosite plugin list|resolve|install|catalog`
+
 ## API endpoints
 
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET | `/plugins/install/settings` | Remote install config snapshot |
+| GET | `/plugins/catalog` | Curated plugin search |
+| GET | `/plugins/catalog/:vendor/:name` | One catalog entry |
 | POST | `/plugins/install/resolve` | Lightweight preview |
 | POST | `/plugins/install` | Upload, manifest, or `{source}` |
 

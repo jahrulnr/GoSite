@@ -284,11 +284,19 @@ export interface PluginManifest {
 }
 
 export interface PluginInstallSource {
-  type: 'url' | 'github-release';
+  type: 'url' | 'github-release' | 'gitlab-release' | 'git-ref' | 'github-build' | 'gitlab-build';
   url?: string;
   sha256?: string;
   repo?: string;
   tag?: string;
+}
+
+export interface PluginCatalogEntry {
+  plugin_id: string;
+  name: string;
+  description: string;
+  vendor: string;
+  source: PluginInstallSource;
 }
 
 export interface PluginResolvePreview {
@@ -319,6 +327,7 @@ export interface PluginInstallSettings {
   allow_unsigned: boolean;
   github_token_configured: boolean;
   gitlab_token_configured: boolean;
+  build_enabled: boolean;
 }
 
 export interface PluginKeyringEntry {

@@ -51,6 +51,12 @@ type Config struct {
 	PluginTrustMode          string
 	GitHubToken              string
 	GitLabToken              string
+	PluginBuildEnabled       bool
+	PluginBuildTimeout       time.Duration
+	PluginBuildMemoryMB      int
+	PluginBuildCPU           float64
+	PluginBuildImage         string
+	PluginCatalogPath        string
 
 	ListenAddr string
 	TLSCert    string
@@ -137,6 +143,12 @@ func Load() Config {
 		PluginTrustMode:           envOr("PLUGIN_TRUST_MODE", ""),
 		GitHubToken:               envOr("GITHUB_TOKEN", ""),
 		GitLabToken:               envOr("GITLAB_TOKEN", ""),
+		PluginBuildEnabled:        envBool("PLUGIN_BUILD_ENABLED", appEnv != "production"),
+		PluginBuildTimeout:        envDuration("PLUGIN_BUILD_TIMEOUT", 600*time.Second),
+		PluginBuildMemoryMB:       envInt("PLUGIN_BUILD_MEMORY_MB", 2048),
+		PluginBuildCPU:            envFloat("PLUGIN_BUILD_CPU_LIMIT", 2.0),
+		PluginBuildImage:          envOr("PLUGIN_BUILD_IMAGE", "golang:1.22-bookworm"),
+		PluginCatalogPath:         envOr("PLUGIN_CATALOG_PATH", ""),
 
 		ListenAddr: envOr("LISTEN_ADDR", ":8080"),
 		TLSCert:    envOr("TLS_CERT", filepath.Join(storage, "webconfig/ssl/live/default/cert.pem")),
@@ -211,6 +223,18 @@ func envInt(key string, fallback int) int {
 		return fallback
 	}
 	parsed, err := strconv.Atoi(v)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
+func envFloat(key string, fallback float64) float64 {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseFloat(v, 64)
 	if err != nil {
 		return fallback
 	}

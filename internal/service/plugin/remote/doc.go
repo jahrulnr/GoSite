@@ -31,6 +31,8 @@ const (
 	FailureResolveStale          = failures.ResolveStale
 	FailureOperationInProgress   = failures.OperationInProgress
 	FailureRemoteInstallDisabled = failures.RemoteInstallDisabled
+	FailureBuildFailed           = failures.BuildFailed
+	FailureBuildDisabled         = failures.BuildDisabled
 )
 
 // ConfigFromApp maps application config to remote install settings.
@@ -56,5 +58,11 @@ func ConfigFromApp(cfg config.Config) Config {
 		AllowUnsigned:         cfg.PluginAllowUnsigned,
 		GitHubTokenConfigured: strings.TrimSpace(cfg.GitHubToken) != "",
 		GitLabTokenConfigured: strings.TrimSpace(cfg.GitLabToken) != "",
+		BuildEnabled:          cfg.PluginBuildEnabled,
+		BuildTimeout:          cfg.PluginBuildTimeout,
+		BuildMemoryMB:         cfg.PluginBuildMemoryMB,
+		BuildCPU:              cfg.PluginBuildCPU,
+		BuildImage:            cfg.PluginBuildImage,
+		CatalogPath:           cfg.PluginCatalogPath,
 	}
 }

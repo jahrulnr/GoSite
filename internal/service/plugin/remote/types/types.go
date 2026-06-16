@@ -25,6 +25,18 @@ type FetchPlan struct {
 	ResolvedDigest string `json:"resolved_digest"`
 	SourceCommit   string `json:"source_commit,omitempty"`
 	SourceRepository string `json:"source_repository,omitempty"`
+	InlineArtifact   []byte `json:"-"`
+	Build            *BuildPlan `json:"-"`
+}
+
+// BuildPlan carries G2b docker build parameters inside a fetch plan.
+type BuildPlan struct {
+	VCS       string
+	Repo      string
+	Tag       string
+	GoVersion string
+	Package   string
+	Token     string
 }
 
 // ResolvePreview is returned by POST /plugins/install/resolve.
@@ -77,4 +89,10 @@ type Config struct {
 	AllowUnsigned         bool
 	GitHubTokenConfigured bool
 	GitLabTokenConfigured bool
+	BuildEnabled          bool
+	BuildTimeout          time.Duration
+	BuildMemoryMB         int
+	BuildCPU              float64
+	BuildImage            string
+	CatalogPath           string
 }

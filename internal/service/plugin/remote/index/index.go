@@ -19,6 +19,14 @@ type File struct {
 type Distribution struct {
 	APIVersion string    `json:"apiVersion"`
 	Releases   []Release `json:"releases"`
+	Build      *Build    `json:"build,omitempty"`
+}
+
+// Build describes a host-side Docker build for Path B (G2b).
+type Build struct {
+	GoVersion  string `json:"goVersion"`
+	Package    string `json:"package"`
+	Entrypoint string `json:"entrypoint"`
 }
 
 // Release is one published version in the index.
@@ -91,6 +99,32 @@ func encodePlatforms(platforms []Platform) string {
 		parts = append(parts, p.OS+"/"+p.Arch)
 	}
 	return strings.Join(parts, ",")
+}
+
+// PlatformsForVersion lists GOOS/GOARCH pairs advertised for a release tag.
+func (f File) PlatformsForVersion(version string) []Platform {
+	version = strings.TrimPrefix(strings.TrimSpace(version), "v")
+	for _, rel := range f.Distribution.Releases {
+		relVer := strings.TrimPrefix(strings.TrimSpace(rel.Version), "v")
+		if relVer != version {
+			continue
+		}
+		out := make([]Platform, 0, len(rel.Assets))
+		for _, asset := range rel.Assets {
+			out = append(out, Platform{OS: asset.OS, Arch: asset.Arch})
+		}
+		return out
+	}
+	return nil
+}
+
+// BuildSpec returns the distribution build block when present.
+func (f File) BuildSpec() *Build {
+	if f.Distribution.Build == nil {
+		return nil
+	}
+	cp := *f.Distribution.Build
+	return &cp
 }
 
 // HostPlatform returns the current process GOOS/GOARCH.

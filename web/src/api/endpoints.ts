@@ -18,6 +18,7 @@ import type {
   NetworkTraffic,
   PluginInstallSettings,
   PluginInstallSource,
+  PluginCatalogEntry,
   PluginKeyringEntry,
   PluginResolvePreview,
   PluginVersion,
@@ -226,6 +227,13 @@ export const plugins = {
     http.post<void>('/plugins/keyring', key),
   revokeKeyringEntry: (vendor: string, keyId: string) =>
     http.del<void>('/plugins/keyring', { vendor, keyId }),
+  catalog: (query?: string) =>
+    http.get<{ entries: PluginCatalogEntry[] }>('/plugins/catalog', query ? { q: query } : undefined).then((r) => r.entries ?? []),
+  catalogEntry: (pluginID: string) => {
+    const [vendor, name] = pluginID.split('/');
+    if (!vendor || !name) throw new Error('Plugin id must be vendor/name');
+    return http.get<{ entry: PluginCatalogEntry }>(`/plugins/catalog/${encodeURIComponent(vendor)}/${encodeURIComponent(name)}`).then((r) => r.entry);
+  },
 };
 
 // ---- Logs ----

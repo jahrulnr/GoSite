@@ -6,6 +6,7 @@ import (
 
 	"github.com/jahrulnr/gosite/internal/app"
 	"github.com/jahrulnr/gosite/internal/bootstrap"
+	"github.com/jahrulnr/gosite/internal/cli"
 	"github.com/jahrulnr/gosite/internal/config"
 	"github.com/jahrulnr/gosite/internal/repository/sqlite"
 )
@@ -31,6 +32,11 @@ func main() {
 	case "migrate":
 		if err := runMigrate(); err != nil {
 			fmt.Fprintf(os.Stderr, "gosite migrate: %v\n", err)
+			os.Exit(1)
+		}
+	case "plugin":
+		if err := cli.RunPlugin(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "gosite plugin: %v\n", err)
 			os.Exit(1)
 		}
 	case "nginx-repair":
@@ -80,5 +86,6 @@ Usage:
   gosite serve         Start HTTPS API server
   gosite init          First-boot storage initialization
   gosite migrate       Apply database migrations
+  gosite plugin        Plugin remote install CLI (list, resolve, install, catalog)
   gosite nginx-repair  Test nginx config and apply safe automatic fixes`)
 }

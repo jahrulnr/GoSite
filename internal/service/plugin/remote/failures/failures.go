@@ -11,5 +11,7 @@ const (
 	AuthTokenExpired      = "auth_token_expired"
 	ResolveStale          = "resolve_stale"
 	OperationInProgress   = "operation_in_progress"
+	BuildFailed           = "build_failed"
+	BuildDisabled         = "build_disabled"
 	RemoteInstallDisabled = "remote_install_disabled"
 )

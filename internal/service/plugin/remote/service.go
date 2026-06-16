@@ -2,9 +2,12 @@ package remote
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"strings"
 	"time"
 
+	"github.com/jahrulnr/gosite/internal/service/plugin/remote/build"
 	"github.com/jahrulnr/gosite/internal/service/plugin/remote/fetch"
 	"github.com/jahrulnr/gosite/internal/service/plugin/remote/failures"
 	"github.com/jahrulnr/gosite/internal/service/plugin/remote/resolver"
@@ -18,10 +21,21 @@ type Service struct {
 	resolver *resolver.Registry
 	fetcher  *fetch.Fetcher
 	cache    *ResolveCache
+	builder  build.Runner
 }
 
 // NewService returns a remote install orchestrator.
 func NewService(cfg types.Config) *Service {
+	var runner build.Runner = build.NopRunner{}
+	if cfg.BuildEnabled {
+		runner = build.NewDockerRunner(build.Config{
+			Enabled:  true,
+			Image:    cfg.BuildImage,
+			Timeout:  cfg.BuildTimeout,
+			MemoryMB: cfg.BuildMemoryMB,
+			CPU:      cfg.BuildCPU,
+		})
+	}
 	return &Service{
 		cfg:      cfg,
 		resolver: resolver.NewRegistry(cfg),
@@ -31,7 +45,8 @@ func NewService(cfg types.Config) *Service {
 			Timeout:      cfg.Timeout,
 			MaxRedirects: cfg.MaxRedirects,
 		}),
-		cache: NewResolveCache(cfg.ResolveTokenTTL),
+		cache:   NewResolveCache(cfg.ResolveTokenTTL),
+		builder: runner,
 	}
 }
 
@@ -44,8 +59,10 @@ func (s *Service) Resolve(ctx context.Context, source types.Source) (types.Resol
 	if err != nil {
 		return types.ResolvePreview{}, err
 	}
-	if size, err := s.fetcher.HeadSize(ctx, preview.URL); err == nil && size > 0 {
-		preview.Size = size
+	if preview.URL != "" {
+		if size, err := s.fetcher.HeadSize(ctx, preview.URL); err == nil && size > 0 {
+			preview.Size = size
+		}
 	}
 	token, expires, err := s.cache.Issue(source, plan)
 	if err != nil {
@@ -56,10 +73,25 @@ func (s *Service) Resolve(ctx context.Context, source types.Source) (types.Resol
 	return preview, nil
 }
 
-// Fetch downloads artifact bytes for a resolved plan.
+// Fetch downloads or builds artifact bytes for a resolved plan.
 func (s *Service) Fetch(ctx context.Context, plan types.FetchPlan) ([]byte, error) {
 	if !s.cfg.Enabled {
 		return nil, apperror.New(apperror.CodeInvalidInput, failures.RemoteInstallDisabled)
+	}
+	if len(plan.InlineArtifact) > 0 {
+		return plan.InlineArtifact, nil
+	}
+	if plan.Build != nil {
+		spec := build.Spec{
+			VCS:       plan.Build.VCS,
+			Repo:      plan.Build.Repo,
+			Tag:       plan.Build.Tag,
+			GoVersion: plan.Build.GoVersion,
+			Package:   plan.Build.Package,
+			Token:     plan.Build.Token,
+		}
+		data, _, err := s.builder.Build(ctx, spec)
+		return data, err
 	}
 	return s.fetcher.Fetch(ctx, plan.URL, plan.SHA256)
 }
@@ -86,6 +118,12 @@ func (s *Service) ResolveAndFetch(ctx context.Context, source types.Source, reso
 	data, err := s.Fetch(ctx, plan)
 	if err != nil {
 		return plan, nil, err
+	}
+	if strings.TrimSpace(plan.SHA256) == "" && len(data) > 0 {
+		sum := sha256.Sum256(data)
+		digest := hex.EncodeToString(sum[:])
+		plan.SHA256 = digest
+		plan.ResolvedDigest = digest
 	}
 	return plan, data, nil
 }

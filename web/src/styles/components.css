@@ -2316,6 +2316,30 @@ code {
   font-size: 14px;
 }
 
+.plugin-catalog-list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.plugin-catalog-item {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--inset);
+  cursor: pointer;
+}
+
+.plugin-catalog-item.active {
+  border-color: var(--accent);
+  background: color-mix(in oklch, var(--accent) 12%, var(--inset));
+}
+
 .plugin-route-fallback {
   min-height: 360px;
   display: grid;

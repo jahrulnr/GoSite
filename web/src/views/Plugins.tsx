@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { plugins } from '../api/endpoints';
-import type { PluginResolvePreview, PluginState, PluginVersion } from '../api/types';
+import type { PluginCatalogEntry, PluginInstallSource, PluginResolvePreview, PluginState, PluginVersion } from '../api/types';
 import { IconArrowUp, IconPlay, IconPlug, IconRefresh, IconShield, IconTrash } from '../components/Icons';
 import { Page, Stat } from '../components/Layout';
 import { AsyncView, Badge, EmptyState, Field, InlineNotice, Modal, Spinner } from '../components/Ui';
@@ -11,7 +11,7 @@ import { navigate } from '../lib/router';
 import { useStore } from '../lib/store';
 import { PluginsKeyringPanel } from './PluginsKeyring';
 
-type InstallMode = 'artifact' | 'url' | 'github' | 'manifest';
+type InstallMode = 'artifact' | 'url' | 'github' | 'gitlab' | 'catalog' | 'manifest';
 
 const HOST_CRITICAL_PERMS = new Set(['docker:manage', 'nginx:modify', 'ssl:issue', 'filesystem:write']);
 
@@ -188,6 +188,11 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
   const [urlSha256, setUrlSha256] = useState('');
   const [repo, setRepo] = useState('');
   const [tag, setTag] = useState('');
+  const [gitlabRepo, setGitlabRepo] = useState('');
+  const [gitlabTag, setGitlabTag] = useState('');
+  const [catalogQuery, setCatalogQuery] = useState('');
+  const [catalogEntry, setCatalogEntry] = useState<PluginCatalogEntry>();
+  const catalogState = useAsync(() => plugins.catalog(catalogQuery.trim() || undefined), [catalogQuery, mode]);
   const [preview, setPreview] = useState<PluginResolvePreview>();
   const [permissionsAck, setPermissionsAck] = useState(false);
   const installFile = useAction(plugins.installFile);
@@ -197,7 +202,7 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
   const busy = installFile.loading || installManifest.loading || installRemote.loading;
   const resolveBusy = resolveInstall.loading;
   const error = installFile.error ?? installManifest.error ?? installRemote.error ?? resolveInstall.error;
-  const isRemoteMode = mode === 'url' || mode === 'github';
+  const isRemoteMode = mode === 'url' || mode === 'github' || mode === 'gitlab' || mode === 'catalog';
 
   useEffect(() => {
     if (!remoteEnabled && isRemoteMode) setMode('artifact');
@@ -207,13 +212,22 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
     setMode(next);
     setPreview(undefined);
     setPermissionsAck(false);
+    setCatalogEntry(undefined);
   };
 
   const resolve = async () => {
     try {
-      const source = mode === 'url'
-        ? { type: 'url' as const, url: url.trim(), sha256: urlSha256.trim() }
-        : { type: 'github-release' as const, repo: repo.trim(), tag: tag.trim() };
+      let source: PluginInstallSource;
+      if (mode === 'url') {
+        source = { type: 'url', url: url.trim(), sha256: urlSha256.trim() };
+      } else if (mode === 'gitlab') {
+        source = { type: 'gitlab-release', repo: gitlabRepo.trim(), tag: gitlabTag.trim() };
+      } else if (mode === 'catalog') {
+        if (!catalogEntry) throw new Error('Select a catalog entry first');
+        source = catalogEntry.source;
+      } else {
+        source = { type: 'github-release', repo: repo.trim(), tag: tag.trim() };
+      }
       const result = await resolveInstall.run(source);
       setPreview(result?.preview);
       setPermissionsAck(false);
@@ -240,6 +254,18 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
           true,
           preview.resolveToken,
         );
+      } else if (mode === 'gitlab') {
+        if (!preview) throw new Error('Resolve the release before installing');
+        if (!permissionsAck) throw new Error('Acknowledge plugin permissions first');
+        await installRemote.run(
+          { type: 'gitlab-release', repo: gitlabRepo.trim(), tag: gitlabTag.trim() },
+          true,
+          preview.resolveToken,
+        );
+      } else if (mode === 'catalog') {
+        if (!preview || !catalogEntry) throw new Error('Resolve the catalog entry before installing');
+        if (!permissionsAck) throw new Error('Acknowledge plugin permissions first');
+        await installRemote.run(catalogEntry.source, true, preview.resolveToken);
       } else {
         if (!preview) throw new Error('Resolve the release before installing');
         if (!permissionsAck) throw new Error('Acknowledge plugin permissions first');
@@ -257,7 +283,7 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
     }
   };
 
-  const installDisabled = busy || (isRemoteMode && (!preview || !permissionsAck));
+  const installDisabled = busy || (isRemoteMode && (!preview || !permissionsAck || (mode === 'catalog' && !catalogEntry)));
 
   return (
     <Modal
@@ -289,6 +315,12 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
           )}
           {remoteEnabled && (
             <button type="button" class={mode === 'github' ? 'active' : ''} onClick={() => switchMode('github')}>GitHub</button>
+          )}
+          {remoteEnabled && (
+            <button type="button" class={mode === 'gitlab' ? 'active' : ''} onClick={() => switchMode('gitlab')}>GitLab</button>
+          )}
+          {remoteEnabled && (
+            <button type="button" class={mode === 'catalog' ? 'active' : ''} onClick={() => switchMode('catalog')}>Catalog</button>
           )}
           <button type="button" class={mode === 'manifest' ? 'active' : ''} onClick={() => switchMode('manifest')}>Manifest JSON</button>
         </div>
@@ -390,6 +422,53 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
             {preview && (
               <InstallPreviewCard preview={preview} permissionsAck={permissionsAck} onPermissionsAck={setPermissionsAck} />
             )}
+          </>
+        )}
+        {mode === 'gitlab' && (
+          <>
+            <Field label="Repository" hint="group/project on GitLab">
+              <input class="input mono" value={gitlabRepo} onInput={(e) => { setGitlabRepo((e.target as HTMLInputElement).value); setPreview(undefined); }} placeholder="acme/my-plugin" required />
+            </Field>
+            <Field label="Tag" hint="Release tag, e.g. v1.2.3">
+              <input class="input mono" value={gitlabTag} onInput={(e) => { setGitlabTag((e.target as HTMLInputElement).value); setPreview(undefined); }} placeholder="v1.2.3" required />
+            </Field>
+            <div class="row wrap" style="margin-bottom:12px;">
+              <button type="button" class="btn ghost" disabled={resolveBusy || !gitlabRepo.trim() || !gitlabTag.trim()} onClick={() => void resolve()}>
+                {resolveBusy ? <Spinner /> : 'Resolve'}
+              </button>
+            </div>
+            {preview && <InstallPreviewCard preview={preview} permissionsAck={permissionsAck} onPermissionsAck={setPermissionsAck} />}
+          </>
+        )}
+        {mode === 'catalog' && (
+          <>
+            <Field label="Search catalog">
+              <input class="input" value={catalogQuery} onInput={(e) => setCatalogQuery((e.target as HTMLInputElement).value)} placeholder="plugin name or id" />
+            </Field>
+            <div class="plugin-catalog-list">
+              {(catalogState.data ?? []).map((entry) => (
+                <button
+                  type="button"
+                  key={entry.plugin_id}
+                  class={`plugin-catalog-item ${catalogEntry?.plugin_id === entry.plugin_id ? 'active' : ''}`}
+                  onClick={() => { setCatalogEntry(entry); setPreview(undefined); setPermissionsAck(false); }}
+                >
+                  <strong class="mono">{entry.plugin_id}</strong>
+                  <span class="dim">{entry.description || entry.name}</span>
+                </button>
+              ))}
+              {!catalogState.loading && (catalogState.data?.length ?? 0) === 0 && (
+                <span class="dim">No catalog entries. Add plugins to the host catalog JSON.</span>
+              )}
+            </div>
+            {catalogEntry && (
+              <div class="row wrap" style="margin:12px 0;">
+                <button type="button" class="btn ghost" disabled={resolveBusy} onClick={() => void resolve()}>
+                  {resolveBusy ? <Spinner /> : 'Resolve'}
+                </button>
+              </div>
+            )}
+            {preview && <InstallPreviewCard preview={preview} permissionsAck={permissionsAck} onPermissionsAck={setPermissionsAck} />}
           </>
         )}
         {(mode === 'artifact' || mode === 'manifest') && (
