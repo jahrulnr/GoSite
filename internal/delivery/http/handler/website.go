@@ -172,16 +172,47 @@ func (h *WebsiteHandler) Toggle(w http.ResponseWriter, r *http.Request) {
 // Validate handles POST /websites/validate.
 func (h *WebsiteHandler) Validate(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Domain string `json:"domain"`
-		Path   string `json:"path"`
-		ID     int64  `json:"id"`
+		Domain   string `json:"domain"`
+		Path     string `json:"path"`
+		Type     string `json:"type"`
+		Upstream string `json:"upstream"`
+		Active   bool   `json:"active"`
+		ID       int64  `json:"id"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		writeError(w, err)
 		return
 	}
-	result := h.svc.Validate(r.Context(), body.Domain, body.Path, body.ID)
+	result := h.svc.Validate(r.Context(), website.ValidateInput{
+		Domain:    body.Domain,
+		Path:      body.Path,
+		Type:      body.Type,
+		Upstream:  body.Upstream,
+		Active:    body.Active,
+		ExcludeID: body.ID,
+	})
 	writeJSON(w, http.StatusOK, result)
+}
+
+// TestNginxConfig handles POST /websites/{id}/nginx-config/test.
+func (h *WebsiteHandler) TestNginxConfig(w http.ResponseWriter, r *http.Request) {
+	id, err := requestID(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	var body struct {
+		Config string `json:"config"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := h.svc.TestNginxConfig(r.Context(), id, body.Config); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 // UpdateNginxConfig handles PUT /websites/{id}/nginx-config.
@@ -231,4 +262,5 @@ func RegisterWebsiteRoutes(mux *http.ServeMux, h *WebsiteHandler) {
 	mux.HandleFunc("PATCH /api/v1/websites/{id}/toggle", h.Toggle)
 	mux.HandleFunc("GET /api/v1/websites/{id}/nginx-config", h.GetNginxConfig)
 	mux.HandleFunc("PUT /api/v1/websites/{id}/nginx-config", h.UpdateNginxConfig)
+	mux.HandleFunc("POST /api/v1/websites/{id}/nginx-config/test", h.TestNginxConfig)
 }

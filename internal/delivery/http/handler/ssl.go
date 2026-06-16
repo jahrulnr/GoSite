@@ -1,21 +1,22 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
-	"time"
 
+	"github.com/jahrulnr/gosite/internal/infra/job"
 	"github.com/jahrulnr/gosite/internal/service/ssl"
+	"github.com/jahrulnr/gosite/pkg/apperror"
 )
 
 // SSLHandler serves website SSL endpoints.
 type SSLHandler struct {
-	svc *ssl.Service
+	svc    *ssl.Service
+	worker *job.Worker
 }
 
 // NewSSLHandler returns an SSL handler.
-func NewSSLHandler(svc *ssl.Service) *SSLHandler {
-	return &SSLHandler{svc: svc}
+func NewSSLHandler(svc *ssl.Service, worker *job.Worker) *SSLHandler {
+	return &SSLHandler{svc: svc, worker: worker}
 }
 
 // GetStatus handles GET /websites/{id}/ssl.
@@ -80,7 +81,7 @@ func (h *SSLHandler) StartCertbot(w http.ResponseWriter, r *http.Request) {
 func (h *SSLHandler) CertbotStream(w http.ResponseWriter, r *http.Request) {
 	jobIDStr := r.URL.Query().Get("job_id")
 	if jobIDStr == "" {
-		writeError(w, fmt.Errorf("job_id required"))
+		writeError(w, apperror.New(apperror.CodeInvalidInput, "job_id required"))
 		return
 	}
 	jobID, err := parseID(jobIDStr)
@@ -88,39 +89,11 @@ func (h *SSLHandler) CertbotStream(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		writeError(w, fmt.Errorf("streaming unsupported"))
-		return
-	}
-
-	job, err := h.svc.GetCertbotJob(r.Context(), jobID)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-
-	fmt.Fprintf(w, "data: %s\n\n", job.Output)
-	flusher.Flush()
-
-	if job.Status == "pending" {
-		fmt.Fprintf(w, "data: Waiting task on queue\n\n")
-		flusher.Flush()
-	}
-
-	for i := 0; i < 3; i++ {
-		time.Sleep(10 * time.Millisecond)
-		job, err = h.svc.GetCertbotJob(r.Context(), jobID)
-		if err != nil {
-			break
+	if err := h.worker.StreamSSE(r.Context(), w, jobID); err != nil {
+		if appErr := apperror.From(err); appErr != nil && appErr.Code == apperror.CodeJobFailed {
+			return
 		}
-		fmt.Fprintf(w, "data: status=%s\n\n", job.Status)
-		flusher.Flush()
+		writeError(w, err)
 	}
 }
 

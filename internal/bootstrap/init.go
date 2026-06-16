@@ -21,7 +21,7 @@ const (
 	defaultAdminPass  = "123456"
 
 	defaultCronName    = "Lets Encrypt Renewal"
-	defaultCronPayload = "certbot renew --post-hook 'supervisorctl restart nginx'"
+	defaultCronPayload = "certbot renew --post-hook 'nginx -s reload'"
 	defaultCronEvery   = "day"
 )
 

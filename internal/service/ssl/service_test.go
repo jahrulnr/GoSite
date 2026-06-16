@@ -67,6 +67,34 @@ func TestEnqueueCertbot_CreatesPendingJob(t *testing.T) {
 	assert.Contains(t, job.Output, "certbot")
 }
 
+func TestEnqueueCertbot_RunsWorker(t *testing.T) {
+	stack := testutil.SetupTestStack(t)
+	ctx := context.Background()
+
+	site, err := stack.WebsiteSvc.Create(ctx, website.CreateInput{
+		Domain: "certbot-run.example.com",
+		Path:   filepath.Join(stack.WebRoot, "certbot-run"),
+	})
+	require.NoError(t, err)
+
+	stack.Cmd.Stdout = "certbot ok"
+	job, err := stack.SSLSvc.EnqueueCertbot(ctx, site.ID)
+	require.NoError(t, err)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		stored, findErr := stack.JobRepo.FindByID(ctx, job.ID)
+		require.NoError(t, findErr)
+		if stored.Status != sqlite.JobStatusPending {
+			assert.Equal(t, sqlite.JobStatusOK, stored.Status)
+			assert.Contains(t, stored.Output, "certbot ok")
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("certbot job did not finish")
+}
+
 func TestParseCertExpiry_ValidCert(t *testing.T) {
 	certPEM, _ := generateTestCert(t)
 	exp, expired, err := ssl.ParseCertExpiry([]byte(certPEM))
@@ -173,6 +201,33 @@ func TestEnqueueCertbot_SiteNotFound(t *testing.T) {
 	stack := testutil.SetupTestStack(t)
 	_, err := stack.SSLSvc.EnqueueCertbot(context.Background(), 99999)
 	require.Error(t, err)
+}
+
+func TestEnqueueCertbot_ClearsPlaceholderSSL(t *testing.T) {
+	stack := testutil.SetupTestStack(t)
+	ctx := context.Background()
+
+	site, err := stack.WebsiteSvc.Create(ctx, website.CreateInput{
+		Domain: "placeholder-clear.example.com",
+		Path:   filepath.Join(stack.WebRoot, "placeholder-clear"),
+		Active: true,
+	})
+	require.NoError(t, err)
+
+	liveDir := filepath.Join(stack.Storage, "webconfig/ssl/live", site.Domain)
+	_, err = os.Stat(filepath.Join(liveDir, "cert.pem"))
+	require.NoError(t, err)
+
+	_, err = stack.SSLSvc.EnqueueCertbot(ctx, site.ID)
+	require.NoError(t, err)
+
+	_, err = os.Stat(liveDir)
+	assert.True(t, os.IsNotExist(err), "placeholder live dir must be removed before certbot")
+
+	cfg, err := stack.Nginx.ReadSiteConfig(ctx, site.Domain)
+	require.NoError(t, err)
+	defaultCert := filepath.Join(stack.Nginx.Paths().SSLDefaultDir, "cert.pem")
+	assert.Contains(t, cfg, defaultCert)
 }
 
 func TestListExpiring_DefaultWithinDays(t *testing.T) {

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jahrulnr/gosite/internal/infra/job"
 	"github.com/jahrulnr/gosite/internal/infra/nginx"
 	"github.com/jahrulnr/gosite/internal/repository/sqlite"
 	"github.com/jahrulnr/gosite/pkg/apperror"
@@ -20,11 +21,12 @@ type Service struct {
 	websites *sqlite.WebsiteRepository
 	jobs     *sqlite.JobRepository
 	nginx    *nginx.Service
+	worker   *job.Worker
 }
 
 // NewService returns an SSL service.
-func NewService(websites *sqlite.WebsiteRepository, jobs *sqlite.JobRepository, ngx *nginx.Service) *Service {
-	return &Service{websites: websites, jobs: jobs, nginx: ngx}
+func NewService(websites *sqlite.WebsiteRepository, jobs *sqlite.JobRepository, ngx *nginx.Service, worker *job.Worker) *Service {
+	return &Service{websites: websites, jobs: jobs, nginx: ngx, worker: worker}
 }
 
 // Status describes SSL state for a website.
@@ -51,6 +53,10 @@ func (s *Service) EnqueueCertbot(ctx context.Context, websiteID int64) (sqlite.J
 		return sqlite.JobRun{}, apperror.Wrap(apperror.CodeNotFound, "website not found", err)
 	}
 
+	if err := s.prepareForCertbot(ctx, site); err != nil {
+		return sqlite.JobRun{}, err
+	}
+
 	cmd := fmt.Sprintf(
 		"certbot --non-interactive --agree-tos --register-unsafely-without-email --nginx -d %s",
 		site.Domain,
@@ -63,6 +69,9 @@ func (s *Service) EnqueueCertbot(ctx context.Context, websiteID int64) (sqlite.J
 	})
 	if err != nil {
 		return sqlite.JobRun{}, apperror.Wrap(apperror.CodeDatabase, "enqueue certbot job", err)
+	}
+	if s.worker != nil {
+		s.worker.Enqueue(job.ID)
 	}
 	return job, nil
 }
@@ -269,4 +278,82 @@ func validatePEM(public, private string) error {
 		return apperror.New(apperror.CodeSSLInvalid, "invalid private key")
 	}
 	return nil
+}
+
+// prepareForCertbot repoints placeholder domain certs to the default vhost material,
+// reloads nginx so certbot's pre-patch nginx -t passes, then removes the placeholder
+// live directory so certbot can create a Let's Encrypt lineage.
+func (s *Service) prepareForCertbot(ctx context.Context, site sqlite.Website) error {
+	paths := s.nginx.Paths()
+	liveDir := filepath.Join(paths.Storage, "webconfig/ssl/live", site.Domain)
+	if !isPlaceholderSSL(liveDir) {
+		return nil
+	}
+
+	config, err := s.nginx.ReadSiteConfig(ctx, site.Domain)
+	if err != nil {
+		return apperror.Wrap(apperror.CodeNotFound, "site config not found", err)
+	}
+
+	certPath, keyPath, ok := nginx.ParseCertPaths(config)
+	domainCert, domainKey := domainSSLPaths(paths.Storage, site.Domain)
+	defaultCert := filepath.Join(paths.SSLDefaultDir, "cert.pem")
+	defaultKey := filepath.Join(paths.SSLDefaultDir, "key.pem")
+
+	if ok && sslPathsEqual(certPath, domainCert) && sslPathsEqual(keyPath, domainKey) {
+		updated := nginx.UpdateSSLDirectives(config, defaultCert, defaultKey)
+		if err := s.nginx.UpdateSiteConfig(ctx, site.Domain, updated); err != nil {
+			return apperror.Wrap(apperror.CodeNginxTestFailed, "stage default ssl for certbot", err)
+		}
+		if err := s.nginx.Reload(ctx); err != nil {
+			return apperror.Wrap(apperror.CodeNginxReloadFailed, "reload nginx for certbot prep", err)
+		}
+	}
+
+	if err := clearPlaceholderSSL(paths.Storage, site.Domain); err != nil {
+		return apperror.Wrap(apperror.CodeInternal, "prepare certbot ssl storage", err)
+	}
+	return nil
+}
+
+func domainSSLPaths(storage, domain string) (cert, key string) {
+	base := filepath.Join(storage, "webconfig/ssl/live", domain)
+	return filepath.Join(base, "cert.pem"), filepath.Join(base, "key.pem")
+}
+
+func sslPathsEqual(a, b string) bool {
+	if a == b {
+		return true
+	}
+	absA, errA := filepath.Abs(a)
+	absB, errB := filepath.Abs(b)
+	return errA == nil && errB == nil && absA == absB
+}
+
+// clearPlaceholderSSL removes gosite self-signed files from live/{domain} so certbot can
+// create a Let's Encrypt lineage. /etc/letsencrypt symlinks to webconfig/ssl, so the
+// placeholder written at website create blocks certbot with CertStorageError.
+func clearPlaceholderSSL(storage, domain string) error {
+	liveDir := filepath.Join(storage, "webconfig/ssl/live", domain)
+	if !isPlaceholderSSL(liveDir) {
+		return nil
+	}
+	return os.RemoveAll(liveDir)
+}
+
+func isPlaceholderSSL(liveDir string) bool {
+	info, err := os.Stat(liveDir)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+	if _, err := os.Lstat(filepath.Join(liveDir, "fullchain.pem")); err == nil {
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(liveDir, "cert.pem")); err != nil {
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(liveDir, "key.pem")); err != nil {
+		return false
+	}
+	return true
 }

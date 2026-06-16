@@ -77,12 +77,20 @@ func (h *NginxHandler) UpdateGlobal(w http.ResponseWriter, r *http.Request) {
 func (h *NginxHandler) Test(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Config string `json:"config"`
+		Scope  string `json:"scope"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		writeError(w, err)
 		return
 	}
-	if err := h.nginx.TestRawConfig(r.Context(), body.Config); err != nil {
+	var err error
+	switch body.Scope {
+	case "default":
+		err = h.nginx.TestDefaultConfig(r.Context(), body.Config)
+	default:
+		err = h.nginx.TestRawConfig(r.Context(), body.Config)
+	}
+	if err != nil {
 		writeError(w, err)
 		return
 	}

@@ -1025,7 +1025,7 @@ paths:
           required: true
           schema:
             type: string
-          description: Absolute path within an allowed root
+          description: Absolute path; the file manager can browse from filesystem root when permitted by the host process.
       responses:
         "200":
           description: Directory listing
@@ -1126,12 +1126,65 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Files]
+      summary: Save file content
+      operationId: saveFileContent
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FileSaveRequest"
+      responses:
+        "200":
+          description: File saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /files/raw:
+    get:
+      tags: [Files]
+      summary: Serve raw file bytes
+      operationId: getRawFile
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Raw file stream
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /files/actions:
     post:
       tags: [Files]
       summary: File action
-      description: Perform chmod, copy, or execute on a path.
+      description: Perform chmod, copy, move, extract, or execute on a path.
       operationId: postFileAction
       security:
         - basicAuth: []
@@ -1157,6 +1210,58 @@ paths:
           $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/UnprocessableEntity"
+
+  /files/batch-save:
+    post:
+      tags: [Files]
+      summary: Save multiple files
+      operationId: batchSaveFiles
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FileBatchSaveRequest"
+      responses:
+        "200":
+          description: Files saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /files/batch-delete:
+    post:
+      tags: [Files]
+      summary: Delete multiple paths
+      operationId: batchDeleteFiles
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FileBatchDeleteRequest"
+      responses:
+        "200":
+          description: Paths deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
   /mounts:
     get:
@@ -2301,10 +2406,19 @@ components:
       type: object
       required: [domain, path]
       properties:
+        name:
+          type: string
         domain:
           type: string
         path:
           type: string
+        type:
+          type: string
+          enum: [static, proxy]
+        upstream:
+          type: string
+        active:
+          type: boolean
         id:
           type: integer
           format: int64
@@ -2413,7 +2527,7 @@ components:
 
     FileEntry:
       type: object
-      required: [name, path, size, mode, is_dir, mod_time]
+      required: [name, path, size, mode, is_dir, mod_time, kind, mime_type, extension, editable, viewable, archive, symlink]
       properties:
         name:
           type: string
@@ -2428,22 +2542,83 @@ components:
           type: boolean
         mod_time:
           type: string
+        kind:
+          type: string
+          enum: [directory, image, json, yaml, config, text, archive, binary]
+        mime_type:
+          type: string
+        extension:
+          type: string
+        editable:
+          type: boolean
+        viewable:
+          type: boolean
+        archive:
+          type: boolean
+        symlink:
+          type: boolean
+        target:
+          type: string
+
+    FileArchiveTools:
+      type: object
+      required: [unzip, tar, gzip]
+      properties:
+        unzip:
+          type: boolean
+        tar:
+          type: boolean
+        gzip:
+          type: boolean
 
     FileListResponse:
       type: object
-      required: [entries]
+      required: [entries, tools]
       properties:
         entries:
           type: array
           items:
             $ref: "#/components/schemas/FileEntry"
+        tools:
+          $ref: "#/components/schemas/FileArchiveTools"
 
     FileContentResponse:
       type: object
-      required: [content]
+      required: [content, entry, encoding]
       properties:
         content:
           type: string
+        entry:
+          $ref: "#/components/schemas/FileEntry"
+        encoding:
+          type: string
+
+    FileSaveRequest:
+      type: object
+      required: [path, content]
+      properties:
+        path:
+          type: string
+        content:
+          type: string
+
+    FileBatchSaveRequest:
+      type: object
+      required: [files]
+      properties:
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileSaveRequest"
+
+    FileBatchDeleteRequest:
+      type: object
+      required: [paths]
+      properties:
+        paths:
+          type: array
+          items:
+            type: string
 
     FileCreateRequest:
       type: object
@@ -2465,7 +2640,7 @@ components:
       properties:
         action:
           type: string
-          enum: [chmod, copy, execute]
+          enum: [chmod, copy, move, rename, extract, uncompress, execute]
         path:
           type: string
         mode:

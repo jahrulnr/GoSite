@@ -29,12 +29,12 @@ type AppMeta struct {
 }
 
 type AuthMeta struct {
-	LoginHint              string `json:"login_hint"`
-	LoginEmailPlaceholder  string `json:"login_email_placeholder,omitempty"`
-	RememberMe             bool   `json:"remember_me"`
-	BasicAuth              bool   `json:"basic_auth_enabled"`
-	Lockscreen             bool   `json:"lockscreen_enabled"`
-	LockAfterSecs          int    `json:"lock_after_seconds"`
+	LoginHint             string `json:"login_hint"`
+	LoginEmailPlaceholder string `json:"login_email_placeholder,omitempty"`
+	RememberMe            bool   `json:"remember_me"`
+	BasicAuth             bool   `json:"basic_auth_enabled"`
+	Lockscreen            bool   `json:"lockscreen_enabled"`
+	LockAfterSecs         int    `json:"lock_after_seconds"`
 }
 
 type NavItem struct {
@@ -120,6 +120,7 @@ func (s *Service) Get() Response {
 		s.cfg.WebPath,
 		s.cfg.Storage,
 	).FileRoots
+	fileRoots = append([]auth.FileRoot{{Path: "/", Label: "Root"}}, fileRoots...)
 	nginxMode := "real"
 	nginxHint := "Runs nginx test/reload on the host."
 	if s.cfg.AppEnv == "local" {
@@ -170,8 +171,12 @@ func (s *Service) Get() Response {
 				{Value: "create_folder", Label: "Create folder"},
 				{Value: "upload", Label: "Upload"},
 				{Value: "delete", Label: "Delete"},
+				{Value: "batch_delete", Label: "Batch delete"},
+				{Value: "batch_save", Label: "Batch save"},
 				{Value: "chmod", Label: "Change permissions"},
 				{Value: "copy", Label: "Copy"},
+				{Value: "move", Label: "Move"},
+				{Value: "extract", Label: "Extract archive"},
 			},
 		},
 		Nginx: NginxMeta{
@@ -192,13 +197,14 @@ func (s *Service) Get() Response {
 			DumpDefault:    "0",
 			FsckDefault:    "0",
 			FSTypes: []Option{
-				{Value: "nfs", Label: "NFS"},
-				{Value: "cifs", Label: "CIFS / SMB"},
-				{Value: "ext4", Label: "ext4"},
-				{Value: "xfs", Label: "XFS"},
-				{Value: "none", Label: "Bind / none"},
+				{Value: "nfs", Label: "NFS", Hint: "Remote NFS export, e.g. server:/export/path"},
+				{Value: "cifs", Label: "CIFS / SMB", Hint: "//server/share"},
+				{Value: "fuse.s3fs", Label: "S3", Hint: "Amazon S3 or compatible storage (MinIO, Wasabi, IDCloudHost Object Storage)"},
+				{Value: "ext4", Label: "ext4", Hint: "Local block device"},
+				{Value: "xfs", Label: "XFS", Hint: "Local block device"},
+				{Value: "none", Label: "Bind / none", Hint: "Bind mount or loop device"},
 			},
-			Example: "Example: device nfs:/export, mount point /storage/mnt/site-assets, type nfs, options rw,nfsvers=4.",
+			Example: "NFS: nfs:/export → /storage/mnt/assets · S3: bucket my-site-assets → /storage/mnt/s3-backup",
 		},
 		Traffic: TrafficMeta{Ranges: []Option{
 			{Value: "1h", Label: "Last hour"},

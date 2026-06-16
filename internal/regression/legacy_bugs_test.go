@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/jahrulnr/gosite/internal/repository/sqlite"
 	"github.com/jahrulnr/gosite/internal/service/website"
 	"github.com/jahrulnr/gosite/internal/testutil"
 	"github.com/stretchr/testify/assert"
@@ -65,6 +66,10 @@ func TestRegression_InvalidDomainRejected(t *testing.T) {
 	stack := testutil.SetupTestStack(t)
 	ctx := context.Background()
 
-	result := stack.WebsiteSvc.Validate(ctx, "not a valid domain!!!", filepath.Join(stack.WebRoot, "bad"), 0)
+	result := stack.WebsiteSvc.Validate(ctx, website.ValidateInput{
+		Domain: "not a valid domain!!!",
+		Path:   filepath.Join(stack.WebRoot, "bad"),
+		Type:   sqlite.WebsiteTypeStatic,
+	})
 	assert.False(t, result.Valid)
 }

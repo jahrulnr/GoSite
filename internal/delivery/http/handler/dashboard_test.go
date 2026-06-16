@@ -54,7 +54,7 @@ func TestDashboard_ContainsAllSections(t *testing.T) {
 	grafanaSvc := grafanalite.NewService(metricsRepo)
 
 	websiteRepo := sqlite.NewWebsiteRepository(db)
-	sslSvc := ssl.NewService(websiteRepo, jobRepo, nil)
+	sslSvc := ssl.NewService(websiteRepo, jobRepo, nil, nil)
 
 	dash := handler.NewDashboardHandler(systemSvc, sslSvc, splunkSvc, grafanaSvc)
 
@@ -89,7 +89,7 @@ func TestDashboard_SystemSectionHasCPU(t *testing.T) {
 	auditRepo := sqlite.NewAuditRepository(db)
 	splunkSvc := splunklite.NewService(auditRepo, sqlite.NewJobRepository(db), sqlite.NewLogEventRepository(db), sqlite.NewSavedQueryRepository(db), 90, 14)
 	grafanaSvc := grafanalite.NewService(sqlite.NewTrafficMetricsRepository(db))
-	sslSvc := ssl.NewService(sqlite.NewWebsiteRepository(db), sqlite.NewJobRepository(db), nil)
+	sslSvc := ssl.NewService(sqlite.NewWebsiteRepository(db), sqlite.NewJobRepository(db), nil, nil)
 
 	dash := handler.NewDashboardHandler(systemSvc, sslSvc, splunkSvc, grafanaSvc)
 	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
@@ -131,7 +131,7 @@ func TestDashboard_RecentAuditFromSplunk(t *testing.T) {
 	}))
 
 	splunkSvc := splunklite.NewService(auditRepo, sqlite.NewJobRepository(db), sqlite.NewLogEventRepository(db), sqlite.NewSavedQueryRepository(db), 90, 14)
-	dash := handler.NewDashboardHandler(systemSvc, ssl.NewService(sqlite.NewWebsiteRepository(db), sqlite.NewJobRepository(db), nil), splunkSvc, grafanalite.NewService(sqlite.NewTrafficMetricsRepository(db)))
+	dash := handler.NewDashboardHandler(systemSvc, ssl.NewService(sqlite.NewWebsiteRepository(db), sqlite.NewJobRepository(db), nil, nil), splunkSvc, grafanalite.NewService(sqlite.NewTrafficMetricsRepository(db)))
 
 	rec := httptest.NewRecorder()
 	dash.Get(rec, httptest.NewRequest(http.MethodGet, "/dashboard", nil))

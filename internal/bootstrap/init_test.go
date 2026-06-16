@@ -164,7 +164,7 @@ func TestBootstrap_SeedsAdminWhenEmpty(t *testing.T) {
 		SELECT name, payload, run_every FROM cronjobs LIMIT 1
 	`).Scan(&cronName, &cronPayload, &cronEvery))
 	assert.Equal(t, "Lets Encrypt Renewal", cronName)
-	assert.Equal(t, "certbot renew --post-hook 'supervisorctl restart nginx'", cronPayload)
+	assert.Equal(t, "certbot renew --post-hook 'nginx -s reload'", cronPayload)
 	assert.Equal(t, "day", cronEvery)
 }
 
