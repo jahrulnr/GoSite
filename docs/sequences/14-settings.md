@@ -1,90 +1,61 @@
 # Sequence: Settings
 
-Empat area: **profil user**, **php.ini**, **php-fpm.conf**, **www pool**.
+GoSite only implements **user profile update**. Legacy PHP/FPM modules are not ported.
 
-**Route:** `GET /admin/setting`
-
-## Load settings page
+## GoSite (implementation)
 
 ```mermaid
 sequenceDiagram
     actor User
-    participant SC as SettingController
-    participant FPM as FPM library
-
-    User->>SC: GET /admin/setting
-    SC->>FPM: phpConf(), fpmConf(), poolConf()
-    SC-->>User: Blade dengan 4 editor
-```
-
-## Update profile
-
-**Route:** `POST /admin/setting/update/profile`
-
-```mermaid
-sequenceDiagram
-    actor User
-    participant SC as SettingController
+    participant UI as Settings view
+    participant H as SettingsHandler
+    participant Svc as settings.Service
+    participant Auth as auth.Service
     participant DB as users
-    participant Mail
 
-    User->>SC: POST { id, name, email, password? }
-    alt password < 6 chars (jika diisi)
-        SC-->>User: warning
-    end
-    SC->>DB: update (bcrypt password jika ada)
-    opt MAIL_NOTIFICATION
-        SC->>Mail: Profile Updated
-    end
-    SC-->>User: success
+    User->>UI: Edit name, email, password
+    UI->>H: PUT /settings/profile
+    H->>Svc: UpdateProfile
+    Svc->>DB: bcrypt password if set
+    H-->>UI: { id, name, email }
 ```
 
-## Update PHP config
+### API
 
-**Route:** `POST /admin/setting/update/php`
+| Method | Path | Status |
+|--------|------|--------|
+| PUT | `/api/v1/settings/profile` | ✅ Implemented |
 
-```mermaid
-sequenceDiagram
-    actor User
-    participant SC as SettingController
-    participant Cmd as Commander
-    participant FPM
+Current user profile is read via `GET /auth/me`.
 
-    User->>SC: POST php-config body
-    SC->>Cmd: php -nc /tmp/test.ini -v
-    alt contains "error"
-        SC-->>User: error line 1
-    end
-    SC->>FPM: setPhpConf() → /storage/php/php.ini
-    SC-->>User: success
-```
+### Validation
 
-## Update FPM & pool
+- Name & email required
+- Password optional; minimum 6 characters when set
+- bcrypt hash (compatible Laravel `$2y$` prefix)
 
-Sama pola:
-- `php-fpm -ny /tmp.conf -t` validasi
-- Tulis ke `php-fpm.conf` atau `php-fpm.d/www.conf`
+---
 
-**Catatan:** Perubahan FPM/pool tidak auto-restart php-fpm di legacy — pertimbangkan reload di GoSite.
+## Legacy BangunSite (not ported)
 
-## Implikasi GoSite
+<details>
+<summary>PHP ini, php-fpm, pool editor</summary>
 
-```
-GET /api/v1/settings
-PUT /api/v1/settings/profile
-PUT /api/v1/settings/php
-PUT /api/v1/settings/fpm
-PUT /api/v1/settings/pool
-```
+| Legacy route | GoSite |
+|--------------|--------|
+| `POST /admin/setting/update/php` | ❌ Dropped — panel without PHP |
+| `POST /admin/setting/update/fpm` | ❌ Dropped |
+| `POST /admin/setting/update/pool` | ❌ Dropped |
 
-Response `GET`:
-```json
-{
-  "user": { "id": 1, "name": "Admin", "email": "admin@demo.com" },
-  "php_ini": "...",
-  "fpm_conf": "...",
-  "pool_conf": "..."
-}
-```
+Legacy BangunSite edited `/storage/php/*`. GoSite container does not run PHP-FPM for the panel.
 
-Setiap `PUT` harus: validate → write → optional reload service.
+</details>
+
+## Code
+
+| File | Role |
+|------|-------|
+| `internal/service/settings/service.go` | UpdateProfile |
+| `internal/delivery/http/handler/settings.go` | HTTP |
+
+UI hints: `GET /ui/meta` → section settings labels.

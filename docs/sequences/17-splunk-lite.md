@@ -1,8 +1,20 @@
 # Sequence: Splunk Lite
 
-Query internal audit, job, and nginx log events without deploying Splunk.
+Query audit, job runs, and nginx log events — without deploying external Splunk.
 
-**Routes:** `GET /api/v1/query/meta`, `GET /api/v1/query`, `POST /api/v1/query` (compat), `GET /api/v1/query/tail`, `GET/POST /api/v1/query/saved`
+**Status:** ✅ Implemented — `internal/observability/splunklite`
+
+## Architecture
+
+## API
+
+| Method | Path |
+|--------|------|
+| GET | `/api/v1/query/meta` |
+| GET / POST | `/api/v1/query` |
+| GET | `/api/v1/query/tail` |
+| GET / POST | `/api/v1/query/saved` |
+| PATCH / DELETE | `/api/v1/query/saved/{id}` |
 
 ## Write audit on mutation
 
@@ -112,13 +124,24 @@ data: {"type":"done"}
 
 ## Retention
 
-| Table | Default retention |
-|-------|-------------------|
-| `audit_logs` | 90 days (`AUDIT_RETENTION_DAYS`) |
-| `log_events` | 14 days (`LOG_EVENTS_RETENTION_DAYS`) |
+| Table | Env | Default |
+|-------|-----|---------|
+| `audit_logs` | `AUDIT_RETENTION_DAYS` | 90 |
+| `log_events` | `LOG_EVENTS_RETENTION_DAYS` | 14 |
+
+Purge harian via `runRetentionPurge` di `internal/app/app.go`.
+
+## Packages
+
+| Path | Role |
+|------|-------|
+| `internal/observability/splunklite/service.go` | Query engine |
+| `internal/observability/splunklite/ingestor.go` | Nginx log ingest |
+| `internal/observability/splunklite/meta.go` | Query UI metadata |
+| `internal/delivery/http/handler/observability.go` | HTTP |
 
 ## Implikasi GoSite
 
-- `internal/observability/splunklite` — parser + query service
-- `contracts.AuditWriter` — hook untuk semua mutasi sensitif
-- Saved queries di `saved_queries` untuk preset dashboard / ops
+- `contracts.AuditWriter` — hook mutasi sensitif (website create/delete, dll.)
+- Saved queries in `saved_queries` for dashboard / ops presets
+- Frontend Logs view uses `GET /query/meta` for the source picker

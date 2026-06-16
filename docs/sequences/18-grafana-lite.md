@@ -1,14 +1,15 @@
 # Sequence: Grafana Lite
 
-Pre-aggregated nginx traffic metrics for dashboard charts — replaces legacy full-file `accessTraffic()` scans.
+Pre-aggregated nginx traffic metrics for dashboard charts — replaces legacy full-file `accessTraffic()` scan.
 
-**Routes:** `GET /api/v1/metrics/traffic/*`
+**Status:** ✅ Implemented — `internal/observability/grafanalite`
 
 ## Collector (background)
 
 ```mermaid
 sequenceDiagram
     participant S as gosite serve
+    participant App as internal/app/app.go
     participant C as grafanalite.Collector
     participant FS as access logs
     participant OFF as metrics_offsets.json
@@ -55,9 +56,11 @@ sequenceDiagram
 
 ## Endpoints
 
+All under `/api/v1/metrics/traffic/*` (session required):
+
 | Path | Params | Response |
 |------|--------|----------|
-| `/metrics/traffic/series` | `range`, `site` | Multi-series `[[iso8601, value], …]` |
+| `/metrics/traffic/series` | `range`, `step`, `site` | Multi-series `[[iso8601, value], …]` |
 | `/metrics/traffic/top-sites` | `range`, `limit` | Ranked sites |
 | `/metrics/traffic/status-codes` | `range`, `site` | 2xx/3xx/4xx/5xx totals |
 | `/metrics/traffic/summary` | `range` | Dashboard card totals |
@@ -71,8 +74,17 @@ Supported `range`: `1h`, `6h`, `24h`, `7d`.
 | `{STORAGE}/logs/access.log` | `default` |
 | `{STORAGE}/logs/access-{domain}.log` | `{domain}` |
 
-## Implikasi GoSite
+## Integrasi dashboard
 
-- Collector goroutine started from `gosite serve` (SA-7 wiring)
-- Dashboard `traffic_summary` reads `summary?range=1h`
-- Retention aligned with `LOG_EVENTS_RETENTION_DAYS` (default 14)
+- `GET /dashboard` → `traffic_summary` from `Summary(1h)`
+- Traffic view Preact calls series/top-sites/status-codes endpoints
+- Fallback: `GET /system/nginx-traffic` when buckets are empty
+
+## Packages
+
+| Path | Role |
+|------|-------|
+| `internal/observability/grafanalite/collector.go` | Incremental log parse |
+| `internal/observability/grafanalite/service.go` | Query buckets |
+| `internal/app/app.go` | `runMetricsCollector` ticker 5m |
+| `internal/repository/sqlite/traffic_metrics.go` | UPSERT storage |

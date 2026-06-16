@@ -15,7 +15,7 @@ GoSite replaces a multi-process Laravel stack with a single Go service that expo
 |-------|-------|
 | Backend | Go 1.26, Gin, SQLite (`modernc.org/sqlite`) |
 | Frontend | Preact 10, TypeScript, Vite 5 |
-| Edge | Nginx 1.30, Certbot, Supervisor |
+| Edge | Nginx 1.30, Certbot |
 | Observability | Splunk Lite (audit + log query), Grafana Lite (traffic metrics) |
 
 ## Screenshots
@@ -40,7 +40,7 @@ GoSite replaces a multi-process Laravel stack with a single Go service that expo
 
 - **Dashboard** — CPU, RAM, disk, network I/O, SSL expiry watch, top sites, recent audit
 - **Websites** — static & reverse-proxy vhosts, enable/disable via `active.d/` symlinks
-- **Nginx & SSL** — edit global/default config, `nginx -t`, reload, Certbot or manual certs
+- **Nginx & SSL** — edit global/default/site config, validate (dry-run), reload dengan auto-repair, Certbot (job + SSE) atau manual certs
 - **Docker** — list, restart, stop containers; stream logs via `docker.sock`
 - **File manager** — browse `/www` and storage roots with path validation
 - **Mount manager** — fstab CRUD and mount/umount
@@ -48,6 +48,7 @@ GoSite replaces a multi-process Laravel stack with a single Go service that expo
 - **Splunk Lite** — structured log ingest, saved queries, tail stream
 - **Grafana Lite** — traffic time-series, top sites, status-code charts
 - **Database viewer** — read-only SQLite table browser
+- **Floating Terminal** — xterm.js popup launched from the topbar; persistent PTY (12h sticky, rolling 256KB dump to `/tmp`), 1 writer + N readers across tabs/devices
 - **Auth** — session cookies, optional HTTP Basic gate, lockscreen
 
 ## Quick start
@@ -175,14 +176,14 @@ internal/
   infra/             nginx, docker, commander, job worker
 web/                 Preact SPA (Vite → dist embed)
 api/                 OpenAPI spec + golden examples
-config/              nginx templates, supervisord, bootstrap scripts
+config/              nginx templates, bootstrap scripts
 migrations/          SQLite schema
 docs/                Architecture, sequences, migration guides
 ```
 
 ## Architecture
 
-GoSite runs inside a single container: **Nginx** (80/443), **Go panel** (8080 HTTPS), **Supervisor**, and **Certbot**. Storage paths mirror BangunSite for drop-in migration.
+GoSite runs inside a single container: **Nginx** (80/443), **Go panel** (8080 HTTPS), and **Certbot**. Storage paths mirror BangunSite for drop-in migration.
 
 ```mermaid
 flowchart LR
@@ -206,7 +207,7 @@ flowchart LR
     NGX --> STG
 ```
 
-Deep dive: [docs/architecture.md](docs/architecture.md) · Feature sequences: [docs/sequences/](docs/sequences/)
+Deep dive: [docs/architecture.md](docs/architecture.md) · [docs/nginx-repair.md](docs/nginx-repair.md) · Sequences: [docs/sequences/](docs/sequences/) · Wiki guide: [docs/wiki.md](docs/wiki.md)
 
 ## Migration from BangunSite
 
@@ -214,8 +215,9 @@ GoSite preserves `/storage`, `/www`, and nginx vhost layout. The docs tree maps 
 
 1. [docs/architecture.md](docs/architecture.md) — runtime & module boundaries
 2. [docs/domain-model.md](docs/domain-model.md) — entities & filesystem
-3. [docs/api-inventory.md](docs/api-inventory.md) — Laravel → Go endpoint map
-4. [docs/migration/backend-modules.md](docs/migration/backend-modules.md) — implementation waves
+3. [docs/nginx-repair.md](docs/nginx-repair.md) — nginx test + auto-repair fallback
+4. [docs/api-inventory.md](docs/api-inventory.md) — API map + OpenAPI
+5. [docs/wiki.md](docs/wiki.md) — suggested GitHub wiki structure
 
 ## License
 

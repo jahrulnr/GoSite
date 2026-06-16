@@ -1,7 +1,10 @@
 BINARY := bin/gosite
 PKG := ./...
 
-.PHONY: build test test-cover clean up down dev dev-api dev-fe build-fe build-docker dev-api-setup contract-check
+.PHONY: build test test-cover clean up down dev dev-api dev-fe build-fe build-docker dev-api-setup contract-check wiki-export
+
+wiki-export:
+	@bash docs/export-wiki.sh
 
 build-fe:
 	cd web && npm ci && npm run build

@@ -1,64 +1,69 @@
 # Sequence: Docker Management
 
-Mengelola container via Docker socket yang di-mount ke container BangunSite.
+Manage containers via **Docker Engine API** (`/var/run/docker.sock`).
 
-**Akses:** `/var/run/docker.sock` (container `privileged: true`)
+## GoSite (implementation)
 
-## List containers
-
-**Route:** `GET /admin/docker`
+**Package:** `internal/infra/docker` (official SDK) → `internal/service/docker`
 
 ```mermaid
 sequenceDiagram
     actor User
-    participant DC as DockerController
-    participant Cmd as Commander::shell
+    participant UI as Docker view
+    participant H as DockerHandler
+    participant Svc as docker.Service
+    participant API as Docker Engine API
 
-    User->>DC: GET /admin/docker
-    DC->>Cmd: docker ps -a
-    Cmd-->>DC: raw table output
-    DC->>DC: parse columns (whitespace → array)
-    DC-->>User: Blade table (head + rows)
+    User->>UI: Open Docker
+    UI->>H: GET /docker/containers
+    H->>Svc: List()
+    Svc->>API: ContainerList(All=true)
+    API-->>UI: JSON [{ id, name, image, status, state }]
+
+    User->>UI: Restart
+    UI->>H: POST /docker/containers/{id}/restart
+    Svc->>API: ContainerRestart
+
+    User->>UI: Logs
+    UI->>H: GET /docker/containers/{id}/logs?tail=200
+    Svc->>API: ContainerLogs
 ```
 
-## Restart / stop / logs
+### API
 
-```mermaid
-sequenceDiagram
-    actor User
-    participant DC as DockerController
-    participant Cmd as Commander::shell
+| Method | Path |
+|--------|------|
+| GET | `/api/v1/docker/containers` |
+| POST | `/api/v1/docker/containers/{id}/restart` |
+| POST | `/api/v1/docker/containers/{id}/stop` |
+| GET | `/api/v1/docker/containers/{id}/logs?tail=` |
 
-    User->>DC: GET /admin/docker/restart/{id}
-    DC->>DC: sanitize id (alphanumeric + hyphen)
-    DC->>Cmd: docker restart {id} &
-    DC-->>User: raw output
+### Security
 
-    User->>DC: GET /admin/docker/stop/{id}
-    DC->>Cmd: docker stop {id}
-    DC-->>User: raw output
+- Container ID is sanitized (`^[a-zA-Z0-9-]+$`)
+- Destructive actions via **POST** (not legacy GET)
+- Session + basic auth required
+- When socket unavailable → `NoopClient` (empty list, no crash)
 
-    User->>DC: GET /admin/docker/log/{id}
-    DC->>Cmd: docker logs {id} -n 200
-    DC-->>User: log text
-```
+### Fallback
 
-## Keamanan legacy
+`dockerinfra.NoopClient` is used when `NewClient()` fails (dev without socket).
 
-- ID disanitize regex `/[^a-zA-Z0-9\-]/`
-- Aksi via **GET** (seharusnya POST di GoSite)
-- Tidak ada filter container — akses penuh ke semua container di host
+---
 
-## Implikasi GoSite
+## Legacy BangunSite
 
-```
-GET  /api/v1/docker/containers
-POST /api/v1/docker/containers/{id}/restart
-POST /api/v1/docker/containers/{id}/stop
-GET  /api/v1/docker/containers/{id}/logs?tail=200
-```
+<details>
+<summary>Parse output `docker ps` CLI</summary>
 
-Pertimbangan:
-- Gunakan Docker Engine API (HTTP via socket) daripada parse CLI
-- Optional: filter container by label
-- Role-based: hanya admin boleh restart/stop
+- `GET /admin/docker/restart/{id}` — aksi via GET
+- Parse whitespace from stdout `docker ps -a`
+
+</details>
+
+## Code
+
+| File | Role |
+|------|-------|
+| `internal/infra/docker/client.go` | Engine API wrapper |
+| `internal/delivery/http/handler/docker.go` | HTTP handlers |

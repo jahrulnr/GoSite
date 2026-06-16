@@ -1,78 +1,74 @@
 # Sequence: Dashboard & Monitoring
 
-Dashboard menampilkan ringkasan server. Data di-refresh via AJAX ke API internal.
+Dashboard menggabungkan snapshot server, traffic, SSL expiry, dan audit feed.
 
-## Initial page load
+## GoSite (implementation)
 
-**Route:** `GET /admin/` → `HomeController@index`
+### Initial load — aggregated dashboard
 
-```mermaid
-sequenceDiagram
-    actor User
-    participant Home as HomeController
-    participant DB as websites table
-    participant Lib as Cpu/Memory/Disk/Network/Log
-
-    User->>Home: GET /admin/
-    Home->>DB: Website::count()
-    Home->>Lib: Cpu::count()
-    Home->>Lib: Memory::info()
-    Home->>Lib: Disk::bytesReadable(disk_total_space)
-    Home->>Lib: Network::traffic()
-    Home->>Lib: Log::accessTraffic()
-    Home-->>User: Blade Home/index (nilai awal)
-```
-
-## Polling API (client-side)
-
-**Routes:** `routes/api.php` — saat ini **tanpa auth middleware**
+**API:** `GET /api/v1/dashboard` (session required)
 
 ```mermaid
 sequenceDiagram
-    actor Browser
-    participant API as ServerController
-    participant OS as /proc, df, free
-    participant NGX as nginx access logs
+    actor UI as Dashboard view
+    participant H as DashboardHandler
+    participant Sys as system.Service
+    participant SSL as ssl.Service
+    participant Splunk as splunklite.Service
+    participant Graf as grafanalite.Service
 
-    loop setiap interval (JS)
-        Browser->>API: POST /api/server/info
-        API->>OS: free, sys_getloadavg, df overlay
-        API-->>Browser: { cpu, memory, storage }
-
-        Browser->>API: POST /api/server/traffic
-        API-->>Browser: Network::traffic()
-
-        Browser->>API: POST /api/server/diskIO
-        API-->>Browser: Disk::simpleStat()
-
-        Browser->>API: POST /api/server/nginx/traffic
-        API->>NGX: Log::accessTraffic()
-        API-->>Browser: { sites[], total }
-    end
+    UI->>H: GET /dashboard
+    H->>Sys: Info()
+    H->>Graf: Summary(1h) — fallback nginx traffic
+    H->>SSL: ListExpiring(30)
+    H->>Splunk: RecentAudit(10)
+    H-->>UI: { system, traffic_summary, ssl_expiring, recent_audit }
 ```
 
-## Data yang dikembalikan
+Response sections:
 
-### `/api/server/info`
+| Key | Sumber |
+|-----|--------|
+| `system` | CPU, memory, storage (`/proc`, `df`) |
+| `traffic_summary` | Grafana Lite `Summary(1h)` atau fallback `system.NginxTraffic` |
+| `ssl_expiring` | Cert expiry ≤ 30 hari |
+| `recent_audit` | 10 audit log terakhir |
 
-- `cpu` — load average / core count × 100
-- `memory[]` — label, total, used, free (dari `free`)
-- `storage` — overlay filesystem dari `df`
+### Polling detail (opsional)
 
-### `/api/server/nginx/traffic`
+Frontend can call granular endpoints for live charts:
 
-- Per-site request count & bytes dari parse access log
-- Total agregat
+| Method | Path | Data |
+|--------|------|------|
+| GET | `/system/info` | CPU, memory, storage |
+| GET | `/system/network` | `/proc/net/dev` |
+| GET | `/system/disk-io` | disk I/O stats |
+| GET | `/system/nginx-traffic` | Parse access log per site |
 
-## Implikasi GoSite
+All endpoints in the **protected** group require session (+ basic auth when enabled).
 
-| Endpoint Go | Sumber data |
-|-------------|-------------|
-| `GET /system/info` | `/proc/loadavg`, `/proc/meminfo`, `df` |
-| `GET /system/network` | `/proc/net/dev` |
-| `GET /system/disk-io` | iostat atau `/proc/diskstats` |
-| `GET /system/nginx-traffic` | parser access log yang sama |
+### Traffic metrics (Grafana Lite)
 
-**Penting:** wajib auth di GoSite (legacy endpoint terbuka).
+Chart traffic memakai pre-aggregated buckets — see [18-grafana-lite.md](./18-grafana-lite.md).
 
-Frontend framework-agnostic: cukup `fetch` interval atau WebSocket push.
+Collector runs every 5 minutes in the background (`internal/app/app.go`).
+
+---
+
+## Legacy BangunSite
+
+<details>
+<summary>Blade + POST /api/server/* without auth</summary>
+
+- `GET /admin/` render Blade with initial values
+- Polling `POST /api/server/info`, `/traffic`, `/diskIO`, `/nginx/traffic` — **without auth middleware** (fixed in GoSite)
+
+</details>
+
+## Code
+
+| Paket | Role |
+|-------|-------|
+| `internal/delivery/http/handler/dashboard.go` | Aggregator |
+| `internal/service/system` | Host metrics |
+| `internal/observability/grafanalite` | Traffic buckets |

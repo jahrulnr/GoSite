@@ -1,82 +1,78 @@
 # Sequence: Mount Manager
 
-Kelola `/etc/fstab` (symlink ke `/storage/fstab`) dan mount/umount filesystem.
+Manage `/etc/fstab` (symlink → `/storage/fstab`) dan mount/umount.
 
-## List mounts
+## GoSite (implementation)
 
-**Route:** `GET /admin/mount`
+**Package:** `internal/service/mount`
 
 ```mermaid
 sequenceDiagram
-    participant MM as MountManager
+    actor User
+    participant H as MountHandler
+    participant Svc as mount.Service
     participant Fstab as /etc/fstab
-    participant Shell
+    participant Cmd as commander
 
-    MM->>Fstab: read all lines
-    loop setiap entry (non-comment)
-        MM->>Shell: mountpoint {dir}
-        MM->>MM: status Enabled/Disabled
-        MM->>Shell: mkdir -p {dir}
+    User->>H: GET /mounts
+    H->>Svc: List()
+    Svc->>Fstab: parse lines
+    loop each entry
+        Svc->>Cmd: mountpoint {dir}
     end
-    MM-->>User: Blade dengan list fstab
+    H-->>User: [{ device, dir, type, mounted, s3? }]
+
+    User->>H: POST /mounts/enable
+    H->>Svc: Enable(device, dir)
+    Svc->>Cmd: mount {dir}
 ```
 
-## Enable mount
+### API
 
-**Route:** `GET /admin/mount/enable?device=&dir=`
+| Method | Path |
+|--------|------|
+| GET | `/api/v1/mounts` |
+| POST | `/api/v1/mounts` |
+| PUT | `/api/v1/mounts` |
+| DELETE | `/api/v1/mounts` |
+| POST | `/api/v1/mounts/enable` |
 
-```mermaid
-sequenceDiagram
-    actor User
-    participant MM as MountManager
-    participant Shell
+### fstab & secrets
 
-    User->>MM: GET enable { device, dir }
-    MM->>Shell: nohup mount {dir} > /tmp/{hash}.log &
-    MM->>MM: sleep(3)
-    MM->>Shell: read log, cek failed/no such
-    MM-->>User: success / error
-```
+| Path | Role |
+|------|-------|
+| `/etc/fstab` | Symlink ke `/storage/fstab` |
+| `/storage/mount-secrets/` | S3 credentials (for s3fs entry type) |
 
-## Add / update / delete
+Entry JSON may include an `s3` block (endpoint, bucket, keys) — stored separately from the fstab line.
 
-```mermaid
-sequenceDiagram
-    actor User
-    participant MM as MountManager
-    participant Fstab
+### Startup
 
-    alt add
-        User->>MM: POST { device, dir, type, option, dump, fsck }
-        MM->>MM: append ke list
-    else update
-        User->>MM: POST update (match device+dir lama)
-        MM->>Shell: umount old dir
-        MM->>MM: replace entry
-    else delete
-        User->>MM: GET delete
-        MM->>Shell: umount dir
-        MM->>MM: remove dari list
-    end
-    MM->>Fstab: save() — rewrite file
-    MM-->>User: redirect + flash message
-```
+`config/start.sh` → `/run/fstab_mounter.sh` mount all entries at boot.
 
-## Startup integration
+### Validation
 
-`config/fstab_mounter.sh` dijalankan saat container start — mount semua entry fstab.
+- Format fstab 6 kolom
+- Device + dir required on create/update
+- Umount before update/delete entry
 
-## Implikasi GoSite
+---
 
-```
-GET    /api/v1/mounts
-POST   /api/v1/mounts
-PUT    /api/v1/mounts
-DELETE /api/v1/mounts
-POST   /api/v1/mounts/enable
-```
+## Legacy BangunSite
 
-Validasi:
-- Format fstab (6 kolom)
-- Device path exists atau remote valid
-- Tidak allow mount sensitif tanpa konfirmasi
+<details>
+<summary>GET for enable/delete</summary>
+
+- Enable via `GET /admin/mount/enable?device=&dir=`
+- Async mount log di `/tmp/{hash}.log`
+
+GoSite memakai POST dan response JSON langsung.
+
+</details>
+
+## Code
+
+| File | Role |
+|------|-------|
+| `internal/service/mount/service.go` | fstab CRUD, mount ops |
+| `internal/delivery/http/handler/mount.go` | HTTP |

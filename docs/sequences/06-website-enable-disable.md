@@ -1,6 +1,6 @@
 # Sequence: Enable / Disable Website
 
-Toggle website aktif dengan symlink antara `site.d` dan `active.d`, lalu nginx memuat vhost aktif.
+Toggle active website via symlink between `site.d` and `active.d`, then nginx loads active vhosts.
 
 **Route:** `OPTIONS /admin/website/{id}/enableSite` → `enableSite()`
 
@@ -14,7 +14,7 @@ sequenceDiagram
 
     User->>WM: OPTIONS /admin/website/{domain}/enableSite
     WM->>DB: Website::getSite(domain)
-    alt tidak ada
+    alt missing
         WM-->>User: 400 JSON error
     end
     WM->>WM: site.active = !site.active
@@ -30,21 +30,21 @@ sequenceDiagram
     WM-->>User: 200 JSON { msg: "actived/disabled successfully" }
 ```
 
-## Bagaimana nginx memuat site aktif
+## How nginx loads active sites
 
 ```nginx
 # nginx.conf
 include /storage/webconfig/active.d/*.conf;
 ```
 
-Hanya file di `active.d/` yang dilayani sebagai vhost tambahan.
+Only files in `active.d/` are served as additional vhosts.
 
-## Catatan
+## Notes
 
-- Toggle **tidak** otomatis `nginx reload` di legacy (perlu reload manual atau via config update)
-- Di praktik produksi, perubahan `active.d` biasanya butuh `nginx -s reload`
+- Toggle **calls `nginx reload`** (with test + auto-repair) — improvement over legacy
+- See [nginx-repair.md](../nginx-repair.md) for fallback when config is broken
 
-## Implikasi GoSite
+## GoSite
 
 ```
 PATCH /api/v1/websites/{id}/toggle
@@ -55,7 +55,7 @@ Response:
 { "id": 1, "active": true, "message": "Site actived successfully" }
 ```
 
-Service harus:
+Service:
 1. Update DB `active`
-2. Symlink/unlink
-3. **Panggil `nginx reload`** (perbaikan dari legacy)
+2. Symlink/unlink `active.d`
+3. `nginx.Service.Reload()` → `TestAndRepair` + `nginx -s reload`

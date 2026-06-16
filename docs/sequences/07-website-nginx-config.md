@@ -1,74 +1,76 @@
 # Sequence: Edit Nginx Config
 
-Tiga level konfigurasi nginx di BangunSite.
+Three levels of nginx configuration in GoSite.
 
 ## A. Config per website
 
-**Route:** `POST /admin/website/{id}/updateConfig`
+**API:** `PUT /api/v1/websites/{id}/nginx-config`
 
 ```mermaid
 sequenceDiagram
     actor User
-    participant WM as WebsiteManagerController
-    participant Disk
-    participant Ngx as Nginx library
-    participant Super as supervisorctl
+    participant API as WebsiteHandler
+    participant Svc as website.Service
+    participant NGX as nginx.Service
 
-    User->>WM: POST updateConfig { config }
-    WM->>Disk: backup oriConfig, write site.d/{domain}.conf
-    WM->>Ngx: test(domain) — nginx -t dengan hanya file domain
-    alt syntax ok
-        Ngx->>Super: restart nginx
-        WM-->>User: success
-    else syntax error
-        WM->>Disk: restore oriConfig
-        WM-->>User: error + config draft
+    User->>API: PUT { config }
+    API->>Svc: UpdateNginxConfig(id, config)
+    Svc->>NGX: BackupSiteConfig
+    Svc->>NGX: WriteSiteConfig (site.d)
+    Svc->>NGX: TestConfig (temp file, no site.d rewrite)
+    alt test ok
+        Svc->>NGX: Reload (TestAndRepair + reload)
+        API-->>User: success
+    else test fail
+        Svc->>NGX: restore backup
+        API-->>User: NGINX_TEST_FAILED
     end
 ```
 
 ## B. Default server config
 
-**Route:** `POST /admin/website/default/updateConfig` (id = `default`)
+**API:** `GET/PUT /api/v1/nginx/default`  
+**File:** `/etc/nginx/http.d/default.conf`
 
-- Target: `/etc/nginx/http.d/default.conf`
-- Sama: test → restart atau rollback
+Alur: `TestDefaultConfig` (temp + clone nginx.conf) → write → `Reload`.
 
 ## C. Global nginx.conf
 
-**Route:** `PATCH /admin/website/updateNginx`
+**API:** `GET/PUT /api/v1/nginx/global`  
+**File:** `/etc/nginx/nginx.conf`
+
+Same: test raw content in temp → write → reload.
+
+## Nginx test per domain (`TestConfig`)
+
+Digunakan oleh: validate website, update site config, create (active).
 
 ```mermaid
-sequenceDiagram
-    actor User
-    participant WM as WebsiteManagerController
-    participant Disk
-    participant Ngx as Nginx library
-
-    User->>WM: PATCH updateNginx { content }
-    WM->>Disk: write nginx-test.conf
-    WM->>Ngx: testNginxConf(tmp path)
-    alt ok
-        WM->>Disk: write nginx.conf
-        WM->>Ngx: restart()
-        WM-->>User: success
-    else fail
-        WM-->>User: error message dari nginx -t
-    end
+flowchart LR
+    A[Render / input content] --> B[Write /tmp/nginx-site-test-*.conf]
+    B --> C[Clone webconfig/nginx.conf]
+    C --> D["Replace include site.d/*.conf → path temp absolut"]
+    D --> E["nginx -t -c /tmp/nginx-test-*.conf"]
+    E --> F[Delete temp files]
 ```
 
-## Nginx::test(domain) detail
+**Important:** include replacement must use an **absolute** path to the temp file. Replacing only the `site.d/*.conf` glob produces an invalid path (`/storage/webconfig//tmp/...`).
 
-1. Clone `nginx.conf`, ganti include `site.d/*.conf` → `site.d/{domain}.conf` saja
-2. Jalankan `nginx -t -c /tmp/nginx-{time}.conf`
-3. Hapus file tmp
+Isolated test file: `config/webconfig/nginx.conf` — loads only one vhost, without `http.d/default.conf`.
 
-## Implikasi GoSite
+## Reload & auto-repair
 
-| Endpoint | File target |
-|----------|-------------|
-| `PUT /websites/{id}/nginx-config` | `site.d/{domain}.conf` |
-| `PUT /nginx/default` | `http.d/default.conf` |
-| `PUT /nginx/global` | `nginx.conf` |
-| `POST /nginx/test` | body config → `{ ok: true }` atau error |
+Every `Reload()` calls `TestAndRepair` on the full production config before `nginx -s reload`. See [nginx-repair.md](../nginx-repair.md).
 
-Invariant: **selalu test sebelum apply + rollback on failure**.
+## API summary
+
+| Method | Path | File target |
+|--------|------|-------------|
+| PUT | `/websites/{id}/nginx-config` | `site.d/{domain}.conf` |
+| GET | `/websites/{id}/nginx-config` | baca `site.d` |
+| PUT | `/nginx/default` | `http.d/default.conf` |
+| PUT | `/nginx/global` | `nginx.conf` |
+| POST | `/nginx/reload` | reload + repair |
+| POST | `/nginx/test` | test body arbitrary |
+
+Invariant: **test before apply + rollback on failure** (update site config); **repair + test before reload** (all reloads).

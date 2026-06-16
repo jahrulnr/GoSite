@@ -1,52 +1,75 @@
 # Sequence: Database Viewer
 
-Admin tool untuk melihat isi SQLite panel — **bukan** manajemen database server.
+Admin tool **read-only** for panel SQLite.
 
-**Routes:** `/admin/database`
+## GoSite (implementation)
 
-## List tables
-
-```mermaid
-sequenceDiagram
-    actor User
-    participant DC as DatabaseController
-    participant SQL as SQLite library
-
-    User->>DC: GET /admin/database
-    DC->>SQL: getTables()
-    DC->>SQL: getPath() → /storage/db.sqlite
-    DC-->>User: Blade table list
-```
-
-## Show table rows
+**Package:** `internal/service/database`
 
 ```mermaid
 sequenceDiagram
     actor User
-    participant DC as DatabaseController
-    participant SQL as SQLite library
+    participant UI as Database view
+    participant H as DatabaseHandler
+    participant Svc as database.Service
+    participant DB as /storage/db.sqlite
 
-    User->>DC: GET /admin/database/{table}?limit=100
-    DC->>SQL: getCols(table)
-    DC->>SQL: getRows(table, limit)
-    DC-->>User: Blade grid cols × rows
+    User->>UI: Open viewer
+    UI->>H: GET /database/tables
+    H->>Svc: ListTables()
+    Svc->>DB: sqlite_master
+    H-->>UI: ["users", "websites", "job_runs", ...]
+
+    User->>UI: Select table
+    UI->>H: GET /database/tables/{name}?limit=&offset=
+    H->>Svc: GetTable(name, limit, offset)
+    H-->>UI: { columns[], rows[][] }
 ```
 
-## Batasan
+### API
 
-- Read-only di UI (tidak ada insert/update/delete dari viewer)
-- Hanya SQLite file panel, bukan MariaDB produksi
+| Method | Path | Query |
+|--------|------|-------|
+| GET | `/database/tables` | — |
+| GET | `/database/tables/{name}` | `limit`, `offset` |
 
-## Implikasi GoSite
+### Batasan
 
-```
-GET /api/v1/database/tables
-GET /api/v1/database/tables/{name}?limit=100&offset=0
-```
+- **Read-only** — no INSERT/UPDATE/DELETE from UI
+- Hanya file `db.sqlite` panel
+- Session + basic auth required
+- Pagination via `limit` / `offset` (default limit 100)
 
-Pertimbangan:
-- Batasi ke admin role
-- Optional: nonaktifkan di produksi (`DB_VIEWER_ENABLED=false`)
-- Pagination proper (legacy hanya limit)
+### Schema relevan
 
-Untuk migrasi: schema tetap SQLite atau evaluasi embed + migration tool (goose/golang-migrate).
+| Table | Contents |
+|-------|-----|
+| `users` | Admin panel |
+| `websites` | Vhost records |
+| `cronjobs` | Scheduled commands |
+| `job_runs` | Certbot, cron, manual runs |
+| `sessions` | Auth sessions |
+| `audit_logs` | Splunk Lite audit |
+| `log_events` | Ingested nginx lines |
+| `traffic_metrics` | Grafana Lite buckets |
+| `saved_queries` | Splunk saved searches |
+
+Migrasi: `migrations/*.sql` via `gosite migrate`.
+
+---
+
+## Legacy BangunSite
+
+<details>
+<summary>Blade grid viewer</summary>
+
+Sama read-only; GoSite menambah offset pagination.
+
+</details>
+
+## Code
+
+| File | Role |
+|------|-------|
+| `internal/service/database/service.go` | Query tables |
+| `internal/repository/sqlite` | Schema + migrations |

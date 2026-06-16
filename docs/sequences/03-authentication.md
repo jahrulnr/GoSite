@@ -1,94 +1,102 @@
 # Sequence: Authentication
 
-Tiga lapisan autentikasi di BangunSite.
+Dua lapisan: **HTTP Basic Auth** (edge) dan **session panel** (SQLite).
 
-## 1. HTTP Basic Auth (opsional)
+## GoSite (implementation)
 
-**Middleware:** `BasicAuth` — aktif jika `AUTH_ENABLE=true`
+### 1. HTTP Basic Auth (opsional)
+
+**Middleware:** `middleware.BasicAuth` — semua `/api/v1/*`
 
 ```mermaid
 sequenceDiagram
     actor Browser
-    participant MW as BasicAuth Middleware
-    participant App as Controller
+    participant NGX as Nginx (optional)
+    participant MW as BasicAuth
+    participant API as Handler
 
-    Browser->>MW: Request /
+    Browser->>MW: Request /api/v1/...
     alt AUTH_ENABLE=false
-        MW->>App: next()
+        MW->>API: next()
     else AUTH_ENABLE=true
-        alt kredensial valid
-            MW->>App: next()
-        else tidak valid
-            MW-->>Browser: 401 WWW-Authenticate: Basic
+        alt Authorization: Basic valid
+            MW->>API: next()
+        else
+            MW-->>Browser: 401 WWW-Authenticate
         end
     end
 ```
 
-## 2. Login Laravel
+| Env | Default |
+|-----|---------|
+| `AUTH_ENABLE` | `true` |
+| `AUTH_USER` / `AUTH_PASS` | `admin` / `admin` |
 
-**Routes:** `GET/POST /` (middleware `basic.auth`)
+### 2. Login & session
 
-```mermaid
-sequenceDiagram
-    actor User
-    participant Auth as AuthController
-    participant RL as RateLimiter
-    participant DB as SQLite users
-    participant Mail as SMTP (opsional)
-
-    User->>Auth: POST / { email, password }
-    Auth->>RL: attempt 5x per 60s per IP
-    alt rate limited
-        Auth-->>User: error "Too many request"
-    end
-    Auth->>Auth: validate email + password min 6
-    Auth->>DB: Auth::attempt()
-    alt sukses
-        opt MAIL_NOTIFICATION
-            Auth->>Mail: New Login Notification
-        end
-        Auth-->>User: redirect /admin (session cookie)
-    else gagal
-        Auth-->>User: error invalid credentials
-    end
-```
-
-## 3. Lockscreen
-
-**Route:** `GET /locked` — logout tapi simpan user id di session
+**Routes:** `/api/v1/auth/*`
 
 ```mermaid
 sequenceDiagram
     actor User
-    participant Auth as AuthController
-    participant Session
+    participant UI as Preact panel
+    participant H as AuthHandler
+    participant Svc as auth.Service
+    participant DB as SQLite users + sessions
 
-    User->>Auth: GET /locked
-    alt sudah login
-        Auth->>Auth: Auth::logout()
+    User->>UI: email + password
+    UI->>H: POST /auth/login
+    H->>Svc: Login(email, password, remember)
+    Svc->>DB: verify bcrypt (users)
+    Svc->>DB: INSERT session
+    H->>H: Set-Cookie session
+    H-->>UI: { token, user }
+
+    loop protected API
+        UI->>H: Cookie + Basic auth
+        H->>Svc: Me(token)
+        H-->>UI: JSON
     end
-    Auth->>Session: push user id, save referer
-    Auth-->>User: lockscreen view (unlock = login ulang)
 ```
 
-## Protected routes
+| Method | Path | Auth |
+|--------|------|------|
+| GET | `/auth/login` | Public — metadata lockscreen, hints |
+| POST | `/auth/login` | Public |
+| POST | `/auth/logout` | Session |
+| GET | `/auth/me` | Session |
+| GET | `/auth/lockscreen` | Session |
+| POST | `/auth/lock` | Session |
+| POST | `/auth/unlock` | Session — re-auth password |
 
-Semua `/admin/*` memakai middleware `auth` (Laravel session).
+Session stored in SQLite (`sessions` table) with HTTP-only cookie. Lockscreen state in-memory (`auth.Lockscreen`).
 
-## Implikasi GoSite
+Default seed: `admin@demo.com` / `123456`.
 
-| Legacy | GoSite |
-|--------|--------|
-| PHP session | JWT atau secure HTTP-only cookie session |
-| Rate limit | middleware per-IP (redis/in-memory) |
-| Basic auth | tetap opsional di reverse proxy atau middleware |
-| Lockscreen | state frontend + endpoint re-auth tanpa full logout flow |
+### Protected routes
 
-**API minimum:**
+Semua `/api/v1/*` kecuali `GET/POST /auth/login` dan `GET /auth/login` metadata membutuhkan:
 
-```
-POST /api/v1/auth/login
-POST /api/v1/auth/logout
-GET  /api/v1/auth/me
-POST /api/v1/auth/unlock   # lockscreen
-```
+1. Basic auth (when enabled)
+2. Session cookie valid (`middleware.RequireSession`)
+
+---
+
+## Legacy BangunSite
+
+<details>
+<summary>Laravel session + Blade</summary>
+
+- PHP session middleware pada `/admin/*`
+- Rate limit login 5×/60s per IP
+- Lockscreen: `GET /locked` stores user id in session
+
+</details>
+
+## Code
+
+| Paket | Role |
+|-------|-------|
+| `internal/service/auth` | Login, logout, me, lock/unlock |
+| `internal/delivery/http/middleware` | BasicAuth, RequireSession |
+| `internal/repository/sqlite` | users, sessions |

@@ -1,76 +1,101 @@
-# Sequence: Buat Website
+# Sequence: Create Website
 
-Membuat entri website baru: validasi → simpan DB → generate nginx config → notifikasi email.
+Create a new website entry: validate → save DB → provision nginx config → optional enable + reload.
 
-**Route:** `POST /admin/website` → `WebsiteManagerController@store`
+## GoSite (implementation)
+
+**API:** `POST /api/v1/websites`  
+**Pre-flight validation:** `POST /api/v1/websites/validate`
 
 ```mermaid
 sequenceDiagram
     actor User
-    participant WM as WebsiteManagerController
-    participant Val as check()
-    participant DB as websites
-    participant Site as Site library
-    participant Disk
-    participant Cmd as Commander
-    participant Mail
+    participant UI as Websites modal
+    participant API as WebsiteHandler
+    participant Svc as website.Service
+    participant DB as SQLite
+    participant NGX as nginx.Service
 
-    User->>WM: POST /admin/website { domain, path, name?, active? }
-    WM->>Val: validate domain & path
-    alt domain invalid / path illegal / path dipakai / path is file
-        Val-->>WM: error message
-        WM-->>User: redirect back + error
+    User->>UI: Validate (optional)
+    UI->>API: POST /websites/validate
+    API->>Svc: Validate(input)
+    Svc->>Svc: domain, path, upstream rules
+    opt active=true
+        Svc->>NGX: TestConfig (temp file only)
+        Note over NGX: does not write site.d
     end
-    WM->>DB: Website::create()
-    alt create gagal
-        WM-->>User: error
+    API-->>UI: { valid, reason? }
+
+    User->>UI: Save
+    UI->>API: POST /websites
+    API->>Svc: Create(input)
+    Svc->>DB: INSERT websites
+    Svc->>NGX: EnsureDomainSSL + WriteSiteConfig
+    opt active=true
+        Svc->>NGX: TestConfig (temp)
+        Svc->>NGX: EnableSite (symlink active.d)
+        Svc->>NGX: Reload (TestAndRepair + reload)
     end
-    Note over Site: createConfig dipanggil lazy saat getSiteConfig
-    WM->>Site: (implisit) createConfig saat config pertama dibaca
-    Site->>Disk: mkdir path, copy index.html default
-    Site->>Cmd: chown apps:apps path
-    Site->>Disk: write site.d/{domain}.conf dari template site.conf
-    opt MAIL_NOTIFICATION
-        WM->>Mail: Created Notification
-    end
-    WM-->>User: success redirect
+    API-->>UI: 201 website JSON
 ```
 
-## createConfig detail
+### Provision site (`provisionSite`)
 
-**Library:** `Site::createConfig()`
+| Tipe | Side-effect |
+|------|-------------|
+| `static` | `mkdir` path, copy `index.html` default |
+| `proxy` | Auto path (`/www/{slug}`) when empty |
+| Semua | `EnsureDomainSSL` → copy self-signed ke `ssl/live/{domain}/cert.pem` |
+| Semua | Render template → `site.d/{domain}.conf` |
 
-```mermaid
-sequenceDiagram
-    participant Site
-    participant Template as site.conf
-    participant SSL as ssl/live/default
-    participant FS as filesystem
+Template:
 
-    Site->>Template: baca placeholder <domain>, <path>, <ssl_*>
-    Site->>SSL: copySSL → ssl/live/{domain}/cert.pem, key.pem
-    Site->>FS: mkdir(path), copy index.html
-    Site->>FS: write /storage/webconfig/site.d/{domain}.conf
-```
+| Tipe | File |
+|------|------|
+| static | `webconfig/site.conf` |
+| proxy | `webconfig/site-proxy.conf` |
 
-## Validasi `check()`
+Placeholder: `<domain>`, `<path>`, `<ssl_cert>`, `<ssl_key>`, `<upstream>`.
 
-| Check | Hasil |
-|-------|-------|
-| `FILTER_VALIDATE_DOMAIN` | domain valid |
-| `Disk::validatePath()` | path aman |
-| Path unik di DB | tidak dipakai site lain |
-| `is_file(path)` | ditolak |
+### Validate — important invariant
 
-## Implikasi GoSite
+`POST /websites/validate` dengan `active: true` runs isolated `nginx -t` **without** writing `site.d/`:
 
-```
-POST /api/v1/websites
-POST /api/v1/websites/validate   # optional pre-flight
-```
+1. Render config ke file temp in `/tmp/`
+2. Clone `webconfig/nginx.conf`, ganti include glob → path temp absolut
+3. `nginx -t -c /tmp/nginx-test-*.conf`
 
-Side-effect yang harus di service layer:
-1. Insert SQLite
-2. Generate `site.d/{domain}.conf`
-3. Copy default SSL + index.html
-4. **Belum** symlink `active.d` kecuali `active=true` saat create
+This prevents validate from "persisting" a draft that breaks the next save/reload.
+
+### Business validation
+
+| Check | Error code |
+|-------|------------|
+| Domain format | `DOMAIN_INVALID` |
+| Path unik | `PATH_DUPLICATE` |
+| Path inside web root | `PATH_INVALID` / `PATH_TRAVERSAL` |
+| Path is a file | `PATH_IS_FILE` |
+| Proxy requires upstream | `VALIDATION` |
+
+### Rollback on failure
+
+If create with `active=true` fails at `Reload`, the service:
+
+1. `DisableSite` — remove `active.d` symlink
+2. `RemoveSiteConfig` — remove `site.d`
+3. `DELETE` DB row
+
+---
+
+## Legacy BangunSite
+
+**Route:** `POST /admin/website` → `WebsiteManagerController@store`
+
+See historical diagram in git history; same flow (validate → DB → `Site::createConfig`) without a separate validate endpoint and without automatic `nginx reload` on all paths.
+
+## API
+
+| Method | Path | Body |
+|--------|------|------|
+| POST | `/api/v1/websites/validate` | `{ domain, path, type, upstream?, active, id? }` |
+| POST | `/api/v1/websites` | `{ name, domain, path, type, upstream?, active }` |

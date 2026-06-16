@@ -1,98 +1,83 @@
 # Sequence: File Manager
 
-Browser dan manipulasi file di server. Default root: `WEB_PATH` (`/www`).
+Browse and manipulate files within **allowlisted roots**.
 
-**Base route:** `/admin/browse`
+## GoSite (implementation)
 
-## Browse directory
+**Default roots:** `["/"]` (entire container filesystem — restrict in production via config)
 
-```mermaid
-sequenceDiagram
-    actor User
-    participant FM as FileManagerController
-    participant Disk
-
-    User->>FM: GET /admin/browse?path=/www/foo
-    FM->>FM: resolve path (handle .. traversal)
-    alt path tidak ada
-        FM-->>User: redirect + error
-    end
-    FM->>Disk: ls(path)
-    FM-->>User: Blade listing
-```
-
-## Read file content
+**Package:** `internal/service/files` + `internal/infra/filesystem.Validator`
 
 ```mermaid
 sequenceDiagram
     actor User
-    participant FM as FileManagerController
+    participant UI as Files view
+    participant H as FilesHandler
+    participant Svc as files.Service
+    participant FS as filesystem
 
-    User->>FM: POST /admin/browse/show { name }
-    FM->>FM: path + name → file path
-    alt bukan file
-        FM-->>User: 400 JSON error
-    end
-    FM-->>User: JSON { status, content }
+    User->>UI: Browse path
+    UI->>H: GET /files?path=
+    H->>Svc: Browse(path)
+    Svc->>Svc: Validator.Resolve — reject `..`
+    Svc->>FS: readdir + stat
+    H-->>UI: { entries[], tools }
+
+    User->>UI: Edit file
+    UI->>H: PUT /files/content { path, content }
+    H->>Svc: Save()
+
+    User->>UI: chmod / copy / execute
+    UI->>H: POST /files/actions
+    H->>Svc: Action(type, ...)
 ```
 
-## Create (directory / file / remote / upload)
+### API
 
-```mermaid
-sequenceDiagram
-    actor User
-    participant FM as FileManagerController
-    participant Disk
-    participant Shell as shell_exec
+| Method | Path | Purpose |
+|--------|------|--------|
+| GET | `/files?path=` | Listing + metadata (mime, editable, archive) |
+| GET | `/files/content?path=` | Read text |
+| GET | `/files/raw?path=` | Download binary |
+| PUT | `/files/content` | Save text |
+| POST | `/files` | Create file/dir, multipart upload, URL import |
+| POST | `/files/actions` | `chmod`, `copy`, `execute` |
+| POST | `/files/batch-save` | Multi-file save |
+| POST | `/files/batch-delete` | Multi-file delete |
+| DELETE | `/files?path=` | Delete file/dir |
 
-    User->>FM: POST /admin/browse/new { type, name, path, ... }
+### Actions
 
-    alt type=directory
-        FM->>Shell: mkdir -p && chmod && chown (if under /www)
-    else type=file
-        FM->>Disk: createFile(content)
-        FM->>Shell: chmod + chown
-    else type=remote
-        FM->>Disk: curl(url) → createFile
-    else type=upload
-        FM->>FM: validate upload_max_filesize
-        FM->>FM: file->move(dest)
-    end
-    FM-->>User: redirect / JSON success
-```
+| type | Behavior |
+|------|----------|
+| `chmod` | `chmod` via command runner |
+| `copy` | Copy to destination path |
+| `execute` | Run script — only when `FILES_ALLOW_EXECUTE=true` |
 
-## Actions: chmod, copy, execute
+### Security
 
-| type | Aksi |
-|------|------|
-| chmod | `chmod {perm} {path}` — validasi 600–777 |
-| copy | `Disk::cp` ke `toPath`, mkdir jika perlu |
-| execute | `nohup {path} &` — butuh permission ≥ 775, bukan folder |
+- `filesystem.Validator` — resolve path, reject traversal outside roots
+- Execute disabled by default (`FILES_ALLOW_EXECUTE=false`)
+- Archive extract (zip/tar) when tools are available on the host
 
-## Delete
+### Entry metadata
 
-```mermaid
-sequenceDiagram
-    actor User
-    participant FM as FileManagerController
-    participant Disk
+Each entry includes: `kind`, `mime_type`, `editable`, `viewable`, `archive`, `symlink`, `target`.
 
-    User->>FM: DELETE /admin/browse/action { path, name }
-    FM->>Disk: rm(path, recursive=true)
-    FM-->>User: success redirect
-```
+---
 
-## Implikasi GoSite
+## Legacy BangunSite
 
-| Endpoint | Catatan |
-|----------|---------|
-| `GET /files?path=` | Listing dengan metadata (name, size, perm, is_dir) |
-| `GET /files/content` | Baca teks/binary base64 |
-| `POST /files` | Multipart upload |
-| `POST /files/actions` | chmod, copy, execute |
-| `DELETE /files` | Hapus |
+<details>
+<summary>/admin/browse Blade UI</summary>
 
-**Keamanan wajib:**
-- Allowlist root: `/www`, `/storage`, `/tmp` (konfigurasi)
-- Tolak `..` dan path absolut di luar allowlist
-- Execute command: sangat terbatas atau dinonaktifkan di produksi
+Default root `WEB_PATH` (`/www`). chown/chmod via shell for paths under `/www`.
+
+</details>
+
+## Code
+
+| File | Role |
+|------|-------|
+| `internal/infra/filesystem/pathutil.go` | Path validation |
+| `internal/delivery/http/handler/files.go` | Multipart upload, batch ops |

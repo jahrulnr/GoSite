@@ -1,94 +1,112 @@
 # Sequence: Cron Jobs
 
-Dua jalur: **scheduler otomatis** (daemon) dan **manual run** dari UI.
+Automatic scheduler + manual run with **SSE stream**.
 
-## Scheduler daemon
+## GoSite (implementation)
 
-**Proses:** `php artisan run:cronjobs` (supervisor program `crond`)
+### Scheduler (background)
+
+**Lokasi:** `internal/app/scheduler.go` — goroutine di `gosite serve`
 
 ```mermaid
 sequenceDiagram
-    participant Cron as CronJobs command
+    participant Tick as ticker 5s
+    participant Sched as runCronScheduler
     participant DB as cronjobs
-    participant Q as queue:work
-    participant Job as RunCommand
+    participant Jobs as job_runs
+    participant W as job.Worker
 
-    Cron->>Q: start queue:work (background)
-    loop setiap 5 detik
-        Cron->>Cron: baca waktu (min, hour, day, month)
-        alt menit berubah & ada cron run_every=min
-            Cron->>DB: dispatchCommand(cron)
+    loop every 5 seconds
+        Tick->>Sched: now
+        Sched->>DB: List cronjobs
+        loop each cron
+            alt ShouldRun(prev, now, run_every)
+                Sched->>Jobs: Create pending job_run
+                Sched->>W: Enqueue(job_id)
+                Sched->>DB: TouchExecutedAt
+            end
         end
-        alt jam berubah & run_every=hour
-            Cron->>DB: dispatchCommand(cron)
-        end
-        alt hari berubah & run_every=day
-            Cron->>DB: dispatchCommand(cron)
-        end
-        alt bulan berubah & run_every=month
-            Cron->>DB: dispatchCommand(cron)
-        end
-        Cron->>Job: dispatch RunCommand(payload)
-        Job->>Job: exec shell command
     end
 ```
 
-## CRUD dari UI
+`ShouldRun` (`internal/service/cron/service.go`):
 
-**Routes:** `/admin/cronjob` resource
+| run_every | Trigger |
+|-----------|---------|
+| `min` | Menit berganti |
+| `hour` | Jam berganti |
+| `day` | Hari berganti |
+| `month` | Bulan berganti |
 
-| Aksi | Route |
-|------|-------|
-| List | GET index |
-| Create | POST store |
-| Update | PUT/PATCH update |
-| Delete | DELETE destroy |
+### Worker
 
-## Manual run (async polling)
+Same as Certbot — `internal/infra/job/worker.go`:
 
-**Route:** `POST /admin/cronjob/run/{id}`
+1. `MarkRunningWithOutput`
+2. `sh -c {payload}` with streaming stdout/stderr
+3. `Complete` status `ok` / `failed`
+
+2 worker goroutines (buffer 32).
+
+### CRUD
+
+| Method | Path |
+|--------|------|
+| GET | `/api/v1/cronjobs` |
+| POST | `/api/v1/cronjobs` |
+| PUT | `/api/v1/cronjobs/{id}` |
+| DELETE | `/api/v1/cronjobs/{id}` |
+
+### Manual run + SSE
 
 ```mermaid
 sequenceDiagram
     actor User
-    participant CJ as CronJobController
-    participant Disk
-    participant Queue as RunCommand
-    participant Tmp as /tmp/execute-{id}.log
+    participant UI as Cron view
+    participant H as CronHandler
+    participant Svc as cron.Service
+    participant W as job.Worker
 
-    User->>CJ: POST run/{id}?start=true
-    CJ->>Disk: write script.sh dengan payload
-    CJ->>Queue: dispatch script > log
-    CJ->>DB: update executed_at
-    CJ-->>User: "Waiting task run on queue"
+    User->>UI: Run now
+    UI->>H: POST /cronjobs/{id}/run
+    H->>Svc: RunManual
+    Svc->>Svc: INSERT job_run + Enqueue
+    H-->>UI: 202 { job_id }
 
-    loop poll
-        User->>CJ: POST run (start=false)
-        CJ->>Tmp: read log
-        CJ-->>User: output text
-    end
+    UI->>H: GET /cronjobs/{id}/run/stream?job_id=
+    H->>W: StreamSSE
+    W-->>UI: data: output ... event: done
 ```
 
-## Default cron: Let's Encrypt
+Frontend: `web/src/lib/sse.ts` + `JobStreamModal`.
 
-```sql
-payload: certbot renew --post-hook 'supervisorctl restart nginx'
+### Default seed
+
+```text
+certbot renew --post-hook 'nginx -s reload'
 run_every: day
 ```
 
-## Implikasi GoSite
+### Security
 
-```
-GET    /api/v1/cronjobs
-POST   /api/v1/cronjobs
-PUT    /api/v1/cronjobs/{id}
-DELETE /api/v1/cronjobs/{id}
-POST   /api/v1/cronjobs/{id}/run
-```
+Payload runs as a shell command — consider an allowlist in production. Panel session required.
 
-Arsitektur Go:
-- **Scheduler goroutine** dengan ticker + evaluasi `run_every`
-- **Worker pool** untuk eksekusi command (timeout 300s seperti legacy)
-- SSE untuk output manual run & certbot
+---
 
-Pertimbangan keamanan: whitelist command atau require admin approval untuk payload berbahaya.
+## Legacy BangunSite
+
+<details>
+<summary>PHP artisan run:cronjobs + Laravel queue</summary>
+
+- Separate supervisor `crond` process
+- Manual run polling file `/tmp/execute-{id}.log`
+
+</details>
+
+## Code
+
+| File | Role |
+|------|-------|
+| `internal/app/scheduler.go` | Auto dispatch |
+| `internal/infra/job/worker.go` | Exec + StreamSSE |
+| `internal/delivery/http/handler/cron.go` | Run + RunStream |

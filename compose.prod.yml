@@ -1,0 +1,67 @@
+# Production compose — BangunSoft VM (/apps/gosite).
+# Usage: docker compose -f compose.prod.yml --env-file .env up -d
+services:
+  gosite:
+    image: gosite:1.0.0
+    container_name: gosite
+    privileged: true
+    cpus: 0.5
+    mem_limit: 512m
+    restart: unless-stopped
+    devices:
+      - /dev/fuse
+    cap_add:
+      - SYS_PTRACE
+      - NET_ADMIN
+    ulimits:
+      nofile:
+        soft: "65536"
+        hard: "65536"
+    environment:
+      TZ: Asia/Jakarta
+      STORAGE_PATH: /storage
+      DB_DATABASE: /storage/db.sqlite
+      WEB_PATH: /storage/www
+      LISTEN_ADDR: ":8080"
+      TEMPLATES_DIR: /var/setup
+      MIGRATIONS_DIR: /app/migrations
+      FE_EMBED: "true"
+      TLS_ENABLE: "true"
+      ENABLE_LOCKSCREEN: ${ENABLE_LOCKSCREEN:-true}
+      LOCK_AFTER: ${LOCK_AFTER:-300}
+      AUTH_ENABLE: ${AUTH_ENABLE:-true}
+      AUTH_USER: ${AUTH_USER}
+      AUTH_PASS: ${AUTH_PASS}
+    ports:
+      - "1100:8080"
+      - target: 80
+        published: 80
+        protocol: tcp
+        mode: host
+      - target: 443
+        published: 443
+        protocol: tcp
+        mode: host
+      - target: 443
+        published: 443
+        protocol: udp
+        mode: host
+      - target: 444
+        published: 444
+        protocol: tcp
+        mode: host
+      - target: 444
+        published: 444
+        protocol: udp
+        mode: host
+    volumes:
+      - /etc/hosts:/etc/hosts
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/storage:rw
+    networks:
+      - services
+
+networks:
+  services:
+    external: true
+    name: services
