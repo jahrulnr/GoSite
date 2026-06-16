@@ -50,7 +50,6 @@ jobs:
           test -f docs/wiki-export/Home.md
           test -f docs/wiki-export/Home-id.md
           test -f docs/wiki-export/_Sidebar.md
-          test -f docs/wiki-export/_Sidebar-id.md
           count="$(find docs/wiki-export -maxdepth 1 -name '*.md' | wc -l)"
           echo "Exported ${count} markdown files"
           test "${count}" -ge 20

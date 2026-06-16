@@ -16,7 +16,7 @@ See [LOCALIZATION.md](./LOCALIZATION.md).
 ```bash
 make wiki-export
 # output: docs/wiki-export/ (gitignored — generated artifact)
-# sidebars: _Sidebar.md (EN), _Sidebar-id.md (ID)
+# sidebars: `_Sidebar.md` only (bilingual EN/ID links per row; GitHub Wiki has one global sidebar)
 ```
 
 On push or pull request that touches `docs/`, [`.github/workflows/wiki.yml`](../.github/workflows/wiki.yml) runs `make wiki-export` and validates the output. **Publishing** to `GoSite.wiki` happens only when changes land on **`master`** (or `main`), or when you run the workflow manually with **publish** enabled.

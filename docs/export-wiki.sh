@@ -382,78 +382,41 @@ export_lang() {
 }
 
 write_sidebars() {
+  # GitHub Wiki exposes a single global _Sidebar.md (see dev-docs github-wiki).
+  # Do not link to _Sidebar-id — underscore pages are special and that switcher breaks.
   cat > "$OUT/_Sidebar.md" <<EOF
-### English · [ID](_Sidebar-id)
-
-**[Home](Home)**
+**[Home (EN)](Home) · [Beranda (ID)](Home-id)**
 
 ### Core
-- [Architecture](Architecture)
-- [Domain-model](Domain-model)
-- [API-reference](API-reference)
-- [Container-startup](Container-startup)
-- [Panel-routing](Panel-routing)
-- [Authentication](Authentication)
+- Architecture · [EN](Architecture) · [ID](Architecture-id)
+- Domain model · [EN](Domain-model) · [ID](Domain-model-id)
+- API reference · [EN](API-reference) · [ID](API-reference-id)
+- Container startup · [EN](Container-startup) · [ID](Container-startup-id)
+- Panel routing · [EN](Panel-routing) · [ID](Panel-routing-id)
+- Authentication · [EN](Authentication) · [ID](Authentication-id)
 
 ### Websites & Nginx
-- [Website-create](Website-create)
-- [Website-enable-disable](Website-enable-disable)
-- [Website-nginx-config](Website-nginx-config)
-- [Website-delete](Website-delete)
-- [Nginx-auto-repair](Nginx-auto-repair)
-- [SSL-and-Certbot](SSL-and-Certbot)
+- Website create · [EN](Website-create) · [ID](Website-create-id)
+- Website enable/disable · [EN](Website-enable-disable) · [ID](Website-enable-disable-id)
+- Website nginx config · [EN](Website-nginx-config) · [ID](Website-nginx-config-id)
+- Website delete · [EN](Website-delete) · [ID](Website-delete-id)
+- Nginx auto-repair · [EN](Nginx-auto-repair) · [ID](Nginx-auto-repair-id)
+- SSL & Certbot · [EN](SSL-and-Certbot) · [ID](SSL-and-Certbot-id)
 
 ### Operations
-- [Dashboard](Dashboard)
-- [Operations](Operations)
-- [Observability](Observability)
+- Dashboard · [EN](Dashboard) · [ID](Dashboard-id)
+- Operations · [EN](Operations) · [ID](Operations-id)
+- Observability · [EN](Observability) · [ID](Observability-id)
 
 ### Extensions
-- [Plugin-installer](Plugin-installer)
-- [Plugin-platform](Plugin-platform)
-- [Plugin templates](${BLOB}/plugins/_templates/)
+- Plugin installer · [EN](Plugin-installer) · [ID](Plugin-installer-id)
+- Plugin platform · [EN](Plugin-platform) · [ID](Plugin-platform-id)
+- Plugin templates · [repo](${BLOB}/plugins/_templates/)
 
 ### Other
-- [Migration](Migration)
-- [Development](Development)
-- [Sequences-index](Sequences-index)
-EOF
-
-  cat > "$OUT/_Sidebar-id.md" <<EOF
-### [EN](_Sidebar) · Bahasa Indonesia
-
-**[Home](Home-id)**
-
-### Inti
-- [Architecture](Architecture-id)
-- [Domain-model](Domain-model-id)
-- [API-reference](API-reference-id)
-- [Container-startup](Container-startup-id)
-- [Panel-routing](Panel-routing-id)
-- [Authentication](Authentication-id)
-
-### Website & Nginx
-- [Website-create](Website-create-id)
-- [Website-enable-disable](Website-enable-disable-id)
-- [Website-nginx-config](Website-nginx-config-id)
-- [Website-delete](Website-delete-id)
-- [Nginx-auto-repair](Nginx-auto-repair-id)
-- [SSL-and-Certbot](SSL-and-Certbot-id)
-
-### Operasi
-- [Dashboard](Dashboard-id)
-- [Operations](Operations-id)
-- [Observability](Observability-id)
-
-### Ekstensi
-- [Plugin-installer](Plugin-installer-id)
-- [Plugin-platform](Plugin-platform-id)
-- [Template plugin](${BLOB}/plugins/_templates/)
-
-### Lainnya
-- [Migration](Migration-id)
-- [Development](Development-id)
-- [Sequences-index](Sequences-index-id)
+- Migration · [EN](Migration) · [ID](Migration-id)
+- Development · [EN](Development) · [ID](Development-id)
+- Sequences index · [EN](Sequences-index) · [ID](Sequences-index-id)
 EOF
 }
 

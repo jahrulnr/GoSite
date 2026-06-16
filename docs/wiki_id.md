@@ -16,7 +16,7 @@ Lihat [LOCALIZATION_id.md](./LOCALIZATION_id.md) — catatan: gunakan [LOCALIZAT
 ```bash
 make wiki-export
 # output: docs/wiki-export/ (di-gitignore — artifact hasil generate)
-# sidebar: _Sidebar.md (EN), _Sidebar-id.md (ID)
+# sidebar: `_Sidebar.md` saja (link EN/ID per baris; GitHub Wiki cuma punya satu sidebar global)
 ```
 
 Saat push/PR mengubah `docs/`, workflow [`.github/workflows/wiki.yml`](../.github/workflows/wiki.yml) menjalankan `make wiki-export` dan memvalidasi hasilnya. **Publish** ke `GoSite.wiki` hanya saat perubahan masuk **`master`** (atau `main`), atau lewat workflow manual dengan opsi **publish**.
