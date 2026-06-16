@@ -482,8 +482,12 @@ func (s *PtySession) ResumeBroadcast(token int) {
 	s.pending = nil
 	s.pauseMu.Unlock()
 
-	if wasPaused && token == 1 {
-		// Final resume; flush.
+	// Flush whenever we just left a paused state. The token argument is
+	// kept for backward compatibility but the flush predicate is purely a
+	// "did we transition out of a pause" check — that is what callers
+	// actually want, and the previous `token == 1` guard caused the
+	// pending buffer to leak the very first prompt bytes of a session.
+	if wasPaused {
 		for _, c := range pending {
 			s.broadcast(c)
 		}
