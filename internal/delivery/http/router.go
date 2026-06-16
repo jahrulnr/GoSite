@@ -28,6 +28,7 @@ import (
 	"github.com/jahrulnr/gosite/internal/service/logs"
 	mountsvc "github.com/jahrulnr/gosite/internal/service/mount"
 	pluginsvc "github.com/jahrulnr/gosite/internal/service/plugin"
+	"github.com/jahrulnr/gosite/internal/service/plugin/hookbus"
 	"github.com/jahrulnr/gosite/internal/service/settings"
 	"github.com/jahrulnr/gosite/internal/service/ssl"
 	"github.com/jahrulnr/gosite/internal/service/system"
@@ -58,20 +59,27 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	))
 
 	cmd := commander.NewExecRunner()
-	ngx := nginx.NewServiceFromConfig(cfg, cmd)
+	auditRepo := sqlite.NewAuditRepository(db)
+	pluginRepo := sqlite.NewPluginRepository(db)
+	pluginRuntime := pluginsvc.NewProcessRuntimeManager()
+	pluginDispatcher := hookbus.New(hookbus.Config{
+		MaxConcurrentHooks: cfg.PluginMaxConcurrentHooks,
+		HookTimeout:        cfg.PluginHookTimeout,
+		Audit:              splunklite.NewAuditWriter(auditRepo),
+	})
+	ngx := nginx.NewServiceFromConfig(cfg, cmd, nginx.WithHookBus(pluginDispatcher))
 	websiteRepo := sqlite.NewWebsiteRepository(db)
 	jobRepo := sqlite.NewJobRepository(db)
-	worker := job.NewWorker(jobRepo, cmd, 32)
+	worker := job.NewWorker(jobRepo, cmd, 32, job.WithHookBus(pluginDispatcher))
 	worker.Start(context.Background(), 2)
 
-	websiteSvc := website.NewService(websiteRepo, ngx, cfg.WebPath)
-	sslSvc := ssl.NewService(websiteRepo, jobRepo, ngx, worker)
+	websiteSvc := website.NewService(websiteRepo, ngx, cfg.WebPath, website.WithHookBus(pluginDispatcher))
+	sslSvc := ssl.NewService(websiteRepo, jobRepo, ngx, worker, ssl.WithHookBus(pluginDispatcher))
 
 	websiteHandler := handler.NewWebsiteHandler(websiteSvc)
 	nginxHandler := handler.NewNginxHandler(ngx)
 	sslHandler := handler.NewSSLHandler(sslSvc, worker)
 
-	auditRepo := sqlite.NewAuditRepository(db)
 	logRepo := sqlite.NewLogEventRepository(db)
 	metricsRepo := sqlite.NewTrafficMetricsRepository(db)
 	savedRepo := sqlite.NewSavedQueryRepository(db)
@@ -103,7 +111,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	} else {
 		dockerSvc = dockerClient
 	}
-	dockerService := dockersvc.NewService(dockerSvc)
+	dockerService := dockersvc.NewService(dockerSvc, dockersvc.WithHookBus(pluginDispatcher))
 	dockerHandler := handler.NewDockerHandler(dockerService)
 
 	fileRoots := []string{"/"}
@@ -116,12 +124,9 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	mountHandler := handler.NewMountHandler(mountSvc)
 
 	cronRepo := sqlite.NewCronJobRepository(db)
-	cronSvc := cronsvc.NewService(cronRepo, jobRepo, worker)
+	cronSvc := cronsvc.NewService(cronRepo, jobRepo, worker, cronsvc.WithHookBus(pluginDispatcher))
 	cronHandler := handler.NewCronHandler(cronSvc, worker)
 
-	pluginRepo := sqlite.NewPluginRepository(db)
-	pluginRuntime := pluginsvc.NewProcessRuntimeManager()
-	pluginDispatcher := pluginsvc.NewMemoryHookDispatcher(cfg.PluginMaxConcurrentHooks)
 	pluginSvc := pluginsvc.NewService(
 		pluginRepo,
 		cfg.Storage,

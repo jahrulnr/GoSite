@@ -2,7 +2,21 @@
 
 Design/RND for how GoSite should install, validate, enable/disable, and run “plugins” (in the spirit of Krakend behavior/extensibility) while keeping compatibility across GoSite upgrades.
 
-**Status:** Research / Proposed (not implemented)
+**Status:** Partially implemented
+
+Implemented as of the current code:
+
+- P1 registry/lifecycle/API/UI: SQLite `plugin_versions`, install/enable/disable/switch/uninstall/purge, failure metadata, signature/keyring checks, startup reconcile, and admin UI.
+- Phase A hook bus core: enabled-set dispatch, deterministic ordering, strict `*.before_*` blocking, lenient continuation, per-hook timeout, independent concurrent dispatch cap, circuit breaker, and audit logging for hook errors.
+- Initial hook call sites: nginx reload, website create/enable/config change, SSL issue/manual renew, job run/failure, cron trigger, and Docker container actions.
+
+Still pending:
+
+- HashiCorp go-plugin gRPC runtime and reference plugin.
+- Plugin config storage, encrypted secrets, config migration RPC, and UI config form renderer.
+- Tier 0 webhook transport and scoped plugin tokens.
+- Self-healing health/restart supervisor.
+- Tier 2 WASM remains explicitly out of scope for this implementation wave.
 
 ## Goals
 

@@ -34,6 +34,7 @@ type Config struct {
 
 	PluginAllowUnsigned      bool
 	PluginKeyringPath        string
+	PluginHookTimeout        time.Duration
 	PluginMaxConcurrentHooks int
 
 	ListenAddr string
@@ -104,6 +105,7 @@ func Load() Config {
 
 		PluginAllowUnsigned:      envBool("PLUGIN_ALLOW_UNSIGNED", appEnv != "production"),
 		PluginKeyringPath:        envOr("PLUGIN_KEYRING_PATH", filepath.Join(storage, "plugins", "keyring.json")),
+		PluginHookTimeout:        envDuration("PLUGIN_HOOK_TIMEOUT", 5*time.Second),
 		PluginMaxConcurrentHooks: envInt("PLUGIN_MAX_CONCURRENT_HOOKS", 10),
 
 		ListenAddr: envOr("LISTEN_ADDR", ":8080"),

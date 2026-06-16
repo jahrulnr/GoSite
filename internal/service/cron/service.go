@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jahrulnr/gosite/internal/contracts"
 	"github.com/jahrulnr/gosite/internal/infra/job"
 	"github.com/jahrulnr/gosite/internal/repository/sqlite"
 	"github.com/jahrulnr/gosite/pkg/apperror"
@@ -17,11 +18,28 @@ type Service struct {
 	repo   *sqlite.CronJobRepository
 	jobs   *sqlite.JobRepository
 	worker *job.Worker
+	hooks  contracts.HookBus
+}
+
+// Option configures cron service dependencies.
+type Option func(*Service)
+
+// WithHookBus dispatches cron lifecycle events to plugins.
+func WithHookBus(hooks contracts.HookBus) Option {
+	return func(s *Service) {
+		if hooks != nil {
+			s.hooks = hooks
+		}
+	}
 }
 
 // NewService returns a cron service.
-func NewService(repo *sqlite.CronJobRepository, jobs *sqlite.JobRepository, worker *job.Worker) *Service {
-	return &Service{repo: repo, jobs: jobs, worker: worker}
+func NewService(repo *sqlite.CronJobRepository, jobs *sqlite.JobRepository, worker *job.Worker, opts ...Option) *Service {
+	svc := &Service{repo: repo, jobs: jobs, worker: worker, hooks: contracts.NoopHookBus{}}
+	for _, opt := range opts {
+		opt(svc)
+	}
+	return svc
 }
 
 // CreateInput holds cron job creation fields.
@@ -103,6 +121,13 @@ func (s *Service) RunManual(ctx context.Context, cronID int64) (sqlite.JobRun, e
 	cronJob, err := s.repo.FindByID(ctx, cronID)
 	if err != nil {
 		return sqlite.JobRun{}, apperror.Wrap(apperror.CodeNotFound, "cronjob not found", err)
+	}
+	if _, err := s.hooks.Dispatch(ctx, "cron.before_trigger", map[string]any{
+		"id":        cronJob.ID,
+		"name":      cronJob.Name,
+		"run_every": cronJob.RunEvery,
+	}); err != nil {
+		return sqlite.JobRun{}, err
 	}
 	run, err := s.jobs.Create(ctx, sqlite.JobRun{
 		JobType: "cron",

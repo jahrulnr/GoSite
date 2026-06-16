@@ -2,7 +2,21 @@
 
 RND/Desain untuk bagaimana GoSite harus meng-install, memvalidasi, mengaktifkan/nonaktifkan, dan menjalankan “plugin” (gaya extensibility seperti Krakend) sambil menjaga kompatibilitas antar upgrade GoSite.
 
-**Status:** Riset / Proposed (belum diimplementasikan)
+**Status:** Terimplementasi sebagian
+
+Sudah ada di kode saat ini:
+
+- P1 registry/lifecycle/API/UI: SQLite `plugin_versions`, install/enable/disable/switch/uninstall/purge, metadata failure, signature/keyring, startup reconcile, dan admin UI.
+- Core hook bus Phase A: dispatch enabled-set, urutan deterministik, strict `*.before_*` yang bisa memblokir, lenient continuation, timeout per hook, batas concurrency untuk isolation `independent`, circuit breaker, dan audit logging untuk error hook.
+- Call site hook awal: nginx reload, website create/enable/config change, SSL issue/manual renew, job run/failure, cron trigger, dan aksi container Docker.
+
+Masih pending:
+
+- Runtime HashiCorp go-plugin gRPC dan reference plugin.
+- Storage config plugin, secret terenkripsi, RPC config migration, dan renderer form config di UI.
+- Transport webhook Tier 0 dan scoped plugin token.
+- Self-healing health/restart supervisor.
+- Tier 2 WASM tetap out of scope untuk gelombang implementasi ini.
 
 ## Tujuan
 

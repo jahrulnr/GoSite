@@ -1,6 +1,6 @@
-# ADR: Plugin platform (proposed)
+# ADR: Plugin platform
 
-**Status:** Proposed (research complete, not implemented)  
+**Status:** Partially implemented
 **Date:** 2026-06-16  
 **Research:** dev-docs `go-plugin-platform` — see [plugin architecture](https://github.com/jahrulnr/dev-docs/blob/main/docs/best-practices/architecture/patterns/plugin-architecture_en.md) (or local dev-docs corpus)
 
@@ -52,11 +52,11 @@ Rollback on failed nginx reload (existing pattern in `website.Toggle`) applies t
 
 ## Phased delivery
 
-1. **P0** — Hook bus + Tier 0 webhooks (SSL/job events)
-2. **P1** — Plugin registry (SQLite), manifest, checksum verify
-3. **P2** — go-plugin SDK + reference plugin
-4. **P3** — UI catalog (read-only)
-5. **P4+** — WASM sandbox, marketplace publishing (security review)
+1. **P0** — Hook bus core is implemented for enabled plugin dispatch, strict/lenient behavior, per-hook timeout, circuit breaker, audit error writes, and initial call sites across nginx, website, SSL, jobs, cron, and Docker. Tier 0 webhook transport is still pending.
+2. **P1** — Plugin registry (SQLite), manifest, checksum/signature verify, lifecycle API, purge, reconcile, and admin UI are implemented.
+3. **P2** — go-plugin SDK + reference plugin are pending.
+4. **P3** — Host-rendered plugin admin UI exists; richer catalog/config UI is pending.
+5. **P4+** — WASM sandbox, marketplace publishing, encrypted config storage, and full network isolation remain future security-review work.
 
 ## Alternatives considered
 

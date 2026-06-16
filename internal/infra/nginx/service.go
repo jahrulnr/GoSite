@@ -31,11 +31,28 @@ type Service struct {
 	runner contracts.NginxRunner
 	cmd    contracts.CommandRunner
 	paths  Paths
+	hooks  contracts.HookBus
+}
+
+// Option configures nginx service dependencies.
+type Option func(*Service)
+
+// WithHookBus dispatches nginx lifecycle events to plugins.
+func WithHookBus(hooks contracts.HookBus) Option {
+	return func(s *Service) {
+		if hooks != nil {
+			s.hooks = hooks
+		}
+	}
 }
 
 // NewService returns an nginx filesystem service.
-func NewService(runner contracts.NginxRunner, cmd contracts.CommandRunner, paths Paths) *Service {
-	return &Service{runner: runner, cmd: cmd, paths: paths}
+func NewService(runner contracts.NginxRunner, cmd contracts.CommandRunner, paths Paths, opts ...Option) *Service {
+	svc := &Service{runner: runner, cmd: cmd, paths: paths, hooks: contracts.NoopHookBus{}}
+	for _, opt := range opts {
+		opt(svc)
+	}
+	return svc
 }
 
 // Paths returns configured filesystem locations.
@@ -111,13 +128,25 @@ func (s *Service) TestDefaultConfig(ctx context.Context, content string) error {
 
 // Reload runs nginx -t with automatic repair, ensures nginx is running, then reloads.
 func (s *Service) Reload(ctx context.Context) error {
+	payload := map[string]string{
+		"global_config": s.paths.GlobalConf,
+		"site_dir":      s.paths.SiteD,
+		"active_dir":    s.paths.ActiveD,
+	}
+	if _, err := s.hooks.Dispatch(ctx, "nginx.before_reload", payload); err != nil {
+		return err
+	}
 	if _, err := s.TestAndRepair(ctx); err != nil {
 		return err
 	}
 	if err := s.EnsureRunning(ctx); err != nil {
 		return err
 	}
-	return s.runner.Reload(ctx)
+	if err := s.runner.Reload(ctx); err != nil {
+		return err
+	}
+	_, err := s.hooks.Dispatch(ctx, "nginx.after_reload", payload)
+	return err
 }
 
 // EnsureRunning starts nginx when the master process is not running.

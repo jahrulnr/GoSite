@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jahrulnr/gosite/internal/contracts"
 	"github.com/jahrulnr/gosite/internal/infra/job"
 	"github.com/jahrulnr/gosite/internal/infra/nginx"
 	"github.com/jahrulnr/gosite/internal/repository/sqlite"
@@ -22,11 +23,28 @@ type Service struct {
 	jobs     *sqlite.JobRepository
 	nginx    *nginx.Service
 	worker   *job.Worker
+	hooks    contracts.HookBus
+}
+
+// Option configures SSL service dependencies.
+type Option func(*Service)
+
+// WithHookBus dispatches SSL lifecycle events to plugins.
+func WithHookBus(hooks contracts.HookBus) Option {
+	return func(s *Service) {
+		if hooks != nil {
+			s.hooks = hooks
+		}
+	}
 }
 
 // NewService returns an SSL service.
-func NewService(websites *sqlite.WebsiteRepository, jobs *sqlite.JobRepository, ngx *nginx.Service, worker *job.Worker) *Service {
-	return &Service{websites: websites, jobs: jobs, nginx: ngx, worker: worker}
+func NewService(websites *sqlite.WebsiteRepository, jobs *sqlite.JobRepository, ngx *nginx.Service, worker *job.Worker, opts ...Option) *Service {
+	svc := &Service{websites: websites, jobs: jobs, nginx: ngx, worker: worker, hooks: contracts.NoopHookBus{}}
+	for _, opt := range opts {
+		opt(svc)
+	}
+	return svc
 }
 
 // Status describes SSL state for a website.
@@ -54,6 +72,12 @@ func (s *Service) EnqueueCertbot(ctx context.Context, websiteID int64) (sqlite.J
 	}
 
 	if err := s.prepareForCertbot(ctx, site); err != nil {
+		return sqlite.JobRun{}, err
+	}
+	if _, err := s.hooks.Dispatch(ctx, "ssl.before_issue", map[string]any{
+		"website_id": site.ID,
+		"domain":     site.Domain,
+	}); err != nil {
 		return sqlite.JobRun{}, err
 	}
 
@@ -174,6 +198,11 @@ func (s *Service) UpdateManual(ctx context.Context, websiteID int64, in ManualIn
 	if err != nil {
 		return apperror.Wrap(apperror.CodeDatabase, "update ssl flag", err)
 	}
+	_, _ = s.hooks.Dispatch(ctx, "ssl.after_renew", map[string]any{
+		"website_id": site.ID,
+		"domain":     site.Domain,
+		"manual":     true,
+	})
 	return nil
 }
 
@@ -216,11 +245,11 @@ func (s *Service) GetStatus(ctx context.Context, websiteID int64) (Status, error
 
 // ExpiringCert describes a site certificate nearing expiry.
 type ExpiringCert struct {
-	WebsiteID int64      `json:"website_id"`
-	Domain    string     `json:"domain"`
-	ExpiresAt time.Time  `json:"expires_at"`
-	DaysLeft  int        `json:"days_left"`
-	Expired   bool       `json:"expired"`
+	WebsiteID int64     `json:"website_id"`
+	Domain    string    `json:"domain"`
+	ExpiresAt time.Time `json:"expires_at"`
+	DaysLeft  int       `json:"days_left"`
+	Expired   bool      `json:"expired"`
 }
 
 // ListExpiring returns enabled SSL sites expiring within withinDays.

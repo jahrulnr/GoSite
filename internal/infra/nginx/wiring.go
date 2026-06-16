@@ -31,7 +31,7 @@ func PathsFromConfig(cfg config.Config) Paths {
 }
 
 // NewServiceFromConfig wires a production or local nginx service.
-func NewServiceFromConfig(cfg config.Config, cmd contracts.CommandRunner) *Service {
+func NewServiceFromConfig(cfg config.Config, cmd contracts.CommandRunner, opts ...Option) *Service {
 	if cmd == nil {
 		cmd = commander.NewExecRunner()
 	}
@@ -45,5 +45,5 @@ func NewServiceFromConfig(cfg config.Config, cmd contracts.CommandRunner) *Servi
 	if cfg.AppEnv == "local" {
 		runner = NewNoopReloadRunner(baseRunner)
 	}
-	return NewService(runner, cmd, paths)
+	return NewService(runner, cmd, paths, opts...)
 }
