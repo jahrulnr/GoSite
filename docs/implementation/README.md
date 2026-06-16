@@ -13,6 +13,7 @@ Subagent-oriented implementation plan for the GoSite oneshot backend.
 | [WAVE-SA-5](./WAVE-SA-5.md) | Docker, files, mount, cron, jobs | 10 tests per package |
 | [WAVE-SA-6](./WAVE-SA-6.md) | Splunk Lite + Grafana Lite + audit | Query/metrics tests |
 | [WAVE-SA-7](./WAVE-SA-7.md) | System, settings, logs, database viewer | Dashboard aggregate |
+| [WAVE-PLUGIN-G](./WAVE-PLUGIN-G.md) | Remote plugin distribution (seq 20) | Shipped v1.3.1 |
 
 ## Shared contracts (Wave 0)
 
@@ -30,5 +31,7 @@ Subagent-oriented implementation plan for the GoSite oneshot backend.
 ## References
 
 - [architecture.md](../architecture.md)
+- [architecture/plugin-platform.md](../architecture/plugin-platform.md)
 - [api-inventory.md](../api-inventory.md)
 - [sequences/](../sequences/)
+- [DOCS-MAINTENANCE.md](../DOCS-MAINTENANCE.md)

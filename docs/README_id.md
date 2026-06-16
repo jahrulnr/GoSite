@@ -8,11 +8,12 @@ Dokumentasi runtime, API, dan migrasi dari **BangunSite (Laravel)** ke **GoSite 
 
 | Kategori | Status |
 |----------|--------|
-| Arsitektur & domain model | ✅ Selaras implementasi |
-| Semua sequence (01–19) + nginx-repair | ✅ Diperbarui ke GoSite |
-| Template plugin | `plugins/_templates/` (scaffold tier 0–3) |
-| `api/openapi.yaml` | Sumber kontrak API terbaru |
-| `migration/` | Referensi legacy + status fase implementasi |
+| Arsitektur & domain model | Sebagian besar selaras — lihat [DOCS-MAINTENANCE.md](./DOCS-MAINTENANCE.md) |
+| Sequence 01–20 + nginx-repair | Diperbarui (seq 20 = gelombang G, v1.3.1) |
+| Template plugin | `plugins/_templates/` |
+| `api/openapi.yaml` | Kontrak API — wave G plugin routes ✅ |
+| `migration/` | Referensi legacy BangunSite |
+| `implementation/` | WAVE-SA-1..7 + [WAVE-PLUGIN-G](./implementation/WAVE-PLUGIN-G.md) |
 
 ## Sumber kebenaran
 
@@ -81,6 +82,13 @@ Dokumentasi runtime, API, dan migrasi dari **BangunSite (Laravel)** ke **GoSite 
 │  Log viewer                                                 │
 ├─────────────────────────────────────────────────────────────┤
 │  SQLite database viewer                                     │
+├─────────────────────────────────────────────────────────────┤
+│  Plugins (v1.3+)                                            │
+│  ├── Artifact + remote install (GitHub/GitLab/URL/catalog)    │
+│  ├── Tier 0 webhooks + tier 1 go-plugin runtime             │
+│  └── Keyring, provenance, install log                       │
+├─────────────────────────────────────────────────────────────┤
+│  Terminal (floating)                                          │
 └─────────────────────────────────────────────────────────────┘
 ```
 

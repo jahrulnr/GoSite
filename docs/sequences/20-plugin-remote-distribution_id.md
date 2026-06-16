@@ -1,6 +1,8 @@
 # Sequence: Distribusi plugin remote (GitHub / GitLab / URL)
 
-Perluasan dari [19-plugin-installer_id.md](./19-plugin-installer_id.md). **Status:** Proposed (gelombang G)
+Perluasan dari [19-plugin-installer_id.md](./19-plugin-installer_id.md). **Status:** Implemented (gelombang G — **v1.3.1**)
+
+> Checklist implementasi: [20-plugin-remote-distribution-impl.md](./20-plugin-remote-distribution-impl.md)
 
 Lihat dokumen EN lengkap: [20-plugin-remote-distribution.md](./20-plugin-remote-distribution.md).
 

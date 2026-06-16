@@ -78,6 +78,7 @@ Preact frontend (`web/`) calls `/api/v1/*` only.
 | `system` | `internal/service/system` | CPU, RAM, disk, network |
 | `settings` | `internal/service/settings` | User profile |
 | `uimeta` | `internal/service/uimeta` | UI hints & labels |
+| `plugin` | `internal/service/plugin` | Registry, hooks, tier 0/1 runtime, remote install (`remote/`), catalog, health supervisor |
 | `terminal` | `internal/terminal` | Floating xterm.js (topbar popup) — PTY session registry, rolling dump 256KB to `/tmp`, 12h sticky TTL, 1-writer-N-readers multi-attach |
 
 ## Nginx: draft vs active

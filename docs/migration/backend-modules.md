@@ -20,7 +20,9 @@ gosite/
 │   │   └── docker/
 │   ├── observability/       # splunklite, grafanalite
 │   ├── repository/sqlite/
-│   └── service/             # auth, website, ssl, cron, files, …
+│   ├── repository/sqlite/
+│   └── service/             # auth, website, ssl, cron, files, plugin, …
+│       └── plugin/          # registry, hooks, remote/, catalog/
 ├── web/                     # Preact SPA
 ├── config/                  # nginx, webconfig, start.sh
 └── docs/
@@ -72,6 +74,16 @@ infra/       → nginx, job worker, exec, filesystem
 | Cron scheduler + worker SSE | `service/cron`, `infra/job` |
 | Splunk Lite, Grafana Lite | `observability/*` |
 | DB viewer | `service/database` |
+
+### Phase 4 — Plugin platform ✅
+
+| Task | Package |
+|------|-------|
+| Hook bus + registry (seq 19) | `internal/service/plugin` |
+| Remote install wave G (seq 20) | `internal/service/plugin/remote/`, `catalog/` |
+| Panel + CLI | `web/src/views/Plugins*.tsx`, `internal/cli/plugin.go` |
+
+> Post-cutover features: document in `docs/sequences/` — not in Laravel phase tables below.
 
 ### Tidak ported / deprecated
 

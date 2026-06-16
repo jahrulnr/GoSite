@@ -78,6 +78,7 @@ Frontend Preact (`web/`) hanya memanggil `/api/v1/*`.
 | `system` | `internal/service/system` | CPU, RAM, disk, network |
 | `settings` | `internal/service/settings` | Profile user |
 | `uimeta` | `internal/service/uimeta` | Hints & labels untuk UI |
+| `plugin` | `internal/service/plugin` | Registry, hooks, runtime tier 0/1, install remote (`remote/`), catalog, supervisor |
 
 ## Nginx: draft vs aktif
 

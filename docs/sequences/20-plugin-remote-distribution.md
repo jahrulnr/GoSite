@@ -1,6 +1,8 @@
 # Sequence: Plugin remote distribution (GitHub / GitLab / URL)
 
-Extension to [19-plugin-installer.md](./19-plugin-installer.md). **Status:** Proposed (wave G — not implemented)
+Extension to [19-plugin-installer.md](./19-plugin-installer.md). **Status:** Implemented (wave G — **v1.3.1**)
+
+> Implementation checklist: [20-plugin-remote-distribution-impl.md](./20-plugin-remote-distribution-impl.md)
 
 ## Problem
 

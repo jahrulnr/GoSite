@@ -10,11 +10,12 @@ Runtime, API, and migration docs for **GoSite** (Go + Preact hosting panel).
 
 | Category | Status |
 |----------|--------|
-| Architecture & domain model | Aligned with implementation |
-| All sequences (01–19) + nginx-repair | Updated for GoSite |
+| Architecture & domain model | Mostly aligned — see [DOCS-MAINTENANCE.md](./DOCS-MAINTENANCE.md) |
+| Sequences 01–20 + nginx-repair | Updated for GoSite (seq 20 = wave G, v1.3.1) |
 | Plugin templates | `plugins/_templates/` (tier 0–3 scaffolds) |
-| `api/openapi.yaml` | Canonical API contract |
-| `migration/` | Legacy reference + module map |
+| `api/openapi.yaml` | Canonical API contract (plugin wave G included) |
+| `migration/` | Legacy BangunSite reference (not updated per feature) |
+| `implementation/` | WAVE-SA-1..7 + [WAVE-PLUGIN-G](./implementation/WAVE-PLUGIN-G.md) |
 
 ## Source of truth
 
@@ -32,6 +33,8 @@ Runtime, API, and migration docs for **GoSite** (Go + Preact hosting panel).
 | Document | Description |
 |----------|-------------|
 | [architecture.md](./architecture.md) | Container runtime, Go modules, persistent paths |
+| [architecture/plugin-platform.md](./architecture/plugin-platform.md) | Plugin ADR (tier 0–3, hooks, remote install) |
+| [DOCS-MAINTENANCE.md](./DOCS-MAINTENANCE.md) | Doc layers, drift audit, ship/release checklist |
 | [domain-model.md](./domain-model.md) | SQLite entities & filesystem artifacts |
 | [api-inventory.md](./api-inventory.md) | REST API map |
 | [nginx-repair.md](./nginx-repair.md) | `nginx -t` fallback + auto-fix |
@@ -39,6 +42,7 @@ Runtime, API, and migration docs for **GoSite** (Go + Preact hosting panel).
 | [sequences/](./sequences/) | Mermaid flow diagrams per feature |
 | [plugins/_templates/](../plugins/_templates/) | Plugin development scaffolds |
 | [migration/](./migration/) | BangunSite migration notes |
+| [implementation/](./implementation/) | Implementation wave trackers (SA + plugin) |
 
 ## Wiki export
 

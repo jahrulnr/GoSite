@@ -1948,6 +1948,105 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /plugins/catalog:
+    get:
+      tags: [Plugins]
+      summary: Search curated plugin catalog
+      operationId: getPluginCatalog
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Optional filter on plugin id, name, vendor, or description.
+      responses:
+        "200":
+          description: Catalog entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PluginCatalogListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /plugins/catalog/{vendor}/{name}:
+    get:
+      tags: [Plugins]
+      summary: Get one catalog entry
+      operationId: getPluginCatalogEntry
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/PluginVendor"
+        - $ref: "#/components/parameters/PluginName"
+      responses:
+        "200":
+          description: Catalog entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PluginCatalogEntryResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /plugins/install/settings:
+    get:
+      tags: [Plugins]
+      summary: Remote install host settings (read-only)
+      operationId: getPluginInstallSettings
+      description: |
+        Snapshot of `PLUGIN_REMOTE_INSTALL`, trust mode, allowlist, token presence,
+        and optional Docker build flags. Does not expose secret token values.
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "200":
+          description: Install settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PluginInstallSettings"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /plugins/install/resolve:
+    post:
+      tags: [Plugins]
+      summary: Preview a remote plugin source
+      description: |
+        Resolves `source` to digest, capabilities, and permissions without installing.
+        Returns a short-lived `resolveToken` for TOCTOU-safe install.
+      operationId: postPluginInstallResolve
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginResolveRequest"
+      responses:
+        "200":
+          description: Resolve preview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PluginResolvePreviewResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
   /plugins/install:
     post:
       tags: [Plugins]
@@ -1955,8 +2054,14 @@ paths:
       description: |
         Installs a plugin artifact, parses `manifest.json`, checks host
         compatibility, stores the artifact by digest, and leaves it in
-        `installed` state. The implementation accepts multipart upload field
-        `artifact` or a JSON string body for manifest-only/dev installs.
+        `installed` state.
+
+        Accepts:
+        - multipart field `artifact` (+ optional `sha256`) for air-gapped upload;
+        - JSON `content` manifest string for dev/testing;
+        - JSON `source` for remote install (wave G) with optional `permissions_ack`
+          and `resolveToken` from `POST /plugins/install/resolve`.
+
         Re-installing the same `(plugin_id, version)` is accepted only when the
         existing registry row is `install_failed`; other duplicate versions
         return `409`.
@@ -3445,6 +3550,29 @@ components:
           type: object
           additionalProperties: true
           description: Data-only UI contribution definitions rendered by the host.
+        source_type:
+          type: string
+          description: Remote install resolver type (e.g. url, github-release).
+        source_ref:
+          type: string
+          description: Human-readable source reference (URL, repo@tag, …).
+        resolved_url:
+          type: string
+          description: Final artifact download URL when applicable.
+        install_path:
+          type: string
+          enum: [release, build]
+        source_commit:
+          type: string
+          description: Optional VCS commit SHA linked to the artifact.
+        permissions_ack_at:
+          type: string
+          format: date-time
+          nullable: true
+        install_log:
+          type: array
+          items:
+            $ref: "#/components/schemas/PluginInstallLogStep"
         created_at:
           type: string
           format: date-time
@@ -3470,7 +3598,7 @@ components:
 
     PluginInstallJSONRequest:
       type: object
-      required: [content]
+      description: Manifest-only dev install or remote install via source.
       properties:
         name:
           type: string
@@ -3479,6 +3607,186 @@ components:
         content:
           type: string
           description: Manifest JSON string for development/testing clients.
+        source:
+          $ref: "#/components/schemas/PluginSource"
+        permissions_ack:
+          type: boolean
+          description: Acknowledge declared capabilities before remote install.
+        resolveToken:
+          type: string
+          description: Token from POST /plugins/install/resolve preview.
+
+    PluginSource:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum:
+            - url
+            - github-release
+            - github
+            - github-build
+            - gitlab-release
+            - gitlab
+            - gitlab-build
+            - git-ref
+        url:
+          type: string
+          format: uri
+        repo:
+          type: string
+          description: owner/repo or GitLab path with namespace
+        tag:
+          type: string
+        asset:
+          type: string
+          description: Optional release asset name override
+        sha256:
+          type: string
+          description: Required for type=url
+        installPath:
+          type: string
+          enum: [release, build]
+        resolveToken:
+          type: string
+
+    PluginResolveRequest:
+      type: object
+      required: [source]
+      properties:
+        source:
+          $ref: "#/components/schemas/PluginSource"
+
+    PluginResolvePreview:
+      type: object
+      properties:
+        plugin_id:
+          type: string
+        version:
+          type: string
+        tier:
+          type: integer
+        signed:
+          type: boolean
+        keyId:
+          type: string
+        sha256:
+          type: string
+        size:
+          type: integer
+          format: int64
+        url:
+          type: string
+          format: uri
+        minGoSiteVersion:
+          type: string
+        source_type:
+          type: string
+        source_ref:
+          type: string
+        install_path:
+          type: string
+        sourceCommit:
+          type: string
+        sourceRepository:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+        hooks:
+          type: array
+          items:
+            type: string
+        supportedPlatforms:
+          type: array
+          items:
+            $ref: "#/components/schemas/PluginPlatform"
+        resolveToken:
+          type: string
+        resolveExpiresAt:
+          type: string
+          format: date-time
+
+    PluginResolvePreviewResponse:
+      type: object
+      required: [preview]
+      properties:
+        preview:
+          $ref: "#/components/schemas/PluginResolvePreview"
+
+    PluginPlatform:
+      type: object
+      properties:
+        os:
+          type: string
+        arch:
+          type: string
+
+    PluginInstallSettings:
+      type: object
+      properties:
+        remote_install_enabled:
+          type: boolean
+        trust_mode:
+          type: string
+        allowed_hosts:
+          type: array
+          items:
+            type: string
+        allow_unsigned:
+          type: boolean
+        github_token_configured:
+          type: boolean
+        gitlab_token_configured:
+          type: boolean
+        build_enabled:
+          type: boolean
+
+    PluginCatalogEntry:
+      type: object
+      properties:
+        plugin_id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        vendor:
+          type: string
+        source:
+          $ref: "#/components/schemas/PluginSource"
+
+    PluginCatalogListResponse:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/PluginCatalogEntry"
+
+    PluginCatalogEntryResponse:
+      type: object
+      required: [entry]
+      properties:
+        entry:
+          $ref: "#/components/schemas/PluginCatalogEntry"
+
+    PluginInstallLogStep:
+      type: object
+      properties:
+        step:
+          type: string
+        at:
+          type: string
+          format: date-time
+        status:
+          type: string
+        failure_class:
+          type: string
+        detail:
+          type: string
 
     PluginVersionRequest:
       type: object

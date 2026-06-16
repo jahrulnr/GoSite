@@ -258,3 +258,28 @@ big-endian monotonic sequence number carry raw PTY output.
 See [`docs/sequences/10-floating-terminal.md`](sequences/10-floating-terminal.md)
 for the full lifecycle (initial attach, refresh, server restart, sweeper
 kill, multi-attach).
+
+---
+
+## Plugins
+
+Greenfield REST (no Laravel equivalent). Canonical detail: `api/openapi.yaml` (base install routes) + [sequence 19](sequences/19-plugin-installer.md) / [sequence 20](sequences/20-plugin-remote-distribution-impl.md).
+
+| GoSite | Method | Purpose |
+|--------|--------|---------|
+| `GET /plugins` | GET | Installed registry |
+| `POST /plugins/install` | POST | Multipart zip **or** JSON `{ "source": … }` **or** manifest |
+| `POST /plugins/install/resolve` | POST | Preview remote source (URL, GitHub, GitLab, catalog ref) |
+| `GET /plugins/install/settings` | GET | Remote install flags (read-only from env) |
+| `GET /plugins/catalog` | GET | Bundled curated catalog search |
+| `GET /plugins/catalog/{vendor}/{name}` | GET | One catalog entry |
+| `POST /plugins/{vendor}/{name}/enable` | POST | Enable version |
+| `POST /plugins/{vendor}/{name}/disable` | POST | Disable |
+| `POST /plugins/{vendor}/{name}/switch` | POST | Switch active version |
+| `DELETE /plugins/{vendor}/{name}/versions/{version}` | DELETE | Uninstall / purge |
+| `GET/PUT /plugins/{vendor}/{name}/versions/{version}/config` | GET/PUT | Encrypted plugin config |
+| `GET/POST/DELETE /plugins/keyring` | * | Trusted signing keys (admin) |
+
+CLI (same APIs): `gosite plugin list|resolve|install|catalog`.
+
+**OpenAPI gap:** resolved in v1.3.1 doc pass — see `api/openapi.yaml` for wave G routes.

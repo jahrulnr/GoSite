@@ -56,7 +56,8 @@ Rollback on failed nginx reload (existing pattern in `website.Toggle`) applies t
 2. **P1 — Registry** — Implemented: SQLite `plugin_versions`, install/enable/disable/switch/uninstall, signature/keyring checks, reconcile, and admin UI.
 3. **P2 — Tier 1 runtime** — Implemented: `pkg/pluginrpc`, HashiCorp go-plugin subprocess manager, health supervisor, and developer templates under `plugins/_templates/`.
 4. **P3 — Tier 0 + config** — Implemented: HTTP webhooks (`Tier0Caller`), encrypted plugin config (`plugin_configs`), host-rendered sidebar/config forms.
-5. **P4+ — Deferred** — WASM sandbox (tier 2), scoped API tokens/egress policies, marketplace publishing, tier 3 `.so` community support, **remote distribution (sequence 20)**.
+5. **P4 — Remote distribution** — Implemented (wave G, v1.3.1): URL/GitHub/GitLab/git-ref/catalog install, provenance, install log, keyring UI, optional Docker build — [sequence 20](../sequences/20-plugin-remote-distribution.md).
+6. **P5+ — Deferred** — WASM sandbox (tier 2), scoped API tokens/egress policies, marketplace publishing, tier 3 `.so` community support.
 
 ## Alternatives considered
 
