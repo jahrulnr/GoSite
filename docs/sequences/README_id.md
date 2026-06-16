@@ -41,6 +41,7 @@ Diagram alur fitur GoSite. Bagian **Legacy BangunSite** (jika ada) disimpan seba
 | 17 | [17-splunk-lite.md](./17-splunk-lite.md) | Audit + log query | ✅ |
 | 18 | [18-grafana-lite.md](./18-grafana-lite.md) | Traffic metrics | ✅ |
 | 19 | [19-plugin-installer.md](./19-plugin-installer.md) | Plugin installer + compatibility contract | ✅ |
+| 20 | [20-plugin-remote-distribution.md](./20-plugin-remote-distribution.md) | Install remote GitHub/GitLab/URL — gelombang G | 📋 Proposed |
 
 ## Wiki GitHub
 

@@ -41,6 +41,7 @@ GoSite feature flow diagrams. **Legacy BangunSite** sections (if any) are kept a
 | 17 | [17-splunk-lite.md](./17-splunk-lite.md) | Audit + log query | ✅ |
 | 18 | [18-grafana-lite.md](./18-grafana-lite.md) | Traffic metrics | ✅ |
 | 19 | [19-plugin-installer.md](./19-plugin-installer.md) | Plugin installer + compatibility contract | ✅ |
+| 20 | [20-plugin-remote-distribution.md](./20-plugin-remote-distribution.md) | Remote install (GitHub/GitLab/URL) — wave G | 📋 Proposed |
 
 ## Wiki GitHub
 

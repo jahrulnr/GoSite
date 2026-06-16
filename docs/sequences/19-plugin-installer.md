@@ -19,6 +19,7 @@ Deferred to a future wave:
 
 - Scoped plugin API tokens and egress policies (UI scaffolding only).
 - Tier 2 WASM and tier 3 `.so` remain explicitly out of scope for this implementation wave.
+- **Remote distribution** (install from GitHub/GitLab/URL without manual zip upload) — see [20-plugin-remote-distribution.md](./20-plugin-remote-distribution.md).
 
 ## Developer templates
 
