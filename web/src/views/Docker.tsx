@@ -4,6 +4,7 @@ import type { DockerContainer } from '../api/types';
 import { IconList, IconRefresh, IconTrash } from '../components/Icons';
 import { AsyncView, Badge, EmptyState, Modal } from '../components/Ui';
 import { Page } from '../components/Layout';
+import { humanizeError } from '../lib/errors';
 import { useAction, useAsync } from '../lib/hooks';
 import { useStore } from '../lib/store';
 
@@ -24,15 +25,23 @@ export function DockerView() {
   const logState = useAsync(() => (logId ? docker.logs(logId) : Promise.resolve([])), [logId]);
 
   const doRestart = async (row: DockerContainer) => {
-    await restart.run(row.id);
-    toast(`${row.name} restarted`);
-    state.reload();
+    try {
+      await restart.run(row.id);
+      toast(`${row.name} restarted`);
+      state.reload();
+    } catch (err) {
+      toast(humanizeError(err as Error, meta), 'error');
+    }
   };
 
   const doStop = async (row: DockerContainer) => {
-    await stop.run(row.id);
-    toast(`${row.name} stopped`);
-    state.reload();
+    try {
+      await stop.run(row.id);
+      toast(`${row.name} stopped`);
+      state.reload();
+    } catch (err) {
+      toast(humanizeError(err as Error, meta), 'error');
+    }
   };
 
   return (

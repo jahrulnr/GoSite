@@ -17,6 +17,7 @@ import {
   IconSearch,
   IconServer,
   IconSettings,
+  IconTerminal,
 } from './Icons';
 import { ErrorState, Loading, Toasts } from './Ui';
 import { initials, envLabel } from '../lib/format';
@@ -24,6 +25,8 @@ import { mergePanelMeta } from '../lib/meta';
 import { useAction, useAsync } from '../lib/hooks';
 import { navigate, useRoute } from '../lib/router';
 import { useStore } from '../lib/store';
+import { useTerminalStore } from '../lib/terminalStore';
+import { TerminalWindow } from './TerminalWindow';
 import { Lockscreen, Login } from '../views/Login';
 import { CronView } from '../views/Cron';
 import { DashboardView } from '../views/Dashboard';
@@ -371,6 +374,7 @@ export function Shell() {
           <div class="topbar-spacer" />
           <div class="row">
             <HealthPill />
+            <TerminalButton />
             {meta?.auth?.lockscreen_enabled && (
               <button type="button" class="btn ghost" disabled={locking} onClick={lock}>
                 {locking ? '…' : <><IconLock /> Lock</>}
@@ -385,7 +389,24 @@ export function Shell() {
           <RouteView path={route.path} params={route.params} />
         </div>
       </main>
+      <TerminalWindow />
       <Toasts />
     </div>
+  );
+}
+
+function TerminalButton() {
+  const terminal = useTerminalStore();
+  const active = terminal.open;
+  return (
+    <button
+      type="button"
+      class="btn ghost topbar-icon-btn--terminal"
+      data-active={active}
+      title={active ? 'Hide terminal' : 'Open terminal'}
+      onClick={() => terminal.toggleTerminal()}
+    >
+      <IconTerminal /> Terminal
+    </button>
   );
 }

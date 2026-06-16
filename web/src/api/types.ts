@@ -155,9 +155,43 @@ export interface FileEntry {
   mode: string;
   is_dir: boolean;
   mod_time: string;
+  kind: string;
+  mime_type: string;
+  extension: string;
+  editable: boolean;
+  viewable: boolean;
+  archive: boolean;
+  symlink: boolean;
+  target?: string;
+}
+
+export interface FileTools {
+  unzip: boolean;
+  tar: boolean;
+  gzip: boolean;
+}
+
+export interface FileListResponse {
+  entries: FileEntry[];
+  tools: FileTools;
+}
+
+export interface FileContentResponse {
+  content: string;
+  entry: FileEntry;
+  encoding: string;
 }
 
 // ---- Mounts ----
+
+export interface MountS3Config {
+  bucket?: string;
+  endpoint?: string;
+  region?: string;
+  access_key?: string;
+  secret_key?: string;
+  path_style?: boolean;
+}
 
 export interface Mount {
   device: string;
@@ -167,6 +201,7 @@ export interface Mount {
   dump: string;
   fsck: string;
   mounted: boolean;
+  s3?: MountS3Config;
 }
 
 // ---- Cron ----

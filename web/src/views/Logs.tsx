@@ -287,6 +287,7 @@ export function LogsView() {
 
       const url = observability.tailUrl({
         source: source.query.source,
+        q: query.trim() === '*' ? '' : query,
         site: source.query.site,
         from,
       });

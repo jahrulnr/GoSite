@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { render, cleanup } from '@testing-library/preact';
+import { fireEvent, render, cleanup, waitFor } from '@testing-library/preact';
 import { AppProvider, useStore } from '../lib/store';
 import type { ComponentChildren } from 'preact';
 import { useEffect } from 'preact/hooks';
@@ -103,4 +103,43 @@ describe('WebsiteModal select', () => {
     // The 3rd field label is dynamic: "Upstream" for proxy, "Path" for static.
     expect(labels).toContain('Upstream');
     expect(labels).not.toContain('Path');
-  });});
+  });
+
+  it('validates and saves proxy sites with type, upstream, active, and generated path', async () => {
+    const validate = vi.fn(async () => ({ valid: true }));
+    const create = vi.fn(async () => ({ ...SAMPLE_SITE, id: 1 }));
+    const endpoints = await import('../api/endpoints');
+    const api = (endpoints as unknown as { websites: { validate: typeof validate; create: typeof create } }).websites;
+    api.validate = validate;
+    api.create = create;
+
+    const { container } = render(
+      <AppProvider>
+        <SetMeta meta={META} />
+        <WebsiteModal site={{ ...SAMPLE_SITE, name: 'bangunsoft', domain: 'bangunsoft.com', upstream: 'http://banguninfo_vsh:8234', active: true }} onClose={vi.fn()} onSaved={vi.fn()} />
+      </AppProvider>,
+    );
+
+    const validateButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.includes('Validate'));
+    expect(validateButton).toBeTruthy();
+    fireEvent.click(validateButton as HTMLButtonElement);
+    await waitFor(() => expect(validate).toHaveBeenCalled());
+    expect(validate).toHaveBeenCalledWith(expect.objectContaining({
+      domain: 'bangunsoft.com',
+      type: 'proxy',
+      upstream: 'http://banguninfo_vsh:8234',
+      active: true,
+      path: '/www/bangunsoft',
+    }));
+
+    fireEvent.submit(container.querySelector('#website-form') as HTMLFormElement);
+    await waitFor(() => expect(create).toHaveBeenCalled());
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      domain: 'bangunsoft.com',
+      type: 'proxy',
+      upstream: 'http://banguninfo_vsh:8234',
+      active: true,
+      path: '/www/bangunsoft',
+    }));
+  });
+});

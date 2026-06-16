@@ -3,6 +3,7 @@ import { ssl, websites } from '../api/endpoints';
 import type { Website, WebsiteCreateRequest } from '../api/types';
 import {
   IconEdit,
+  IconPause,
   IconPlay,
   IconPlus,
   IconSettings,
@@ -10,16 +11,27 @@ import {
   IconTrash,
 } from '../components/Icons';
 import { JobStreamModal } from '../components/JobStream';
+import { CodeEditor } from '../components/CodeEditor';
 import { AsyncView, Badge, EmptyState, ErrorState, Field, InlineNotice, Modal, Spinner } from '../components/Ui';
 import { Page, optionLabel } from '../components/Layout';
 import { formatDate, displayPath } from '../lib/format';
 import { humanizeError, humanizeValidation } from '../lib/errors';
 import { useAction, useAsync } from '../lib/hooks';
+import { validateSiteNginx } from '../lib/nginxValidate';
 import { useStore } from '../lib/store';
 
 export function WebsiteModal({ site, onClose, onSaved }: Readonly<{ site: Website; onClose: () => void; onSaved: () => void }>) {
   const { meta, toast } = useStore();
   const pathHint = meta?.websites?.static_path_hint ?? '';
+  const webRoot = meta?.websites?.web_root ?? '';
+  const proxyPathFor = (body: WebsiteCreateRequest) => {
+    if (body.type !== 'proxy' || body.path) return body.path;
+    const slug = (body.name || body.domain || 'proxy')
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'proxy';
+    return `${webRoot.replace(/\/+$/, '')}/${slug}`.replace(/^\/\//, '/');
+  };
   const [form, setForm] = useState<WebsiteCreateRequest>({
     name: site.name,
     domain: site.domain,
@@ -36,15 +48,26 @@ export function WebsiteModal({ site, onClose, onSaved }: Readonly<{ site: Websit
   const validate = useAction(websites.validate);
 
   const setField = (key: keyof WebsiteCreateRequest, value: string | boolean) => setForm((current) => ({ ...current, [key]: value }));
+  const payload = (): WebsiteCreateRequest => ({ ...form, path: proxyPathFor(form) });
   const onValidate = async () => {
-    const res = await validate.run(form.domain, form.path);
-    setValidation(humanizeValidation(res?.valid ? 'Valid' : res?.reason ?? res?.message ?? 'Not valid', meta));
+    try {
+      const res = await validate.run({ ...payload(), id: site.id || undefined });
+      const result = humanizeValidation(res?.valid ? 'Valid' : res?.reason ?? res?.message ?? 'Not valid', meta);
+      setValidation(result);
+      toast(result.ok ? 'Validation passed' : result.text, result.ok ? 'info' : 'error');
+    } catch (err) {
+      toast(humanizeError(err as Error, meta), 'error');
+    }
   };
   const onSubmit = async (event: Event) => {
     event.preventDefault();
-    await save.run(form);
-    toast(`${form.domain} saved`);
-    onSaved();
+    try {
+      await save.run(payload());
+      toast(`${form.domain} saved`);
+      onSaved();
+    } catch (err) {
+      toast(humanizeError(err as Error, meta), 'error');
+    }
   };
   const pathFieldHint = form.type === 'proxy'
     ? meta?.websites?.proxy_upstream_hint
@@ -89,7 +112,9 @@ export function WebsiteModal({ site, onClose, onSaved }: Readonly<{ site: Websit
           <input type="checkbox" checked={Boolean(form.active)} onChange={(e) => setField('active', (e.target as HTMLInputElement).checked)} />
           <span>Active after save</span>
         </label>
-        {validation?.ok && <InlineNotice kind="ok">{validation.text}</InlineNotice>}
+        {validation && (
+          <InlineNotice kind={validation.ok ? 'ok' : 'danger'}>{validation.text}</InlineNotice>
+        )}
         {save.error && <ErrorState error={save.error} message={humanizeError(save.error, meta)} />}
       </form>
     </Modal>
@@ -107,18 +132,26 @@ export function SslModal({ site, onClose }: Readonly<{ site: Website; onClose: (
 
   const saveManual = async (event: Event) => {
     event.preventDefault();
-    await manual.run();
-    toast(`${site.domain} SSL updated`);
-    status.reload();
+    try {
+      await manual.run();
+      toast(`${site.domain} SSL updated`);
+      status.reload();
+    } catch (err) {
+      toast(humanizeError(err as Error), 'error');
+    }
   };
 
   const runCertbot = async () => {
-    const res = await certbot.run();
-    if (res?.job_id) {
-      setStreamUrl(ssl.certbotStreamUrl(site.id, res.job_id));
+    try {
+      const res = await certbot.run();
+      if (res?.job_id) {
+        setStreamUrl(ssl.certbotStreamUrl(site.id, res.job_id));
+      }
+      toast(res?.message ?? 'Certbot queued');
+      status.reload();
+    } catch (err) {
+      toast(humanizeError(err as Error), 'error');
     }
-    toast(res?.message ?? 'Certbot queued');
-    status.reload();
   };
 
   return (
@@ -152,24 +185,69 @@ function WebsiteConfigModal({ site, onClose }: Readonly<{ site: Website; onClose
   const { toast } = useStore();
   const state = useAsync(() => websites.nginxConfig(site.id), [site.id]);
   const [config, setConfig] = useState('');
+  const [notice, setNotice] = useState<{ kind: 'ok' | 'danger'; text: string }>();
+  const test = useAction(() => websites.testNginxConfig(site.id, config));
   const save = useAction(() => websites.updateNginxConfig(site.id, config));
 
   useEffect(() => {
     if (state.data !== undefined) setConfig(state.data);
   }, [state.data]);
 
+  const onTest = async () => {
+    setNotice(undefined);
+    try {
+      await test.run();
+      setNotice({ kind: 'ok', text: 'Configuration syntax OK' });
+      toast('Configuration syntax OK');
+    } catch (err) {
+      const msg = humanizeError(err as Error);
+      setNotice({ kind: 'danger', text: msg });
+      toast(msg, 'error');
+    }
+  };
+
   const submit = async (event: Event) => {
     event.preventDefault();
-    await save.run();
-    toast(`${site.domain} config saved`);
+    setNotice(undefined);
+    try {
+      await save.run();
+      setNotice({ kind: 'ok', text: `${site.domain} config saved` });
+      toast(`${site.domain} config saved`);
+    } catch (err) {
+      const msg = humanizeError(err as Error);
+      setNotice({ kind: 'danger', text: msg });
+      toast(msg, 'error');
+    }
   };
 
   return (
-    <Modal title={`Nginx config · ${site.domain}`} onClose={onClose} wide footer={<button type="submit" form="website-config" class="btn primary" disabled={save.loading}>{save.loading ? <Spinner /> : 'Save config'}</button>}>
+    <Modal
+      title={`Nginx config · ${site.domain}`}
+      onClose={onClose}
+      wide
+      footer={
+        <>
+          {notice && <InlineNotice kind={notice.kind}>{notice.text}</InlineNotice>}
+          <button type="button" class="btn" onClick={onTest} disabled={test.loading}>
+            {test.loading ? <Spinner /> : <><IconShield /> Test</>}
+          </button>
+          <button type="submit" form="website-config" class="btn primary" disabled={save.loading}>
+            {save.loading ? <Spinner /> : 'Save config'}
+          </button>
+        </>
+      }
+    >
       <AsyncView state={state}>
         {() => (
           <form id="website-config" onSubmit={submit}>
-            <textarea class="textarea config-editor" value={config} onInput={(e) => setConfig((e.target as HTMLTextAreaElement).value)} />
+            <CodeEditor
+              value={config}
+              onChange={setConfig}
+              language="nginx"
+              minHeight="360px"
+              placeholder="# nginx site configuration"
+              onValidate={(text, signal) => validateSiteNginx(site.id, text, signal)}
+            />
             {save.error && <ErrorState error={save.error} />}
           </form>
         )}
@@ -188,16 +266,24 @@ export function WebsitesView() {
   const remove = useAction(websites.remove);
 
   const onToggle = async (site: Website) => {
-    await toggle.run(site.id);
-    toast(`${site.domain} updated`);
-    state.reload();
+    try {
+      await toggle.run(site.id);
+      toast(`${site.domain} updated`);
+      state.reload();
+    } catch (err) {
+      toast(humanizeError(err as Error, meta), 'error');
+    }
   };
 
   const onRemove = async (site: Website) => {
     if (!globalThis.confirm(`Delete ${site.domain}?`)) return;
-    await remove.run(site.id, false);
-    toast(`${site.domain} deleted`);
-    state.reload();
+    try {
+      await remove.run(site.id, false);
+      toast(`${site.domain} deleted`);
+      state.reload();
+    } catch (err) {
+      toast(humanizeError(err as Error, meta), 'error');
+    }
   };
 
   return (
@@ -229,7 +315,9 @@ export function WebsitesView() {
                       <td><Badge kind={site.active ? 'ok' : 'off'}>{site.active ? 'active' : 'disabled'}</Badge></td>
                       <td><Badge kind={site.ssl ? 'ok' : 'off'}>{site.ssl ? 'enabled' : 'off'}</Badge></td>
                       <td class="right nowrap">
-                        <button type="button" class="btn sm ghost" onClick={() => onToggle(site)} title="Toggle active"><IconPlay /></button>
+                        <button type="button" class="btn sm ghost" onClick={() => onToggle(site)} title={site.active ? 'Disable site' : 'Enable site'}>
+                          {site.active ? <IconPause /> : <IconPlay />}
+                        </button>
                         <button type="button" class="btn sm ghost" onClick={() => setSslSite(site)} title="SSL"><IconShield /></button>
                         <button type="button" class="btn sm ghost" onClick={() => setConfigSite(site)} title="Config"><IconSettings /></button>
                         <button type="button" class="btn sm ghost" onClick={() => setEditing(site)} title="Edit"><IconEdit /></button>

@@ -58,12 +58,14 @@ export function useAction<TArgs extends unknown[], TResult>(
 ) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | Error>();
+  const fnRef = useRef(fn);
+  fnRef.current = fn;
   const run = useCallback(
     async (...args: TArgs): Promise<TResult | undefined> => {
       setLoading(true);
       setError(undefined);
       try {
-        return await fn(...args);
+        return await fnRef.current(...args);
       } catch (err) {
         setError(err as Error);
         throw err;
@@ -71,7 +73,6 @@ export function useAction<TArgs extends unknown[], TResult>(
         setLoading(false);
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
   return { run, loading, error };

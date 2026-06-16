@@ -138,6 +138,45 @@ export const IconPlus = (p: P) => (
   </Svg>
 );
 
+export const IconArrowUp = (p: P) => (
+  <Svg {...p}>
+    <path d="M12 19V5" />
+    <path d="m5 12 7-7 7 7" />
+  </Svg>
+);
+
+export const IconCopy = (p: P) => (
+  <Svg {...p}>
+    <rect x="9" y="9" width="13" height="13" rx="2" />
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+  </Svg>
+);
+
+export const IconMove = (p: P) => (
+  <Svg {...p}>
+    <path d="M12 3v18" />
+    <path d="m8 7 4-4 4 4" />
+    <path d="M8 17l4 4 4-4" />
+  </Svg>
+);
+
+export const IconExtract = (p: P) => (
+  <Svg {...p}>
+    <path d="M12 3v10" />
+    <path d="m8 9 4-4 4 4" />
+    <path d="M4 21h16" />
+    <path d="M4 15v4h16v-4" />
+  </Svg>
+);
+
+export const IconSave = (p: P) => (
+  <Svg {...p}>
+    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+    <path d="M17 21v-8H7v8" />
+    <path d="M7 3v5h8" />
+  </Svg>
+);
+
 export const IconTrash = (p: P) => (
   <Svg {...p}>
     <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
@@ -209,5 +248,37 @@ export const IconMemory = (p: P) => (
   <Svg {...p}>
     <rect x="3" y="7" width="18" height="10" rx="1" />
     <path d="M7 7V5M11 7V5M15 7V5M7 21v-2M11 21v-2M15 21v-2" />
+  </Svg>
+);
+
+export const IconTerminal = (p: P) => (
+  <Svg {...p}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M7 9l3 3-3 3M12 15h5" />
+  </Svg>
+);
+
+export const IconWindow = (p: P) => (
+  <Svg {...p}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M3 9h18" />
+  </Svg>
+);
+
+export const IconMinus = (p: P) => (
+  <Svg {...p}>
+    <path d="M5 12h14" />
+  </Svg>
+);
+
+export const IconSquare = (p: P) => (
+  <Svg {...p}>
+    <rect x="4" y="4" width="16" height="16" rx="2" />
+  </Svg>
+);
+
+export const IconPulse = (p: P) => (
+  <Svg {...p}>
+    <path d="M3 12h4l3-9 4 18 3-9h4" />
   </Svg>
 );

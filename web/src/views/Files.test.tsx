@@ -1,9 +1,9 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, waitFor, cleanup } from '@testing-library/preact';
+import { fireEvent, render, screen, waitFor, cleanup } from '@testing-library/preact';
 import type { ComponentChildren } from 'preact';
 import { useEffect } from 'preact/hooks';
 import { AppProvider, useStore } from '../lib/store';
-import type { UiMetaResponse } from '../api/types';
+import type { FileEntry, FileListResponse, UiMetaResponse } from '../api/types';
 import { FilesView } from './Files';
 
 vi.mock('../components/Layout', () => ({
@@ -63,10 +63,27 @@ const PARTIAL_META = {
   },
 } as UiMetaResponse;
 
-const BROWSE_BY_PATH: Record<string, Array<{ name: string; path: string; size: number; mode: string; is_dir: boolean; mod_time: string }>> = {
-  '/www': [{ name: 'default', path: '/www/default', size: 4096, mode: 'drwxr-xr-x', is_dir: true, mod_time: '2026-06-14T15:15:11Z' }],
-  '/storage': [{ name: 'db.sqlite', path: '/storage/db.sqlite', size: 106496, mode: '-rw-r--r--', is_dir: false, mod_time: '2026-06-14T16:02:14Z' }],
-  '/tmp': [],
+function entry(partial: Partial<FileEntry> & Pick<FileEntry, 'name' | 'path' | 'is_dir'>): FileEntry {
+  return {
+    size: partial.is_dir ? 4096 : 106496,
+    mode: partial.is_dir ? 'drwxr-xr-x' : '-rw-r--r--',
+    mod_time: '2026-06-14T15:15:11Z',
+    kind: partial.is_dir ? 'directory' : 'text',
+    mime_type: partial.is_dir ? 'inode/directory' : 'text/plain',
+    extension: '',
+    editable: !partial.is_dir,
+    viewable: !partial.is_dir,
+    archive: false,
+    symlink: false,
+    ...partial,
+  };
+}
+
+const BROWSE_BY_PATH: Record<string, FileListResponse> = {
+  '/www': { entries: [entry({ name: 'default', path: '/www/default', is_dir: true })], tools: { unzip: true, tar: true, gzip: true } },
+  '/storage': { entries: [entry({ name: 'db.sqlite', path: '/storage/db.sqlite', is_dir: false })], tools: { unzip: true, tar: true, gzip: true } },
+  '/www/default': { entries: [entry({ name: 'index.txt', path: '/www/default/index.txt', is_dir: false })], tools: { unzip: true, tar: true, gzip: true } },
+  '/tmp': { entries: [], tools: { unzip: true, tar: true, gzip: true } },
 };
 
 function SetMeta({ meta }: Readonly<{ meta: UiMetaResponse | undefined }>): ComponentChildren {
@@ -79,11 +96,18 @@ function SetMeta({ meta }: Readonly<{ meta: UiMetaResponse | undefined }>): Comp
 
 describe('FilesView', () => {
   let browse: ReturnType<typeof vi.fn>;
+  let action: ReturnType<typeof vi.fn>;
+  let uploadMany: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
-    browse = vi.fn(async (p: string) => BROWSE_BY_PATH[p] ?? []);
+    browse = vi.fn(async (p: string) => BROWSE_BY_PATH[p] ?? { entries: [], tools: { unzip: false, tar: false, gzip: false } });
+    action = vi.fn(async () => ({ message: 'ok' }));
+    uploadMany = vi.fn(async () => ({ message: 'uploaded' }));
     const endpoints = await import('../api/endpoints');
-    (endpoints as unknown as { files: { browse: typeof browse } }).files.browse = browse;
+    const fileApi = (endpoints as unknown as { files: { browse: typeof browse; action: typeof action; uploadMany: typeof uploadMany } }).files;
+    fileApi.browse = browse;
+    fileApi.action = action;
+    fileApi.uploadMany = uploadMany;
   });
 
   afterEach(() => {
@@ -134,5 +158,62 @@ describe('FilesView', () => {
     );
     await waitFor(() => expect(browse).toHaveBeenCalledWith('/tmp'));
     expect(document.body.textContent).toContain('This folder is empty');
+  });
+
+  it('does not move a dragged internal path when dropped on the broad browser surface', async () => {
+    render(
+      <AppProvider>
+        <SetMeta meta={FULL_META} />
+        <FilesView path="/www" />
+      </AppProvider>,
+    );
+    await waitFor(() => expect(browse).toHaveBeenCalledWith('/www'));
+    const panel = document.querySelector('.file-manager');
+    expect(panel).toBeTruthy();
+    fireEvent.drop(panel as Element, {
+      dataTransfer: {
+        types: ['text/gosite-path'],
+        files: [],
+        getData: (key: string) => key === 'text/gosite-path' ? '/www/default' : '',
+      },
+    });
+    expect(action).not.toHaveBeenCalled();
+    expect(uploadMany).not.toHaveBeenCalled();
+  });
+
+  it('moves a dragged internal path only when dropped on an explicit folder target', async () => {
+    render(
+      <AppProvider>
+        <SetMeta meta={FULL_META} />
+        <FilesView path="/www" />
+      </AppProvider>,
+    );
+    await waitFor(() => expect(browse).toHaveBeenCalledWith('/www'));
+    const row = screen.getByText('default').closest('tr');
+    expect(row).toBeTruthy();
+    fireEvent.drop(row as Element, {
+      dataTransfer: {
+        types: ['text/gosite-path'],
+        files: [],
+        getData: (key: string) => key === 'text/gosite-path' ? '/storage/db.sqlite' : '',
+      },
+    });
+    await waitFor(() => expect(action).toHaveBeenCalledWith('move', '/storage/db.sqlite', { to_path: '/www/default/db.sqlite' }));
+  });
+
+  it('copies and moves selected entries to the parent directory', async () => {
+    render(
+      <AppProvider>
+        <SetMeta meta={FULL_META} />
+        <FilesView path="/www/default" />
+      </AppProvider>,
+    );
+    await waitFor(() => expect(browse).toHaveBeenCalledWith('/www/default'));
+    const rowCheckbox = document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')[1];
+    fireEvent.click(rowCheckbox);
+    fireEvent.click(screen.getByTitle('Copy selected to parent'));
+    await waitFor(() => expect(action).toHaveBeenCalledWith('copy', '/www/default/index.txt', { to_path: '/www/index.txt' }));
+    fireEvent.click(screen.getByTitle('Move selected to parent'));
+    await waitFor(() => expect(action).toHaveBeenCalledWith('move', '/www/default/index.txt', { to_path: '/www/index.txt' }));
   });
 });
