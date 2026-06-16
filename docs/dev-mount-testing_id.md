@@ -1,29 +1,33 @@
 # Mount testing in development
 
-GoSite mount QA covers two cases:
+QA mount manager GoSite — [sequences/12-mount-manager_id.md](./sequences/12-mount-manager_id.md). API: `/api/v1/mounts`. Panel: **Mounts**.
 
-1. **Mountable** — valid NFS export, Enable succeeds, status shows Mounted.
-2. **Non-mountable** — invalid device/host, Enable fails with a clear error.
+EN lengkap: [dev-mount-testing.md](./dev-mount-testing.md).
 
-## Docker compose (recommended for TC-M01)
+## Dua skenario
+
+1. **Mountable** — NFS valid, Enable sukses, status Mounted.
+2. **Non-mountable** — host/device invalid, Enable gagal dengan error jelas.
+
+## Docker compose (disarankan)
 
 ```bash
 mkdir -p data/nfs-export
 docker compose up -d
 ```
 
-Inside the `gosite` container, use hostname `nfs` on the compose network.
+Di dalam container `gosite`, hostname `nfs` di jaringan compose.
 
-| Field | Mountable example | Non-mountable example |
-|-------|-------------------|------------------------|
+| Field | Contoh mountable | Contoh gagal |
+|-------|------------------|--------------|
 | Device | `nfs:/export` | `192.0.2.99:/export` |
 | Mount point | `/storage/mnt/nfs-test` | `/storage/mnt/nfs-bad` |
 | Type | `nfs` | `nfs` |
 | Options | `rw,nfsvers=4` | `rw,nfsvers=4` |
 
-Flow: **Add** → row appears (Unmounted) → **Enable** → Mounted or error.
+Alur: **Add** → **Enable** → Mounted atau error.
 
-## Local API (`make dev-api`)
+## `make dev-api`
 
-- **Non-mountable** testing works without NFS (Enable fails on bogus host).
-- **Mountable** testing needs NFS reachable from the host process (install `nfs-common`, point device at a running NFS server) or use `docker compose up` instead.
+- Uji **non-mountable** tanpa NFS.
+- Uji **mountable** butuh NFS dari host atau pakai `docker compose up`.

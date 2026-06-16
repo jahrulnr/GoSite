@@ -8,6 +8,7 @@ GoSite menjalankan `nginx -t` **sebelum setiap reload** dan, jika gagal, mencoba
 |---------|-------------|
 | `POST /api/v1/nginx/reload` | `internal/infra/nginx/service.go` → `Reload()` |
 | Toggle website, update nginx config, SSL manual, dll. | Semua pemanggil `nginx.Service.Reload()` |
+| Hook plugin sebelum reload nginx | `nginx.before_reload` / `nginx.after_reload` |
 | Boot container | `config/start.sh` → `gosite nginx-repair` |
 | Manual | `gosite nginx-repair` |
 

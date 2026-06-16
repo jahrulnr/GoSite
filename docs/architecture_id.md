@@ -1,5 +1,7 @@
 # Arsitektur GoSite
 
+**Status:** Selaras dengan **v1.3.1** (platform plugin + install remote gelombang G). ADR: [architecture/plugin-platform.md](./architecture/plugin-platform.md).
+
 ## Runtime saat ini
 
 Satu container Docker menjalankan **nginx** (edge) dan **gosite serve** (API + SPA). Nginx di-start dari `start.sh`; lifecycle reload/restart dipegang Go.
@@ -23,6 +25,7 @@ flowchart LR
         WORKER[Job worker in-process]
         SOCK[docker.sock]
         STG["/storage"]
+        PLG["subproses plugin / webhook"]
     end
 
     P80 --> NGX
@@ -31,11 +34,14 @@ flowchart LR
     APP --> STG
     APP --> WORKER
     APP --> SOCK
+    APP --> PLG
 ```
+
+**Panel:** Nginx menyajikan `/panel/` (Preact embedded jika `FE_EMBED=true`, else static dari `internal/delivery/http/frontend/dist`).
 
 ## Startup sequence
 
-Detail: [sequences/01-container-startup.md](./sequences/01-container-startup_id.md))
+Detail: [sequences/01-container-startup.md](./sequences/01-container-startup_id.md)
 
 `config/start.sh`:
 
@@ -54,10 +60,14 @@ HTTP Request
   → Handler (internal/delivery/http/handler)
   → Service (internal/service/*)
   → Repository (SQLite) | Infrastructure (nginx, job, docker, commander)
-  → JSON / SSE
+  → JSON / SSE / WebSocket
 ```
 
-Frontend Preact (`web/`) hanya memanggil `/api/v1/*`.
+Frontend Preact (`web/`) hanya memanggil `/api/v1/*`. Label navigasi dari `GET /ui/meta`.
+
+### Hook bus (plugin)
+
+Sebelum side-effect tidak reversibel (reload nginx, issue SSL, job, aksi Docker), service memanggil hook ke webhook tier-0 dan subprocess go-plugin tier-1 yang **enabled**. Lihat [plugin-platform.md](./architecture/plugin-platform.md).
 
 ## Modul backend
 
@@ -76,9 +86,20 @@ Frontend Preact (`web/`) hanya memanggil `/api/v1/*`.
 | `grafanalite` | `internal/observability/grafanalite` | Traffic metrics |
 | `database` | `internal/service/database` | SQLite viewer |
 | `system` | `internal/service/system` | CPU, RAM, disk, network |
-| `settings` | `internal/service/settings` | Profile user |
+| `settings` | `internal/service/settings` | Profile user (`PUT /settings/profile`) |
 | `uimeta` | `internal/service/uimeta` | Hints & labels untuk UI |
 | `plugin` | `internal/service/plugin` | Registry, hooks, runtime tier 0/1, install remote (`remote/`), catalog, supervisor |
+| `terminal` | `internal/terminal` | Terminal mengambang xterm.js — PTY, dump 256KB, multi-attach |
+
+## CLI (`cmd/gosite`)
+
+| Perintah | Peran |
+|----------|-------|
+| `gosite init` | Layout storage, migrate, seed |
+| `gosite migrate` | Apply migrasi SQL |
+| `gosite serve` | API + SPA opsional + job worker |
+| `gosite nginx-repair` | `nginx -t` + auto-fix |
+| `gosite plugin list\|resolve\|install\|catalog` | CLI operator (API install sama) |
 
 ## Nginx: draft vs aktif
 
@@ -98,7 +119,7 @@ Validate website memakai `config/webconfig/nginx.conf` terisolasi (satu file vho
 |---------|--------|
 | `/etc/letsencrypt` | `/storage/webconfig/ssl` |
 
-Certbot dan placeholder website create berbagi namespace `live/{domain}/`. Lihat [sequences/08-website-ssl.md](./sequences/08-website-ssl_id.md)).
+Certbot dan placeholder website create berbagi namespace `live/{domain}/`. Lihat [sequences/08-website-ssl.md](./sequences/08-website-ssl_id.md).
 
 ## Path persisten
 
@@ -110,10 +131,21 @@ Certbot dan placeholder website create berbagi namespace `live/{domain}/`. Lihat
 | `/storage/webconfig/ssl/` | Sertifikat (LE layout) |
 | `/storage/logs/` | Access/error nginx + gosite |
 | `/storage/nginx/` | Symlink source untuk `/etc/nginx` |
+| `/storage/plugins/` | Artifact plugin terpasang |
+| `/storage/plugins/keyring.json` | Kunci signing vendor (default) |
 | `/www/` | Document root (`/storage/www`) |
+
+## Dokumen terkait
+
+| Topik | Dokumen |
+|-------|---------|
+| ADR plugin | [plugin-platform.md](./architecture/plugin-platform.md) |
+| Installer | [sequences/19-plugin-installer_id.md](./sequences/19-plugin-installer_id.md) |
+| Distribusi remote | [sequences/20-plugin-remote-distribution_id.md](./sequences/20-plugin-remote-distribution_id.md) |
+| API | [api-inventory_id.md](./api-inventory_id.md) |
 
 ## Legacy (BangunSite)
 
-BangunSite menjalankan nginx + PHP artisan :8000 + Go proxy :8080 + PHP cron. Diagram dan modul Laravel dipertahankan di sequence docs sebagai referensi migrasi.
+BangunSite menjalankan nginx + PHP artisan :8000 + Go proxy :8080 + PHP cron. Diagram legacy ada di sequence docs.
 
 Di produksi BangunSoft, edge nginx mem-proxy ke upstream (BangunInfo, Grafana, dll.). Format vhost GoSite (`site-proxy.conf`) dirancang kompatibel.

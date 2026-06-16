@@ -1,152 +1,63 @@
 # Domain Model
 
-Entitas dan artefak file yang harus dipahami backend Go.
+Entitas dan artefak file yang harus dipahami backend Go. **v1.3.1** mencakup registry plugin + ekstensi observability.
+
+Ringkasan EN lengkap: [domain-model.md](./domain-model.md).
 
 ## Entitas database (SQLite)
 
-### `users`
+### `users`, `websites`, `cronjobs`, `settings`
 
-| Kolom | Tipe | Keterangan |
-|-------|------|------------|
-| id | int | PK |
-| name | string | Display name |
-| email | string | Login identifier |
-| password | string | bcrypt hash |
-| timestamps | | created_at, updated_at |
-
-Default seed: `admin@demo.com` / `123456`
-
-### `websites`
-
-| Kolom | Tipe | Keterangan |
-|-------|------|------------|
-| id | int | PK |
-| name | string | Label tampilan |
-| domain | string | server_name nginx |
-| path | string | document root (`/www/...`) |
-| ssl | bool | Flag SSL aktif (legacy) |
-| config | text | Config tambahan (jarang dipakai) |
-| active | bool | Site enabled (symlink di active.d) |
-| timestamps | | |
-
-### `cronjobs`
-
-| Kolom | Tipe | Keterangan |
-|-------|------|------------|
-| id | int | PK |
-| name | string | Label |
-| payload | string | Shell command |
-| run_every | string | `min` \| `hour` \| `day` \| `month` |
-| executed_at | datetime | Terakhir dijalankan |
-| timestamps | | |
-
-Default seed: Let's Encrypt renewal — `certbot renew --post-hook 'nginx -s reload'`
-
-### `settings`
-
-Key-value store (migrations ada; dipakai minimal di legacy).
+Sama seperti legacy BangunSite. `websites` ditambah kolom GoSite: `type` (`static`|`proxy`), `upstream`.
 
 ### `job_runs` (GoSite)
 
-| Kolom | Tipe | Keterangan |
-|-------|------|------------|
-| id | int | PK |
-| job_type | string | `certbot`, `cron`, … |
-| name | string | Label (mis. domain) |
-| status | string | `pending`, `running`, `ok`, `failed`, `cancelled` |
-| output | text | Command + stdout/stderr |
-| error | text | Pesan gagal |
-| timestamps | | |
+Worker certbot + cron manual — SSE output.
 
-Certbot dan cron manual run memakai worker yang sama (`internal/infra/job/worker.go`). Output di-stream via SSE.
+### `sessions` (GoSite)
 
-### `jobs` / `failed_jobs` (legacy Laravel)
+Sesi panel persisten (`004_sessions.sql`): `id`, `user_id`, `expires_at`.
 
-## Artefak filesystem (bukan DB)
+### Observability (`002_gosite_extensions.sql`)
 
-### Vhost nginx per domain
+`audit_logs`, `log_events`, `traffic_metrics`, `saved_queries` — dipakai Splunk Lite / Grafana Lite.
 
-- **Draft:** `/storage/webconfig/site.d/{domain}.conf`
-- **Aktif:** `/storage/webconfig/active.d/{domain}.conf` → symlink ke `site.d/`
-- **Template:** `/storage/webconfig/site.conf` dengan placeholder `<domain>`, `<path>`, `<ssl_cert>`, `<ssl_key>`
+### `plugin_versions` (GoSite)
 
-### SSL per domain
+Satu baris per `(plugin_id, version)` — state machine install/enable (lihat [19-plugin-installer_id.md](./sequences/19-plugin-installer_id.md)).
 
-- Default: `/storage/webconfig/ssl/live/default/cert.pem` + `key.pem` (self-signed boot)
-- Placeholder create website: `/storage/webconfig/ssl/live/{domain}/cert.pem` + `key.pem`
-- Let's Encrypt (setelah certbot): `live/{domain}/fullchain.pem`, `privkey.pem` (+ symlink ke `archive/`)
-- **Symlink:** `/etc/letsencrypt` → `/storage/webconfig/ssl` (dibuat `gosite init`)
+Kolom provenance (007): `source_type`, `source_ref`, `resolved_url`, `install_log`, dll.
 
-Certbot menolak membuat lineage jika `live/{domain}/` sudah ada sebagai placeholder Gosite. Service SSL menjalankan `prepareForCertbot` sebelum enqueue (lihat [sequences/08-website-ssl.md](./sequences/08-website-ssl_id.md))).
+### `plugin_configs` (GoSite)
 
-### Log nginx per domain
+Config per versi + `secrets_encrypted`.
 
-- Access: `/storage/logs/access-{domain}.log`
-- Error: `/storage/logs/error-{domain}.log`
-- Global: `access.log`, `error.log`
+### Keyring plugin (filesystem)
 
-## Relasi konseptual
+`/storage/plugins/keyring.json` — bukan tabel SQL. API `/plugins/keyring`.
 
-```mermaid
-erDiagram
-    users ||--o{ sessions : has
-    websites ||--|| site_config_file : generates
-    websites ||--o| active_symlink : enables
-    websites ||--o| ssl_certs : uses
-    cronjobs ||--o{ job_runs : dispatches
+## Artefak filesystem
 
-    users {
-        int id
-        string email
-        string password_hash
-    }
-    websites {
-        int id
-        string domain
-        string path
-        bool active
-    }
-    cronjobs {
-        int id
-        string payload
-        string run_every
-    }
-```
+- Vhost nginx: `site.d/` + `active.d/`
+- SSL: `/storage/webconfig/ssl/live/{domain}/`
+- Log: `/storage/logs/access-{domain}.log`, …
+- **Plugin:** `/storage/plugins/{plugin_id}/{version}/`
 
-## State: website lifecycle
+## Validasi bisnis
 
-```mermaid
-stateDiagram-v2
-    [*] --> Draft: create (DB + site.d config)
-    Draft --> Active: enable (symlink active.d)
-    Active --> Disabled: disable (unlink active.d)
-    Disabled --> Active: enable
-    Active --> Draft: edit domain/path
-    Draft --> [*]: delete
-    Active --> [*]: delete (+ optional rm path)
-```
-
-## Validasi bisnis (harus dipertahankan)
-
-| Rule | Legacy check |
-|------|--------------|
-| Domain format | `FILTER_VALIDATE_DOMAIN` |
-| Path unik | Tidak boleh dipakai website lain |
-| Path aman | `Disk::validatePath()` — cegah traversal/illegal chars |
-| Path bukan file | `is_file($path)` ditolak |
-| Nginx config | `nginx -t` sebelum reload; rollback jika gagal |
-| PHP/FPM config | `php -nc` / `php-fpm -t` sebelum simpan |
-| Login | Rate limit 5x / 60 detik per IP |
-| File execute | Permission minimal 775 |
+| Rule | Catatan |
+|------|---------|
+| Nginx | `nginx -t` + auto-repair sebelum reload |
+| Plugin remote | Allowlist host, `permissions_ack`, signature policy |
+| PHP/FPM | **Tidak di-port** ke GoSite |
 
 ## Environment variables relevan
 
 | Var | Default | Pengaruh |
 |-----|---------|----------|
-| `AUTH_ENABLE` | false | HTTP Basic Auth di depan login |
-| `AUTH_USER` / `AUTH_PASS` | admin/admin | Kredensial basic auth |
-| `ENABLE_LOCKSCREEN` | false | Auto lock session |
-| `LOCK_AFTER` | 300 | Detik idle sebelum lock |
-| `WEB_PATH` | /www | Root file manager & default site |
-| `MAIL_NOTIFICATION` | true | Email setiap aksi sensitif |
-| `DB_DATABASE` | /storage/db.sqlite | Path SQLite |
+| `AUTH_ENABLE` | false | Basic auth |
+| `PLUGIN_REMOTE_INSTALL` | true | Matikan install remote |
+| `PLUGIN_KEYRING_PATH` | `/storage/plugins/keyring.json` | Keyring |
+| `GITHUB_TOKEN` / `GITLAB_TOKEN` | — | Repo privat |
+| `TERMINAL_STICKY_TTL` | 12h | Reattach terminal |
+| `DB_DATABASE` | `/storage/db.sqlite` | Path DB |

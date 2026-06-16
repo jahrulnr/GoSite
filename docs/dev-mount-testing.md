@@ -1,5 +1,7 @@
 # Mount testing in development
 
+QA mount manager GoSite — lihat juga [sequences/12-mount-manager.md](./sequences/12-mount-manager.md). API: `GET/POST/PUT/DELETE /api/v1/mounts`, `POST /mounts/enable`. Panel: **Mounts** di sidebar.
+
 GoSite mount QA covers two cases:
 
 1. **Mountable** — valid NFS export, Enable succeeds, status shows Mounted.
@@ -22,6 +24,8 @@ Inside the `gosite` container, use hostname `nfs` on the compose network.
 | Options | `rw,nfsvers=4` | `rw,nfsvers=4` |
 
 Flow: **Add** → row appears (Unmounted) → **Enable** → Mounted or error.
+
+Panel path: `/mounts`. Verify API with session cookie after `POST /auth/login`.
 
 ## Local API (`make dev-api`)
 

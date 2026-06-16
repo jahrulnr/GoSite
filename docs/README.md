@@ -10,7 +10,7 @@ Runtime, API, and migration docs for **GoSite** (Go + Preact hosting panel).
 
 | Category | Status |
 |----------|--------|
-| Architecture & domain model | Mostly aligned — see [DOCS-MAINTENANCE.md](./DOCS-MAINTENANCE.md) |
+| Architecture & domain model | Aligned v1.3.1 — see [DOCS-MAINTENANCE.md](./DOCS-MAINTENANCE.md) |
 | Sequences 01–20 + nginx-repair | Updated for GoSite (seq 20 = wave G, v1.3.1) |
 | Plugin templates | `plugins/_templates/` (tier 0–3 scaffolds) |
 | `api/openapi.yaml` | Canonical API contract (plugin wave G included) |

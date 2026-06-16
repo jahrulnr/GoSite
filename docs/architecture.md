@@ -1,5 +1,7 @@
 # GoSite Architecture
 
+**Status:** Aligned with **v1.3.1** (plugin platform + remote install wave G). ADR: [architecture/plugin-platform.md](./architecture/plugin-platform.md).
+
 ## Current runtime
 
 A single Docker container runs **nginx** (edge) and **gosite serve** (API + SPA). Nginx is started from `start.sh`; reload/restart lifecycle is owned by Go.
@@ -23,6 +25,7 @@ flowchart LR
         WORKER[Job worker in-process]
         SOCK[docker.sock]
         STG["/storage"]
+        PLG["plugin subprocesses / webhooks"]
     end
 
     P80 --> NGX
@@ -31,7 +34,10 @@ flowchart LR
     APP --> STG
     APP --> WORKER
     APP --> SOCK
+    APP --> PLG["plugin subprocesses / webhooks"]
 ```
+
+**Panel delivery:** Nginx serves `/panel/` (embedded Preact when `FE_EMBED=true`, else static from `internal/delivery/http/frontend/dist`). All feature UI calls `/api/v1/*` only.
 
 ## Startup sequence
 
@@ -57,7 +63,11 @@ HTTP Request
   → JSON / SSE
 ```
 
-Preact frontend (`web/`) calls `/api/v1/*` only.
+Preact frontend (`web/`) calls `/api/v1/*` only. Navigation labels and feature flags come from `GET /ui/meta`.
+
+### Hook bus (plugins)
+
+Before irreversible side effects (nginx reload, SSL issue, job run, Docker action), services dispatch lifecycle hooks to **enabled** tier-0 webhooks and tier-1 go-plugin subprocesses. See [plugin-platform.md](./architecture/plugin-platform.md) and [sequences/19-plugin-installer.md](./sequences/19-plugin-installer.md).
 
 ## Backend modules
 
@@ -80,6 +90,18 @@ Preact frontend (`web/`) calls `/api/v1/*` only.
 | `uimeta` | `internal/service/uimeta` | UI hints & labels |
 | `plugin` | `internal/service/plugin` | Registry, hooks, tier 0/1 runtime, remote install (`remote/`), catalog, health supervisor |
 | `terminal` | `internal/terminal` | Floating xterm.js (topbar popup) — PTY session registry, rolling dump 256KB to `/tmp`, 12h sticky TTL, 1-writer-N-readers multi-attach |
+
+## CLI (`cmd/gosite`)
+
+| Command | Role |
+|---------|------|
+| `gosite init` | Storage layout, symlinks, migrate, demo seed |
+| `gosite migrate` | Apply SQL migrations only |
+| `gosite serve` | HTTP API + optional embedded SPA + in-process job worker |
+| `gosite nginx-repair` | `nginx -t` + safe auto-fix ([nginx-repair.md](./nginx-repair.md)) |
+| `gosite plugin list\|resolve\|install\|catalog` | Operator CLI over the same install APIs ([sequence 20](./sequences/20-plugin-remote-distribution-impl.md)) |
+
+Boot order in production: `start.sh` → `init` → `nginx-repair` → `nginx` → `gosite serve`.
 
 ## Nginx: draft vs active
 
@@ -111,7 +133,19 @@ Certbot and website placeholder SSL share the `live/{domain}/` namespace. See [s
 | `/storage/webconfig/ssl/` | Certificates (LE layout) |
 | `/storage/logs/` | Nginx access/error + gosite |
 | `/storage/nginx/` | Symlink source for `/etc/nginx` |
+| `/storage/plugins/` | Installed plugin artifacts `{plugin_id}/{version}/` |
+| `/storage/plugins/keyring.json` | Trusted vendor signing keys (default; override `PLUGIN_KEYRING_PATH`) |
 | `/www/` | Document roots (`/storage/www`) |
+
+## Related docs
+
+| Topic | Document |
+|-------|----------|
+| Plugin ADR | [architecture/plugin-platform.md](./architecture/plugin-platform.md) |
+| Installer + lifecycle | [sequences/19-plugin-installer.md](./sequences/19-plugin-installer.md) |
+| Remote distribution | [sequences/20-plugin-remote-distribution.md](./sequences/20-plugin-remote-distribution.md) |
+| API surface | [api-inventory.md](./api-inventory.md), `api/openapi.yaml` |
+| Doc maintenance | [DOCS-MAINTENANCE.md](./DOCS-MAINTENANCE.md) |
 
 ## Legacy (BangunSite)
 

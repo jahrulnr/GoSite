@@ -1,6 +1,8 @@
 # API Inventory — Laravel → GoSite REST
 
-> **Canonical contract:** [`api/openapi.yaml`](../api/openapi.yaml) and [`api/examples/`](../api/examples/). This document is a legacy migration map.
+> **Canonical contract:** [`api/openapi.yaml`](../api/openapi.yaml) and [`api/examples/`](../api/examples/).
+>
+> This document maps **legacy BangunSite routes** to GoSite REST **and** lists **greenfield** endpoints (plugins, terminal, observability) as of **v1.3.1**.
 
 Legacy route mapping to the proposed Go REST API. JSON responses; consistent errors:
 
@@ -24,6 +26,9 @@ Legacy route mapping to the proposed Go REST API. JSON responses; consistent err
 | `GET /` | GET | `GET /auth/login` (metadata: lockscreen enabled, basic auth) |
 | `POST /` | POST | `POST /auth/login` `{ email, password, remember }` |
 | `GET /locked` | GET | `GET /auth/lockscreen` |
+| — | POST | `POST /auth/logout` |
+| — | GET | `GET /auth/me` — current user profile |
+| — | POST | `POST /auth/lock`, `POST /auth/unlock` |
 | BasicAuth middleware | — | `401` + `WWW-Authenticate` when `AUTH_ENABLE=true` |
 
 **Successful login response:**
@@ -89,6 +94,7 @@ Legacy route mapping to the proposed Go REST API. JSON responses; consistent err
 | `gosite migrate` | Apply migrations |
 | `gosite serve` | HTTP API + SPA |
 | `gosite nginx-repair` | `nginx -t` + safe auto-fix ([nginx-repair.md](./nginx-repair.md)) |
+| `gosite plugin list\|resolve\|install\|catalog` | Plugin operator CLI (wave G) |
 
 Invoked from `config/start.sh` before nginx + `gosite serve`.
 
@@ -111,6 +117,9 @@ Invoked from `config/start.sh` before nginx + `gosite serve`.
 |--------|--------|--------|
 | `GET /admin/browse?path=` | GET | `GET /files?path=/www` |
 | `POST /admin/browse/show` | POST | `GET /files/content?path=...` |
+| — | GET | `GET /files/raw` — download |
+| — | PUT | `PUT /files/content` — save |
+| — | POST | `POST /files/batch-save`, `POST /files/batch-delete` |
 | `POST /admin/browse/new` | POST | `POST /files` — type: directory\|file\|remote\|upload |
 | `PATCH /admin/browse/action` | PATCH | `POST /files/actions` — chmod\|copy\|execute |
 | `DELETE /admin/browse/action` | DELETE | `DELETE /files?path=...` |
@@ -145,13 +154,21 @@ Invoked from `config/start.sh` before nginx + `gosite serve`.
 
 | Legacy | Method | GoSite |
 |--------|--------|--------|
-| `GET /admin/setting` | GET | `GET /settings` |
+| `GET /admin/setting` | GET | **Removed** — profile via `GET /auth/me` |
 | `POST /admin/setting/update/profile` | POST | `PUT /settings/profile` |
-| `POST /admin/setting/update/php` | POST | `PUT /settings/php` |
-| `POST /admin/setting/update/fpm` | POST | `PUT /settings/fpm` |
-| `POST /admin/setting/update/pool` | POST | `PUT /settings/pool` |
+| `POST /admin/setting/update/php` | POST | **Not ported** |
+| `POST /admin/setting/update/fpm` | POST | **Not ported** |
+| `POST /admin/setting/update/pool` | POST | **Not ported** |
+
+Plugin remote-install host flags: `GET /plugins/install/settings` (read-only env snapshot).
 
 ---
+
+## UI metadata
+
+| GoSite | Method | Notes |
+|--------|--------|-------|
+| `GET /ui/meta` | GET | App name, env label, navigation, auth flags for Preact shell |
 
 ## Logs
 
@@ -183,9 +200,14 @@ Invoked from `config/start.sh` before nginx + `gosite serve`.
 
 | Method | Path | Body / query |
 |--------|------|--------------|
-| POST | `/api/v1/query` | `{ "source": "audit\|job\|access\|error\|all", "q": "action:vhost.*", "from": "-24h", "to": "now", "limit": 100 }` |
+| GET | `/api/v1/query/meta` | Sources, fields metadata |
+| POST | `/api/v1/query` | `{ "source": "audit\|job\|access\|error\|all", "q": "...", "from", "to", "limit" }` |
+| GET | `/api/v1/query` | Same params as query string |
+| GET | `/api/v1/query/tail` | Live tail |
 | GET | `/api/v1/query/saved` | — |
 | POST | `/api/v1/query/saved` | `{ "name", "source", "query" }` |
+| PATCH | `/api/v1/query/saved/{id}` | Update saved query |
+| DELETE | `/api/v1/query/saved/{id}` | Delete saved query |
 
 ---
 
@@ -280,6 +302,4 @@ Greenfield REST (no Laravel equivalent). Canonical detail: `api/openapi.yaml` (b
 | `GET/PUT /plugins/{vendor}/{name}/versions/{version}/config` | GET/PUT | Encrypted plugin config |
 | `GET/POST/DELETE /plugins/keyring` | * | Trusted signing keys (admin) |
 
-CLI (same APIs): `gosite plugin list|resolve|install|catalog`.
-
-**OpenAPI gap:** resolved in v1.3.1 doc pass — see `api/openapi.yaml` for wave G routes.
+CLI (same APIs): `gosite plugin list|resolve|install|catalog`. Detail: `api/openapi.yaml`.

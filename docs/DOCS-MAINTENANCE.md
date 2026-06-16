@@ -32,7 +32,8 @@ How to keep `docs/` aligned with the codebase during active development.
 | `api/openapi.yaml` | Wave G plugin routes added (v1.3.1 doc pass) | ✅ |
 | `20-plugin-remote-distribution.md` body | Long spec still reads like a proposal in places | OK as design doc; impl truth in `*-impl.md` |
 | Wiki `Plugin-platform` / `Plugin-installer` pages | May lag until `make wiki-export` on `master` | Run export after doc PR merges |
-| `README_id.md` module diagram | Still 14 areas, no Plugins/Terminal | Low priority — overview only |
+| `README_id.md` module diagram | Still 14 areas, no Plugins/Terminal | ✅ Fixed in README_id |
+| Core architecture docs | `architecture*.md`, `domain-model*.md`, `api-inventory*.md`, `dev-mount-testing*`, `nginx-repair*` lagged v1.3.1 | ✅ Fixed this pass |
 
 ## Checklist — ship a feature
 

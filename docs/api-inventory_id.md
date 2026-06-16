@@ -1,6 +1,8 @@
 # API Inventory — Laravel → GoSite REST
 
-> **Canonical contract:** [`api/openapi.yaml`](../api/openapi.yaml) and [`api/examples/`](../api/examples/). This document is a legacy migration map.
+> **Kontrak kanonik:** [`api/openapi.yaml`](../api/openapi.yaml) dan [`api/examples/`](../api/examples/).
+>
+> Dokumen ini memetakan route **legacy BangunSite** ke REST GoSite **dan** mencantumkan endpoint **greenfield** (plugin, terminal, observability) per **v1.3.1**. EN lengkap: [api-inventory.md](./api-inventory.md).
 
 Mapping route legacy ke usulan API REST untuk backend Go. Format respons JSON; error konsisten:
 
@@ -24,6 +26,8 @@ Mapping route legacy ke usulan API REST untuk backend Go. Format respons JSON; e
 | `GET /` | GET | `GET /auth/login` (metadata: lockscreen enabled, basic auth) |
 | `POST /` | POST | `POST /auth/login` `{ email, password, remember }` |
 | `GET /locked` | GET | `GET /auth/lockscreen` |
+| — | POST | `POST /auth/logout`, `POST /auth/lock`, `POST /auth/unlock` |
+| — | GET | `GET /auth/me` |
 | BasicAuth middleware | — | `401` + `WWW-Authenticate` jika `AUTH_ENABLE=true` |
 
 **Response login sukses:**
@@ -88,6 +92,7 @@ Mapping route legacy ke usulan API REST untuk backend Go. Format respons JSON; e
 | `gosite migrate` | Apply migrations |
 | `gosite serve` | HTTP API + SPA |
 | `gosite nginx-repair` | `nginx -t` + auto-fix aman ([nginx-repair.md](./nginx-repair_id.md)) |
+| `gosite plugin list\|resolve\|install\|catalog` | CLI operator plugin (gelombang G) |
 
 Dipanggil dari `config/start.sh` sebelum nginx + gosite serve.
 
@@ -142,15 +147,21 @@ Dipanggil dari `config/start.sh` sebelum nginx + gosite serve.
 
 ## Settings
 
-| Legacy | Method | Usulan GoSite |
-|--------|--------|---------------|
-| `GET /admin/setting` | GET | `GET /settings` |
+| Legacy | Method | GoSite |
+|--------|--------|--------|
+| `GET /admin/setting` | GET | **Dihapus** — profil via `GET /auth/me` |
 | `POST /admin/setting/update/profile` | POST | `PUT /settings/profile` |
-| `POST /admin/setting/update/php` | POST | `PUT /settings/php` |
-| `POST /admin/setting/update/fpm` | POST | `PUT /settings/fpm` |
-| `POST /admin/setting/update/pool` | POST | `PUT /settings/pool` |
+| PHP / FPM / pool | POST | **Tidak di-port** |
+
+Flag install remote plugin: `GET /plugins/install/settings`.
 
 ---
+
+## UI metadata
+
+| GoSite | Method | Keterangan |
+|--------|--------|------------|
+| `GET /ui/meta` | GET | Nama app, navigasi, flag auth untuk shell Preact |
 
 ## Logs
 
@@ -182,9 +193,10 @@ Dipanggil dari `config/start.sh` sebelum nginx + gosite serve.
 
 | Method | Path | Body / query |
 |--------|------|----------------|
-| POST | `/api/v1/query` | `{ "source": "audit\|job\|access\|error\|all", "q": "action:vhost.*", "from": "-24h", "to": "now", "limit": 100 }` |
-| GET | `/api/v1/query/saved` | — |
-| POST | `/api/v1/query/saved` | `{ "name", "source", "query" }` |
+| GET | `/api/v1/query/meta` | Metadata sumber |
+| POST | `/api/v1/query` | Query audit/log |
+| GET | `/api/v1/query/tail` | Tail live |
+| GET/POST/PATCH/DELETE | `/api/v1/query/saved` | Query tersimpan |
 
 ---
 
@@ -238,3 +250,37 @@ Legacy memakai polling file `/tmp/*.txt` untuk output async:
 2. Lindungi `/system/*` dengan auth (legacy terbuka)
 3. File manager & mount: validasi path ketat, deny di luar allowlist root
 4. Cron payload: pertimbangkan allowlist atau approval untuk command berbahaya
+
+---
+
+## Terminal mengambang
+
+| GoSite | Method | Keterangan |
+|--------|--------|------------|
+| `GET /terminal/ws` | WebSocket | Sesi PTY |
+| `GET /terminal/sessions` | GET | Daftar sesi user |
+| `GET /terminal/sessions/{id}/snapshot` | GET | Dump rolling + seq |
+| `DELETE /terminal/sessions/{id}` | DELETE | Hentikan sesi |
+
+Lihat [sequences/10-floating-terminal.md](./sequences/10-floating-terminal.md).
+
+---
+
+## Plugin
+
+REST greenfield (tanpa padanan Laravel). Kontrak: `api/openapi.yaml`, [seq 19](./sequences/19-plugin-installer_id.md), [seq 20](./sequences/20-plugin-remote-distribution_id.md).
+
+| GoSite | Method | Tujuan |
+|--------|--------|--------|
+| `GET /plugins` | GET | Registry terpasang |
+| `POST /plugins/install` | POST | Upload zip / JSON `source` / manifest |
+| `POST /plugins/install/resolve` | POST | Preview install remote |
+| `GET /plugins/install/settings` | GET | Flag env install remote |
+| `GET /plugins/catalog` | GET | Katalog kurasi |
+| `GET /plugins/catalog/{vendor}/{name}` | GET | Satu entri katalog |
+| `POST …/enable`, `disable`, `switch` | POST | Lifecycle |
+| `DELETE …/versions/{version}` | DELETE | Uninstall / purge |
+| `GET/PUT …/config` | * | Config terenkripsi |
+| `GET/POST/DELETE /plugins/keyring` | * | Kunci signing |
+
+CLI: `gosite plugin list|resolve|install|catalog`.

@@ -1,6 +1,6 @@
 # Domain Model
 
-Entities and filesystem artifacts the Go backend must understand.
+Entities and filesystem artifacts the Go backend must understand. **v1.3.1** includes plugin registry + observability extensions.
 
 ## Database entities (SQLite)
 
@@ -24,6 +24,8 @@ Default seed: `admin@demo.com` / `123456`
 | name | string | Display label |
 | domain | string | nginx `server_name` |
 | path | string | document root (`/www/...`) |
+| type | string | `static` \| `proxy` (GoSite) |
+| upstream | string | Proxy upstream when `type=proxy` |
 | ssl | bool | SSL enabled flag (legacy) |
 | config | text | Extra config (rarely used) |
 | active | bool | Site enabled (`active.d` symlink) |
@@ -60,7 +62,38 @@ Key-value store (migrations exist; minimally used in legacy).
 
 Certbot and manual cron runs share the same worker (`internal/infra/job/worker.go`). Output is streamed via SSE.
 
+### `sessions` (GoSite)
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | text | PK — session token id |
+| user_id | int | FK → users |
+| created_at | datetime | |
+| expires_at | datetime | Sweeper removes expired rows |
+
+### `audit_logs`, `log_events`, `traffic_metrics`, `saved_queries` (GoSite)
+
+Observability tables from migration `002_gosite_extensions.sql`. Splunk Lite queries audit + log tail; Grafana Lite aggregates `traffic_metrics`.
+
+### `plugin_versions` (GoSite)
+
+Registry row per `(plugin_id, version)`. State machine: `installing` → `installed` → `enabling` → `enabled` → … (see [sequences/19-plugin-installer.md](./sequences/19-plugin-installer.md)).
+
+Key columns: `tier`, `manifest_json`, `capabilities_json`, `ui_json`, `artifact_digest`, `artifact_path`, `state`, failure fields.
+
+**Provenance** (migration `007_plugin_provenance.sql`): `source_type`, `source_ref`, `resolved_url`, `resolved_digest`, `source_commit`, `source_repository`, `install_path`, `permissions_ack_at`, `permissions_acked_caps`, `install_log` (JSON steps).
+
+### `plugin_configs` (GoSite)
+
+Per-version config: `config_json` (plaintext fields), `secrets_encrypted` (AES-256-GCM blob), `config_version`.
+
+### Plugin keyring (filesystem)
+
+Trusted ed25519 vendor keys at `PLUGIN_KEYRING_PATH` (default `/storage/plugins/keyring.json`) — not a SQL table. Managed via `GET/POST/DELETE /plugins/keyring`.
+
 ### `jobs` / `failed_jobs` (legacy Laravel)
+
+Not used by GoSite.
 
 ## Filesystem artifacts (not in DB)
 
@@ -85,6 +118,11 @@ Certbot refuses to create a lineage when `live/{domain}/` already exists as a Go
 - Error: `/storage/logs/error-{domain}.log`
 - Global: `access.log`, `error.log`
 
+### Plugin artifacts
+
+- **Install tree:** `/storage/plugins/{plugin_id}/{version}/` — extracted zip + `manifest.json` snapshot path in DB (`artifact_path`)
+- **Keyring:** `/storage/plugins/keyring.json` (override with `PLUGIN_KEYRING_PATH`)
+
 ## Conceptual relationships
 
 ```mermaid
@@ -94,6 +132,7 @@ erDiagram
     websites ||--o| active_symlink : enables
     websites ||--o| ssl_certs : uses
     cronjobs ||--o{ job_runs : dispatches
+    plugin_versions ||--o| plugin_configs : configures
 
     users {
         int id
@@ -135,9 +174,10 @@ stateDiagram-v2
 | Safe path | `Disk::validatePath()` — block traversal/illegal chars |
 | Path not a file | `is_file($path)` rejected |
 | Nginx config | `nginx -t` before reload; rollback on failure |
-| PHP/FPM config | `php -nc` / `php-fpm -t` before save |
 | Login | Rate limit 5× / 60 seconds per IP |
 | File execute | Minimum permission 775 |
+| Plugin install | Signature / allow-unsigned policy; remote fetch allowlist; `permissions_ack` for remote installs |
+| PHP/FPM config | **Not ported** — BangunSite only |
 
 ## Relevant environment variables
 
@@ -150,3 +190,12 @@ stateDiagram-v2
 | `WEB_PATH` | /www | File manager root & default site |
 | `MAIL_NOTIFICATION` | true | Email on sensitive actions |
 | `DB_DATABASE` | /storage/db.sqlite | SQLite path |
+| `PLUGIN_REMOTE_INSTALL` | true | Disable URL/GitHub/GitLab install when false |
+| `PLUGIN_INSTALL_ALLOWED_HOSTS` | github.com,… | Fetch allowlist |
+| `PLUGIN_ALLOW_UNSIGNED` | false in prod | Dev-only unsigned artifacts |
+| `PLUGIN_KEYRING_PATH` | /storage/plugins/keyring.json | Trusted signing keys |
+| `PLUGIN_CONFIG_KEY` | — | AES key for plugin secret fields (required for config UI) |
+| `GITHUB_TOKEN` / `GITLAB_TOKEN` | — | Optional private repo / rate limits |
+| `PLUGIN_BUILD_ENABLED` | true in dev | Docker build fallback (G2b) |
+| `TERMINAL_STICKY_TTL` | 12h | PTY session sticky reattach window |
+| `FE_EMBED` | false | Embed built SPA in Go binary |

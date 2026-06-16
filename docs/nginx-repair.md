@@ -8,6 +8,7 @@ GoSite runs `nginx -t` **before every reload** and, on failure, applies safe aut
 |---------|---------------|
 | `POST /api/v1/nginx/reload` | `internal/infra/nginx/service.go` → `Reload()` |
 | Website toggle, nginx config update, manual SSL, etc. | All callers of `nginx.Service.Reload()` |
+| Plugin hooks before nginx reload | `infra/nginx` → `nginx.before_reload` / `nginx.after_reload` ([plugin-platform](../architecture/plugin-platform.md)) |
 | Container boot | `config/start.sh` → `gosite nginx-repair` |
 | Manual | `gosite nginx-repair` |
 
