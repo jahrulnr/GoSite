@@ -17,6 +17,27 @@ export function humanizeError(error: Error, meta?: UiMetaResponse): string {
   if (lower.includes('invalid token') && lower.includes('login')) {
     return 'Try action:login or use the Sign-ins quick filter instead of plain "login".';
   }
+  if (lower.includes('auth_token_expired') || lower.includes('auth token expired')) {
+    return 'GitHub or GitLab token was rejected. Set GITHUB_TOKEN on the host (Settings → Plugins) or install via Artifact upload.';
+  }
+  if (lower.includes('resolve_stale') || lower.includes('resolve stale')) {
+    return 'Release changed since preview — click Resolve again.';
+  }
+  if (lower.includes('resolve_failed') || lower.includes('resolve failed')) {
+    return 'Could not find that repo, tag, or asset. Public repos need no token; for private repos set GITHUB_TOKEN on the host or use Artifact upload.';
+  }
+  if (lower.includes('fetch_digest_mismatch') || lower.includes('digest mismatch')) {
+    return 'Downloaded file does not match the expected SHA-256.';
+  }
+  if (lower.includes('release_integrity')) {
+    return 'Release asset changed since the index was published. Contact the vendor or use a new tag.';
+  }
+  if (lower.includes('platform_unsupported') || lower.includes('platform unsupported')) {
+    return 'No build for this server OS/architecture.';
+  }
+  if (lower.includes('remote_install_disabled') || lower.includes('remote install disabled')) {
+    return 'Remote install is disabled on this host. Use Artifact or Manifest JSON upload.';
+  }
 
   return msg.replace(/_/g, ' ');
 }

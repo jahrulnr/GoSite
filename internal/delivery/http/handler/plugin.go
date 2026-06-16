@@ -114,9 +114,12 @@ func (h *PluginHandler) Resolve(w http.ResponseWriter, r *http.Request) {
 // InstallSettings handles GET /plugins/install/settings.
 func (h *PluginHandler) InstallSettings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"remote_install_enabled": h.remoteCfg.Enabled,
-		"trust_mode":             h.remoteCfg.TrustMode,
-		"allowed_hosts":          h.remoteCfg.AllowedHosts,
+		"remote_install_enabled":  h.remoteCfg.Enabled,
+		"trust_mode":              h.remoteCfg.TrustMode,
+		"allowed_hosts":           h.remoteCfg.AllowedHosts,
+		"allow_unsigned":          h.remoteCfg.AllowUnsigned,
+		"github_token_configured": h.remoteCfg.GitHubTokenConfigured,
+		"gitlab_token_configured": h.remoteCfg.GitLabTokenConfigured,
 	})
 }
 

@@ -86,7 +86,7 @@ export function PluginsKeyringPanel() {
   const groups = useMemo(() => groupByVendor(state.data ?? []), [state.data]);
 
   const onRevoke = async (entry: PluginKeyringEntry) => {
-    if (!window.confirm(`Revoke ${entry.vendor}/${entry.keyId}? New installs signed with this key will be rejected.`)) {
+    if (!globalThis.confirm(`Revoke ${entry.vendor}/${entry.keyId}? New installs signed with this key will be rejected.`)) {
       return;
     }
     try {

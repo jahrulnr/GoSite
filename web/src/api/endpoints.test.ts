@@ -60,6 +60,9 @@ describe('plugin endpoints', () => {
         remote_install_enabled: true,
         trust_mode: 'strict',
         allowed_hosts: ['github.com'],
+        allow_unsigned: false,
+        github_token_configured: true,
+        gitlab_token_configured: false,
       }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
@@ -71,6 +74,7 @@ describe('plugin endpoints', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/plugins/install/settings', expect.objectContaining({ method: 'GET' }));
     expect(settings.remote_install_enabled).toBe(true);
     expect(settings.trust_mode).toBe('strict');
+    expect(settings.github_token_configured).toBe(true);
   });
 
   it('resolves remote install source', async () => {

@@ -5,6 +5,7 @@ import { Card, Page } from '../components/Layout';
 import { humanizeError } from '../lib/errors';
 import { useAction, useAsync } from '../lib/hooks';
 import { useStore } from '../lib/store';
+import { PluginSettingsCard } from './PluginSettingsCard';
 
 export function SettingsView() {
   const { user, setUser, toast } = useStore();
@@ -62,6 +63,11 @@ export function SettingsView() {
               );
             }}
           </AsyncView>
+        </Card>
+      </div>
+      <div style="margin-top:16px;">
+        <Card title="Plugins">
+          <PluginSettingsCard />
         </Card>
       </div>
     </Page>

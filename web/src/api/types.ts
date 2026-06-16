@@ -316,6 +316,9 @@ export interface PluginInstallSettings {
   remote_install_enabled: boolean;
   trust_mode: 'strict' | 'community' | 'dev';
   allowed_hosts: string[];
+  allow_unsigned: boolean;
+  github_token_configured: boolean;
+  gitlab_token_configured: boolean;
 }
 
 export interface PluginKeyringEntry {

@@ -53,7 +53,7 @@ Companion to [20-plugin-remote-distribution.md](./20-plugin-remote-distribution.
 - [x] Install log in detail panel
 - [x] Keyring admin tab (`PluginsKeyring.tsx`)
 - [x] `GET /plugins/install/settings`
-- [ ] Settings page token UI (deferred)
+- [x] Settings page token status (read-only; host env `GITHUB_TOKEN`)
 
 ## API endpoints
 

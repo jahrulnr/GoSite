@@ -1,6 +1,7 @@
 package remote
 
 import (
+	"strings"
 	"time"
 
 	"github.com/jahrulnr/gosite/internal/config"
@@ -52,5 +53,8 @@ func ConfigFromApp(cfg config.Config) Config {
 		GitLabToken:     cfg.GitLabToken,
 		TrustMode:       trust,
 		ResolveTokenTTL: 15 * time.Minute,
+		AllowUnsigned:         cfg.PluginAllowUnsigned,
+		GitHubTokenConfigured: strings.TrimSpace(cfg.GitHubToken) != "",
+		GitLabTokenConfigured: strings.TrimSpace(cfg.GitLabToken) != "",
 	}
 }

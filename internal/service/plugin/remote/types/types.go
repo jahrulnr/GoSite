@@ -74,4 +74,7 @@ type Config struct {
 	GitLabToken     string
 	TrustMode       string
 	ResolveTokenTTL time.Duration
+	AllowUnsigned         bool
+	GitHubTokenConfigured bool
+	GitLabTokenConfigured bool
 }
