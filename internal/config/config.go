@@ -34,8 +34,14 @@ type Config struct {
 
 	PluginAllowUnsigned      bool
 	PluginKeyringPath        string
-	PluginHookTimeout        time.Duration
 	PluginMaxConcurrentHooks int
+	PluginHookTimeout        time.Duration
+	PluginHealthInterval     time.Duration
+	PluginRestartMaxAttempts int
+	PluginRestartWindow      time.Duration
+	PluginRestartBackoffMin  time.Duration
+	PluginRestartBackoffMax  time.Duration
+	PluginWebhookSecret      string
 
 	ListenAddr string
 	TLSCert    string
@@ -107,6 +113,12 @@ func Load() Config {
 		PluginKeyringPath:        envOr("PLUGIN_KEYRING_PATH", filepath.Join(storage, "plugins", "keyring.json")),
 		PluginHookTimeout:        envDuration("PLUGIN_HOOK_TIMEOUT", 5*time.Second),
 		PluginMaxConcurrentHooks: envInt("PLUGIN_MAX_CONCURRENT_HOOKS", 10),
+		PluginHealthInterval:     envDuration("PLUGIN_HEALTH_CHECK_INTERVAL", 30*time.Second),
+		PluginRestartMaxAttempts: envInt("PLUGIN_RESTART_MAX_ATTEMPTS", 5),
+		PluginRestartWindow:      envDuration("PLUGIN_RESTART_WINDOW", 10*time.Minute),
+		PluginRestartBackoffMin:  envDuration("PLUGIN_RESTART_BACKOFF_INITIAL", 1*time.Second),
+		PluginRestartBackoffMax:  envDuration("PLUGIN_RESTART_BACKOFF_CAP", 2*time.Minute),
+		PluginWebhookSecret:      envOr("PLUGIN_WEBHOOK_SECRET", ""),
 
 		ListenAddr: envOr("LISTEN_ADDR", ":8080"),
 		TLSCert:    envOr("TLS_CERT", filepath.Join(storage, "webconfig/ssl/live/default/cert.pem")),

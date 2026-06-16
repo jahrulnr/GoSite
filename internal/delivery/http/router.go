@@ -155,6 +155,19 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	pluginConfigHandler := handler.NewConfigHandler(pluginConfigSvc)
 	pluginKeyringHandler := handler.NewKeyringHandler(cfg.PluginKeyringPath)
 
+	supervisor := pluginsvc.NewHealthSupervisor(
+		pluginRepo,
+		pluginRuntime,
+		pluginRuntime,
+		pluginsvc.WithSupervisorInterval(cfg.PluginHealthInterval),
+		pluginsvc.WithSupervisorMaxAttempts(cfg.PluginRestartMaxAttempts),
+		pluginsvc.WithSupervisorWindow(cfg.PluginRestartWindow),
+		pluginsvc.WithSupervisorBackoff(cfg.PluginRestartBackoffMin, cfg.PluginRestartBackoffMax),
+	)
+	supervisorCtx, supervisorCancel := context.WithCancel(context.Background())
+	go supervisor.Run(supervisorCtx)
+	_ = supervisorCancel
+
 	terminalHub := terminal.NewHub(terminal.HubConfig{
 		StickyTTL:    cfg.TerminalStickyTTL,
 		DumpDir:      cfg.TerminalDumpDir,

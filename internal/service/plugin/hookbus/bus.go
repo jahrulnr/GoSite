@@ -34,6 +34,17 @@ type HookCaller interface {
 	CallHook(ctx context.Context, target Target, eventName string, payloadJSON json.RawMessage) (json.RawMessage, error)
 }
 
+// NewTargetForTest builds a Target from a sqlite.PluginVersion. Useful
+// for unit tests that don't want to import the sqlite package twice.
+func NewTargetForTest(p sqlite.PluginVersion) Target {
+	return Target{
+		PluginID:     p.PluginID,
+		Version:      p.Version,
+		Tier:         p.Tier,
+		ManifestJSON: p.ManifestJSON,
+	}
+}
+
 // NoopCaller treats dispatch as successful until real runtimes are attached.
 type NoopCaller struct{}
 
@@ -69,7 +80,17 @@ type manifestSnapshot struct {
 	Capabilities struct {
 		Hooks         []string `json:"hooks"`
 		HookIsolation string   `json:"hookIsolation"`
+		LoggingSink   bool     `json:"loggingSink"`
 	} `json:"capabilities"`
+	Webhooks []Tier0Webhook `json:"webhooks"`
+}
+
+// Tier0Webhook declares a tier-0 HTTP hook target.
+type Tier0Webhook struct {
+	Event   string `json:"event"`
+	URL     string `json:"url"`
+	Method  string `json:"method"`
+	Secret  string `json:"secret,omitempty"`
 }
 
 // New returns a hook dispatcher with deterministic defaults.
