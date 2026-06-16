@@ -56,6 +56,9 @@ func (v *Validator) Resolve(raw string) (string, error) {
 }
 
 func pathUnderRoot(path, root string) bool {
+	if root == string(filepath.Separator) {
+		return filepath.IsAbs(path)
+	}
 	if path == root {
 		return true
 	}

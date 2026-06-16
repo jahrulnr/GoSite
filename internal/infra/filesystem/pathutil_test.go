@@ -59,6 +59,12 @@ func TestResolve_AllowsExactRoot(t *testing.T) {
 	assert.Equal(t, "/www", path)
 }
 
+func TestValidate_RootAllowsAbsolutePaths(t *testing.T) {
+	v := filesystem.NewValidator("/")
+	require.NoError(t, v.Validate("/etc/passwd"))
+	require.NoError(t, v.Validate("/tmp/upload.txt"))
+}
+
 func TestDefaultAllowRoots_ContainsExpected(t *testing.T) {
 	assert.Contains(t, filesystem.DefaultAllowRoots, "/www")
 	assert.Contains(t, filesystem.DefaultAllowRoots, "/storage")
