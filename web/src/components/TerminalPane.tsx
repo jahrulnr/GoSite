@@ -34,6 +34,11 @@ export function TerminalPane({ sessionId, onRoleChange, onStatusChange }: Readon
       cursorBlink: true,
       convertEol: true,
       scrollback: 5000,
+      // Start in read-only mode. The `onRole` callback below flips this
+      // to false once the server confirms the writer role via the
+      // `ready` frame, so the user can never type into an unattached
+      // or read-only shell session.
+      disableStdin: true,
       theme: {
         background: '#0e0f12',
         foreground: '#e7e9ee',

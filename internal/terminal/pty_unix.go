@@ -46,9 +46,27 @@ func ptyStart(cmd *exec.Cmd, cols, rows int) (ptyHandle, error) {
 	cmd.Stdin = tty
 	cmd.Stdout = tty
 	cmd.Stderr = tty
-	// Put the child into its own process group so Kill can signal the entire
+	// Ensure the child has a controlling TTY (required for bash job control).
+	// Also put it into its own process group so Kill can signal the entire
 	// group including any backgrounded long-running processes (e.g. tail -f).
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	//
+	// Without Setsid+Setctty bash prints:
+	//   "cannot set terminal process group ... no job control in this shell"
+	// because it is not a session leader with a controlling terminal.
+	attr := cmd.SysProcAttr
+	if attr == nil {
+		attr = &syscall.SysProcAttr{}
+	}
+	attr.Setsid = true
+	attr.Setctty = true
+	// Ctty is the fd number *in the child* that should become controlling TTY.
+	// Since we wire `tty` into cmd.Stdin, the child will have it as fd 0.
+	attr.Ctty = 0
+	// Note: do NOT also Setpgid here. With Setsid=true, the child is already
+	// placed into a fresh process group (pgid == pid). Setting both can trip
+	// EPERM in restricted environments and is redundant for our kill-by-pgid
+	// strategy (ptyKill uses -pid).
+	cmd.SysProcAttr = attr
 
 	if err := cmd.Start(); err != nil {
 		_ = master.Close()
