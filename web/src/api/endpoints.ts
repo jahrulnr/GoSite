@@ -18,6 +18,7 @@ import type {
   NetworkTraffic,
   PluginInstallSettings,
   PluginInstallSource,
+  PluginKeyringEntry,
   PluginResolvePreview,
   PluginVersion,
   QueryEvent,
@@ -220,6 +221,11 @@ export const plugins = {
     http.post<{ plugin: PluginVersion }>(`${pluginPath(pluginID)}/switch`, { version }),
   uninstall: (pluginID: string, version: string) =>
     http.del<{ plugin: PluginVersion }>(`${pluginPath(pluginID)}/versions/${encodeURIComponent(version)}`),
+  listKeyring: () => http.get<{ keys: PluginKeyringEntry[] }>('/plugins/keyring').then((r) => r.keys ?? []),
+  addKeyringEntry: (key: Pick<PluginKeyringEntry, 'vendor' | 'keyId' | 'publicKey'>) =>
+    http.post<void>('/plugins/keyring', key),
+  revokeKeyringEntry: (vendor: string, keyId: string) =>
+    http.del<void>('/plugins/keyring', { vendor, keyId }),
 };
 
 // ---- Logs ----

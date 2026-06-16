@@ -111,4 +111,24 @@ describe('plugin endpoints', () => {
       }),
     }));
   });
+
+  it('lists and revokes keyring entries', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ keys: [{ vendor: 'acme', keyId: 'k1', publicKey: 'abc' }] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    const keys = await plugins.listKeyring();
+    expect(keys).toHaveLength(1);
+    await plugins.revokeKeyringEntry('acme', 'k1');
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/plugins/keyring', expect.objectContaining({ method: 'GET' }));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/plugins/keyring?vendor=acme&keyId=k1', expect.objectContaining({
+      method: 'DELETE',
+    }));
+  });
 });

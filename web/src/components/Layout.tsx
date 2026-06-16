@@ -245,6 +245,9 @@ export function BootGate({ children }: Readonly<{ children: ComponentChildren }>
 }
 
 function RouteView({ path, params }: Readonly<{ path: string; params: Record<string, string> }>) {
+  if (path === '/plugins/keyring') {
+    return <PluginsView tab="keyring" />;
+  }
   if (path.startsWith('/plugins/')) {
     return <PluginContributionView path={path} />;
   }

@@ -9,6 +9,7 @@ import { humanizeError } from '../lib/errors';
 import { useAction, useAsync } from '../lib/hooks';
 import { navigate } from '../lib/router';
 import { useStore } from '../lib/store';
+import { PluginsKeyringPanel } from './PluginsKeyring';
 
 type InstallMode = 'artifact' | 'url' | 'github' | 'manifest';
 
@@ -632,23 +633,56 @@ function PluginDetailPanel({ rows }: Readonly<{ rows: PluginVersion[] }>) {
   );
 }
 
-export function PluginsView() {
+export function PluginsView({ tab: initialTab = 'registry' }: Readonly<{ tab?: 'registry' | 'keyring' }>) {
   const state = useAsync(() => plugins.list());
   const [installOpen, setInstallOpen] = useState(false);
+  const [tab, setTab] = useState<'registry' | 'keyring'>(initialTab);
+
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab]);
 
   return (
     <Page
       title="Plugins"
-      subtitle="Install artifacts, validate compatibility, and control enabled versions."
+      subtitle={tab === 'keyring'
+        ? 'Manage trusted vendor signing keys for strict-mode installs.'
+        : 'Install artifacts, validate compatibility, and control enabled versions.'}
       eyebrow="runtime"
       actions={
         <div class="row wrap">
-          <button type="button" class="btn ghost" onClick={state.reload}><IconRefresh /> Refresh</button>
-          <button type="button" class="btn primary" onClick={() => setInstallOpen(true)}><IconArrowUp /> Install</button>
+          {tab === 'registry' && (
+            <>
+              <button type="button" class="btn ghost" onClick={state.reload}><IconRefresh /> Refresh</button>
+              <button type="button" class="btn primary" onClick={() => setInstallOpen(true)}><IconArrowUp /> Install</button>
+            </>
+          )}
+          {tab === 'keyring' && (
+            <button type="button" class="btn ghost" onClick={() => navigate('/plugins')}><IconPlug /> Registry</button>
+          )}
         </div>
       }
     >
-      <AsyncView state={state} loadingLabel="Loading plugins">
+      <div class="tabs" style="margin-bottom:16px;">
+        <button
+          type="button"
+          class={tab === 'registry' ? 'active' : ''}
+          onClick={() => { setTab('registry'); navigate('/plugins'); }}
+        >
+          Registry
+        </button>
+        <button
+          type="button"
+          class={tab === 'keyring' ? 'active' : ''}
+          onClick={() => { setTab('keyring'); navigate('/plugins/keyring'); }}
+        >
+          Keyring
+        </button>
+      </div>
+      {tab === 'keyring' ? (
+        <PluginsKeyringPanel />
+      ) : (
+        <AsyncView state={state} loadingLabel="Loading plugins">
         {(rows) => {
           const activeRows = rows.filter((item) => item.state !== 'uninstalled');
           const enabled = activeRows.filter((item) => item.state === 'enabled').length;
@@ -670,6 +704,7 @@ export function PluginsView() {
           );
         }}
       </AsyncView>
+      )}
       {installOpen && <InstallModal onClose={() => setInstallOpen(false)} onInstalled={state.reload} />}
     </Page>
   );

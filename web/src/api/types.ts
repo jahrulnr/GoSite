@@ -318,6 +318,14 @@ export interface PluginInstallSettings {
   allowed_hosts: string[];
 }
 
+export interface PluginKeyringEntry {
+  vendor: string;
+  keyId: string;
+  publicKey: string;
+  createdAt?: string;
+  revokedAt?: string;
+}
+
 export interface PluginInstallLogStep {
   step: string;
   at: string;

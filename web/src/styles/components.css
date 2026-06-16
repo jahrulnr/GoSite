@@ -2306,6 +2306,16 @@ code {
   color: var(--danger);
 }
 
+.plugin-keyring-groups {
+  display: grid;
+  gap: 20px;
+}
+
+.plugin-keyring-vendor h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
 .plugin-route-fallback {
   min-height: 360px;
   display: grid;

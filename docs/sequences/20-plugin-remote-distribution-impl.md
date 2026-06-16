@@ -9,7 +9,7 @@ Companion to [20-plugin-remote-distribution.md](./20-plugin-remote-distribution.
 | **G1** URL + fetcher + provenance | Done | |
 | **G2** GitHub + `gosite.plugin.json` | Done | `github-release` resolver |
 | **G1c** Permission install prompt | Done | API + panel |
-| **G1b** Keyring UI | Deferred | API exists |
+| **G1b** Keyring UI | Done | Registry + `/plugins/keyring` tab |
 | **G2b** Docker builder | Deferred | Per plan |
 | **G3–G6** | Deferred | GitLab, catalog, CLI |
 
@@ -50,6 +50,8 @@ Companion to [20-plugin-remote-distribution.md](./20-plugin-remote-distribution.
 - [x] Install hub wizard (URL + GitHub tabs)
 - [x] Provenance column in registry table
 - [x] Distribution card in detail panel
+- [x] Install log in detail panel
+- [x] Keyring admin tab (`PluginsKeyring.tsx`)
 - [x] `GET /plugins/install/settings`
 - [ ] Settings page token UI (deferred)
 
