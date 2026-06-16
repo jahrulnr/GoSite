@@ -19,6 +19,7 @@ Ditunda ke gelombang berikutnya:
 
 - Scoped plugin API token dan egress policy (cuma UI scaffolding).
 - Tier 2 WASM dan tier 3 `.so` tetap out of scope untuk gelombang implementasi ini.
+- **Distribusi remote** (install dari GitHub/GitLab/URL tanpa upload zip manual) — lihat [20-plugin-remote-distribution_id.md](./20-plugin-remote-distribution_id.md).
 
 ## Template pengembang
 

@@ -16,6 +16,11 @@ import type {
   LogTailResponse,
   Mount,
   NetworkTraffic,
+  PluginInstallSettings,
+  PluginInstallSource,
+  PluginCatalogEntry,
+  PluginKeyringEntry,
+  PluginResolvePreview,
   PluginVersion,
   QueryEvent,
   QueryMetaResponse,
@@ -188,8 +193,19 @@ function pluginPath(pluginID: string) {
   return `/plugins/${encodeURIComponent(vendor)}/${encodeURIComponent(name)}`;
 }
 
+export type { PluginInstallSource, PluginResolvePreview };
+
 export const plugins = {
   list: () => http.get<{ plugins: PluginVersion[] }>('/plugins').then((r) => r.plugins ?? []),
+  installSettings: () => http.get<PluginInstallSettings>('/plugins/install/settings'),
+  resolveInstall: (source: PluginInstallSource) =>
+    http.post<{ preview: PluginResolvePreview }>('/plugins/install/resolve', { source }),
+  installRemote: (source: PluginInstallSource, permissionsAck: boolean, resolveToken?: string) =>
+    http.post<{ plugin: PluginVersion }>('/plugins/install', {
+      source,
+      permissions_ack: permissionsAck,
+      ...(resolveToken ? { resolveToken } : {}),
+    }),
   installFile: (file: File, sha256?: string) => {
     const form = new FormData();
     form.append('artifact', file);
@@ -206,6 +222,18 @@ export const plugins = {
     http.post<{ plugin: PluginVersion }>(`${pluginPath(pluginID)}/switch`, { version }),
   uninstall: (pluginID: string, version: string) =>
     http.del<{ plugin: PluginVersion }>(`${pluginPath(pluginID)}/versions/${encodeURIComponent(version)}`),
+  listKeyring: () => http.get<{ keys: PluginKeyringEntry[] }>('/plugins/keyring').then((r) => r.keys ?? []),
+  addKeyringEntry: (key: Pick<PluginKeyringEntry, 'vendor' | 'keyId' | 'publicKey'>) =>
+    http.post<void>('/plugins/keyring', key),
+  revokeKeyringEntry: (vendor: string, keyId: string) =>
+    http.del<void>('/plugins/keyring', { vendor, keyId }),
+  catalog: (query?: string) =>
+    http.get<{ entries: PluginCatalogEntry[] }>('/plugins/catalog', query ? { q: query } : undefined).then((r) => r.entries ?? []),
+  catalogEntry: (pluginID: string) => {
+    const [vendor, name] = pluginID.split('/');
+    if (!vendor || !name) throw new Error('Plugin id must be vendor/name');
+    return http.get<{ entry: PluginCatalogEntry }>(`/plugins/catalog/${encodeURIComponent(vendor)}/${encodeURIComponent(name)}`).then((r) => r.entry);
+  },
 };
 
 // ---- Logs ----

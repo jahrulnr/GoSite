@@ -1,16 +1,19 @@
-import { useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useState } from 'preact/hooks';
 import { plugins } from '../api/endpoints';
-import type { PluginState, PluginVersion } from '../api/types';
+import type { PluginCatalogEntry, PluginInstallSource, PluginResolvePreview, PluginState, PluginVersion } from '../api/types';
 import { IconArrowUp, IconPlay, IconPlug, IconRefresh, IconShield, IconTrash } from '../components/Icons';
 import { Page, Stat } from '../components/Layout';
 import { AsyncView, Badge, EmptyState, Field, InlineNotice, Modal, Spinner } from '../components/Ui';
-import { formatDate, formatRelative } from '../lib/format';
+import { formatBytes, formatDate, formatRelative } from '../lib/format';
 import { humanizeError } from '../lib/errors';
 import { useAction, useAsync } from '../lib/hooks';
 import { navigate } from '../lib/router';
 import { useStore } from '../lib/store';
+import { PluginsKeyringPanel } from './PluginsKeyring';
 
-type InstallMode = 'artifact' | 'manifest';
+type InstallMode = 'artifact' | 'url' | 'github' | 'gitlab' | 'catalog' | 'manifest';
+
+const HOST_CRITICAL_PERMS = new Set(['docker:manage', 'nginx:modify', 'ssl:issue', 'filesystem:write']);
 
 interface PluginGroup {
   id: string;
@@ -88,16 +91,151 @@ function permissions(plugin: PluginVersion) {
   return plugin.manifest?.permissions ?? [];
 }
 
+function sourceDisplayLabel(sourceType?: string) {
+  if (!sourceType || sourceType === 'upload') return 'upload';
+  if (sourceType === 'github-release') return 'github';
+  if (sourceType === 'url') return 'url';
+  return sourceType;
+}
+
+function truncateText(value: string, max = 40) {
+  if (value.length <= max) return value;
+  return `${value.slice(0, max - 1)}…`;
+}
+
+function truncateSha256(digest: string) {
+  if (digest.length <= 16) return digest;
+  return `${digest.slice(0, 8)}…${digest.slice(-8)}`;
+}
+
+function hasDistribution(plugin: PluginVersion) {
+  const sourceType = plugin.source_type;
+  return !!sourceType && sourceType !== 'upload';
+}
+
+function parseGitHubReleasePaste(text: string) {
+  const re = /github\.com\/([^/]+\/[^/]+)\/releases\/tag\/(.+?)\/?$/i;
+  const match = re.exec(text.trim());
+  if (!match) return {};
+  return { repo: match[1], tag: decodeURIComponent(match[2]) };
+}
+
+function InstallPreviewCard({
+  preview,
+  permissionsAck,
+  onPermissionsAck,
+}: Readonly<{
+  preview: PluginResolvePreview;
+  permissionsAck: boolean;
+  onPermissionsAck: (checked: boolean) => void;
+}>) {
+  const visibleHooks = preview.hooks.slice(0, 5);
+  const extraHooks = preview.hooks.length - visibleHooks.length;
+  return (
+    <div class="plugin-detail-card plugin-install-preview">
+      <div class="row wrap" style="margin-bottom:8px;">
+        <span class="mono">{preview.plugin_id}</span>
+        <Badge kind="info">v{preview.version}</Badge>
+        <Badge kind="info">tier {preview.tier}</Badge>
+        {preview.signed ? <Badge kind="ok">signed ✓</Badge> : <Badge kind="warn">unsigned ✗</Badge>}
+      </div>
+      <dl class="plugin-facts">
+        <div><dt>Min GoSite</dt><dd>{preview.minGoSiteVersion || '—'}</dd></div>
+        <div><dt>SHA-256</dt><dd class="mono">{truncateSha256(preview.sha256)}</dd></div>
+        <div><dt>Size</dt><dd>{formatBytes(preview.size)}</dd></div>
+        <div><dt>Source</dt><dd>{preview.source_type} · {preview.source_ref}</dd></div>
+      </dl>
+      <div style="margin-top:12px;">
+        <div class="dim" style="margin-bottom:6px;">Hooks ({preview.hooks.length})</div>
+        <div class="chip-row">
+          {visibleHooks.map((hook) => <span key={hook} class="chip mono">{hook}</span>)}
+          {extraHooks > 0 && <span class="chip dim">{extraHooks} more</span>}
+          {preview.hooks.length === 0 && <span class="dim">—</span>}
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <div class="dim" style="margin-bottom:6px;">Permissions ({preview.permissions.length})</div>
+        <div class="chip-row">
+          {preview.permissions.map((perm) => (
+            HOST_CRITICAL_PERMS.has(perm)
+              ? <Badge key={perm} kind="warn">{perm}</Badge>
+              : <span key={perm} class="chip mono">{perm}</span>
+          ))}
+          {preview.permissions.length === 0 && <span class="dim">—</span>}
+        </div>
+      </div>
+      <label class="row wrap" style="margin-top:16px; gap:8px; cursor:pointer;">
+        <input
+          type="checkbox"
+          checked={permissionsAck}
+          onChange={(event) => onPermissionsAck((event.target as HTMLInputElement).checked)}
+        />
+        <span>I understand the permissions this plugin requests</span>
+      </label>
+    </div>
+  );
+}
+
 function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; onInstalled: () => void }>) {
   const { meta, toast } = useStore();
+  const settingsState = useAsync(() => plugins.installSettings(), []);
+  const remoteEnabled = settingsState.data?.remote_install_enabled ?? false;
   const [mode, setMode] = useState<InstallMode>('artifact');
   const [file, setFile] = useState<File>();
   const [sha256, setSHA256] = useState('');
   const [manifest, setManifest] = useState('');
+  const [url, setUrl] = useState('');
+  const [urlSha256, setUrlSha256] = useState('');
+  const [repo, setRepo] = useState('');
+  const [tag, setTag] = useState('');
+  const [gitlabRepo, setGitlabRepo] = useState('');
+  const [gitlabTag, setGitlabTag] = useState('');
+  const [catalogQuery, setCatalogQuery] = useState('');
+  const [catalogEntry, setCatalogEntry] = useState<PluginCatalogEntry>();
+  const catalogState = useAsync(() => plugins.catalog(catalogQuery.trim() || undefined), [catalogQuery, mode]);
+  const [preview, setPreview] = useState<PluginResolvePreview>();
+  const [permissionsAck, setPermissionsAck] = useState(false);
   const installFile = useAction(plugins.installFile);
   const installManifest = useAction(plugins.installManifest);
-  const busy = installFile.loading || installManifest.loading;
-  const error = installFile.error ?? installManifest.error;
+  const resolveInstall = useAction(plugins.resolveInstall);
+  const installRemote = useAction(plugins.installRemote);
+  const busy = installFile.loading || installManifest.loading || installRemote.loading;
+  const resolveBusy = resolveInstall.loading;
+  const error = installFile.error ?? installManifest.error ?? installRemote.error ?? resolveInstall.error;
+  const isRemoteMode = mode === 'url' || mode === 'github' || mode === 'gitlab' || mode === 'catalog';
+
+  useEffect(() => {
+    if (!remoteEnabled && isRemoteMode) setMode('artifact');
+  }, [remoteEnabled, isRemoteMode]);
+
+  const switchMode = (next: InstallMode) => {
+    setMode(next);
+    setPreview(undefined);
+    setPermissionsAck(false);
+    setCatalogEntry(undefined);
+  };
+
+  const resolve = async () => {
+    try {
+      let source: PluginInstallSource;
+      if (mode === 'url') {
+        source = { type: 'url', url: url.trim(), sha256: urlSha256.trim() };
+      } else if (mode === 'gitlab') {
+        source = { type: 'gitlab-release', repo: gitlabRepo.trim(), tag: gitlabTag.trim() };
+      } else if (mode === 'catalog') {
+        if (!catalogEntry) throw new Error('Select a catalog entry first');
+        source = catalogEntry.source;
+      } else {
+        source = { type: 'github-release', repo: repo.trim(), tag: tag.trim() };
+      }
+      const result = await resolveInstall.run(source);
+      setPreview(result?.preview);
+      setPermissionsAck(false);
+    } catch (err) {
+      setPreview(undefined);
+      toast(humanizeError(err as Error, meta), 'error');
+    }
+  };
 
   const submit = async (event: Event) => {
     event.preventDefault();
@@ -105,9 +243,37 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
       if (mode === 'artifact') {
         if (!file) throw new Error('Choose an artifact first');
         await installFile.run(file, sha256.trim() || undefined);
-      } else {
+      } else if (mode === 'manifest') {
         JSON.parse(manifest);
         await installManifest.run(manifest, sha256.trim() || undefined);
+      } else if (mode === 'url') {
+        if (!preview) throw new Error('Resolve the URL before installing');
+        if (!permissionsAck) throw new Error('Acknowledge plugin permissions first');
+        await installRemote.run(
+          { type: 'url', url: url.trim(), sha256: urlSha256.trim() },
+          true,
+          preview.resolveToken,
+        );
+      } else if (mode === 'gitlab') {
+        if (!preview) throw new Error('Resolve the release before installing');
+        if (!permissionsAck) throw new Error('Acknowledge plugin permissions first');
+        await installRemote.run(
+          { type: 'gitlab-release', repo: gitlabRepo.trim(), tag: gitlabTag.trim() },
+          true,
+          preview.resolveToken,
+        );
+      } else if (mode === 'catalog') {
+        if (!preview || !catalogEntry) throw new Error('Resolve the catalog entry before installing');
+        if (!permissionsAck) throw new Error('Acknowledge plugin permissions first');
+        await installRemote.run(catalogEntry.source, true, preview.resolveToken);
+      } else {
+        if (!preview) throw new Error('Resolve the release before installing');
+        if (!permissionsAck) throw new Error('Acknowledge plugin permissions first');
+        await installRemote.run(
+          { type: 'github-release', repo: repo.trim(), tag: tag.trim() },
+          true,
+          preview.resolveToken,
+        );
       }
       toast('Plugin installed');
       onInstalled();
@@ -116,6 +282,8 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
       toast(humanizeError(err as Error, meta), 'error');
     }
   };
+
+  const installDisabled = busy || (isRemoteMode && (!preview || !permissionsAck || (mode === 'catalog' && !catalogEntry)));
 
   return (
     <Modal
@@ -126,18 +294,37 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
         <>
           {error && <InlineNotice kind="danger">{humanizeError(error, meta)}</InlineNotice>}
           <button type="button" class="btn ghost" onClick={onClose}>Cancel</button>
-          <button type="submit" form="plugin-install-form" class="btn primary" disabled={busy}>
+          <button type="submit" form="plugin-install-form" class="btn primary" disabled={installDisabled}>
             {busy ? <Spinner /> : <><IconArrowUp /> Install</>}
           </button>
         </>
       }
     >
       <form id="plugin-install-form" onSubmit={submit}>
+        {!settingsState.loading && !remoteEnabled && (
+          <div style="margin-bottom:12px;">
+            <InlineNotice kind="info">
+              Remote install (URL and GitHub) is disabled on this host. Use Artifact or Manifest JSON.
+            </InlineNotice>
+          </div>
+        )}
         <div class="tabs">
-          <button type="button" class={mode === 'artifact' ? 'active' : ''} onClick={() => setMode('artifact')}>Artifact</button>
-          <button type="button" class={mode === 'manifest' ? 'active' : ''} onClick={() => setMode('manifest')}>Manifest JSON</button>
+          <button type="button" class={mode === 'artifact' ? 'active' : ''} onClick={() => switchMode('artifact')}>Artifact</button>
+          {remoteEnabled && (
+            <button type="button" class={mode === 'url' ? 'active' : ''} onClick={() => switchMode('url')}>URL</button>
+          )}
+          {remoteEnabled && (
+            <button type="button" class={mode === 'github' ? 'active' : ''} onClick={() => switchMode('github')}>GitHub</button>
+          )}
+          {remoteEnabled && (
+            <button type="button" class={mode === 'gitlab' ? 'active' : ''} onClick={() => switchMode('gitlab')}>GitLab</button>
+          )}
+          {remoteEnabled && (
+            <button type="button" class={mode === 'catalog' ? 'active' : ''} onClick={() => switchMode('catalog')}>Catalog</button>
+          )}
+          <button type="button" class={mode === 'manifest' ? 'active' : ''} onClick={() => switchMode('manifest')}>Manifest JSON</button>
         </div>
-        {mode === 'artifact' ? (
+        {mode === 'artifact' && (
           <Field label="Artifact">
             <input
               class="input"
@@ -146,7 +333,8 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
               required
             />
           </Field>
-        ) : (
+        )}
+        {mode === 'manifest' && (
           <Field label="Manifest JSON">
             <textarea
               class="textarea plugin-manifest-input"
@@ -156,13 +344,142 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
             />
           </Field>
         )}
-        <Field label="SHA-256" hint="Optional digest check before registry insert.">
-          <input
-            class="input mono"
-            value={sha256}
-            onInput={(event) => setSHA256((event.target as HTMLInputElement).value)}
-          />
-        </Field>
+        {mode === 'url' && (
+          <>
+            <Field label="HTTPS URL" hint="Direct link to a plugin artifact.">
+              <input
+                class="input mono"
+                type="url"
+                value={url}
+                onInput={(event) => {
+                  setUrl((event.target as HTMLInputElement).value);
+                  setPreview(undefined);
+                }}
+                required
+              />
+            </Field>
+            <Field label="SHA-256" hint="Required digest check for remote URL installs.">
+              <input
+                class="input mono"
+                value={urlSha256}
+                onInput={(event) => {
+                  setUrlSha256((event.target as HTMLInputElement).value);
+                  setPreview(undefined);
+                }}
+                required
+              />
+            </Field>
+            <div class="row wrap" style="margin-bottom:12px;">
+              <button type="button" class="btn ghost" disabled={resolveBusy || !url.trim() || !urlSha256.trim()} onClick={() => void resolve()}>
+                {resolveBusy ? <Spinner /> : 'Resolve'}
+              </button>
+            </div>
+            {preview && (
+              <InstallPreviewCard preview={preview} permissionsAck={permissionsAck} onPermissionsAck={setPermissionsAck} />
+            )}
+          </>
+        )}
+        {mode === 'github' && (
+          <>
+            <Field label="Repository" hint="owner/repo — paste a GitHub release URL to auto-fill.">
+              <input
+                class="input mono"
+                value={repo}
+                onInput={(event) => {
+                  setRepo((event.target as HTMLInputElement).value);
+                  setPreview(undefined);
+                }}
+                onPaste={(event) => {
+                  const text = event.clipboardData?.getData('text') ?? '';
+                  const parsed = parseGitHubReleasePaste(text);
+                  if (!parsed.repo) return;
+                  event.preventDefault();
+                  setRepo(parsed.repo);
+                  if (parsed.tag) setTag(parsed.tag);
+                  setPreview(undefined);
+                }}
+                placeholder="acme/my-plugin"
+                required
+              />
+            </Field>
+            <Field label="Tag" hint="Release tag, e.g. v1.2.3">
+              <input
+                class="input mono"
+                value={tag}
+                onInput={(event) => {
+                  setTag((event.target as HTMLInputElement).value);
+                  setPreview(undefined);
+                }}
+                placeholder="v1.2.3"
+                required
+              />
+            </Field>
+            <div class="row wrap" style="margin-bottom:12px;">
+              <button type="button" class="btn ghost" disabled={resolveBusy || !repo.trim() || !tag.trim()} onClick={() => void resolve()}>
+                {resolveBusy ? <Spinner /> : 'Resolve'}
+              </button>
+            </div>
+            {preview && (
+              <InstallPreviewCard preview={preview} permissionsAck={permissionsAck} onPermissionsAck={setPermissionsAck} />
+            )}
+          </>
+        )}
+        {mode === 'gitlab' && (
+          <>
+            <Field label="Repository" hint="group/project on GitLab">
+              <input class="input mono" value={gitlabRepo} onInput={(e) => { setGitlabRepo((e.target as HTMLInputElement).value); setPreview(undefined); }} placeholder="acme/my-plugin" required />
+            </Field>
+            <Field label="Tag" hint="Release tag, e.g. v1.2.3">
+              <input class="input mono" value={gitlabTag} onInput={(e) => { setGitlabTag((e.target as HTMLInputElement).value); setPreview(undefined); }} placeholder="v1.2.3" required />
+            </Field>
+            <div class="row wrap" style="margin-bottom:12px;">
+              <button type="button" class="btn ghost" disabled={resolveBusy || !gitlabRepo.trim() || !gitlabTag.trim()} onClick={() => void resolve()}>
+                {resolveBusy ? <Spinner /> : 'Resolve'}
+              </button>
+            </div>
+            {preview && <InstallPreviewCard preview={preview} permissionsAck={permissionsAck} onPermissionsAck={setPermissionsAck} />}
+          </>
+        )}
+        {mode === 'catalog' && (
+          <>
+            <Field label="Search catalog">
+              <input class="input" value={catalogQuery} onInput={(e) => setCatalogQuery((e.target as HTMLInputElement).value)} placeholder="plugin name or id" />
+            </Field>
+            <div class="plugin-catalog-list">
+              {(catalogState.data ?? []).map((entry) => (
+                <button
+                  type="button"
+                  key={entry.plugin_id}
+                  class={`plugin-catalog-item ${catalogEntry?.plugin_id === entry.plugin_id ? 'active' : ''}`}
+                  onClick={() => { setCatalogEntry(entry); setPreview(undefined); setPermissionsAck(false); }}
+                >
+                  <strong class="mono">{entry.plugin_id}</strong>
+                  <span class="dim">{entry.description || entry.name}</span>
+                </button>
+              ))}
+              {!catalogState.loading && (catalogState.data?.length ?? 0) === 0 && (
+                <span class="dim">No catalog entries. Add plugins to the host catalog JSON.</span>
+              )}
+            </div>
+            {catalogEntry && (
+              <div class="row wrap" style="margin:12px 0;">
+                <button type="button" class="btn ghost" disabled={resolveBusy} onClick={() => void resolve()}>
+                  {resolveBusy ? <Spinner /> : 'Resolve'}
+                </button>
+              </div>
+            )}
+            {preview && <InstallPreviewCard preview={preview} permissionsAck={permissionsAck} onPermissionsAck={setPermissionsAck} />}
+          </>
+        )}
+        {(mode === 'artifact' || mode === 'manifest') && (
+          <Field label="SHA-256" hint="Optional digest check before registry insert.">
+            <input
+              class="input mono"
+              value={sha256}
+              onInput={(event) => setSHA256((event.target as HTMLInputElement).value)}
+            />
+          </Field>
+        )}
       </form>
     </Modal>
   );
@@ -245,6 +562,7 @@ function PluginRegistry({ rows, reload }: Readonly<{ rows: PluginVersion[]; relo
               <thead>
                 <tr>
                   <th>Version</th>
+                  <th>Source</th>
                   <th>State</th>
                   <th>Capabilities</th>
                   <th>UI</th>
@@ -259,6 +577,16 @@ function PluginRegistry({ rows, reload }: Readonly<{ rows: PluginVersion[]; relo
                     <td>
                       <div class="mono">{plugin.version}</div>
                       <div class="dim">api {plugin.api_version}</div>
+                    </td>
+                    <td>
+                      <span title={plugin.source_ref ? truncateText(plugin.source_ref, 80) : undefined}>
+                        {sourceDisplayLabel(plugin.source_type)}
+                      </span>
+                      {plugin.source_ref && (
+                        <div class="dim mono" style="font-size:11px; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                          {truncateText(plugin.source_ref, 24)}
+                        </div>
+                      )}
                     </td>
                     <td><Badge kind={stateKind(plugin.state)}>{stateLabel(plugin.state)}</Badge></td>
                     <td>
@@ -323,6 +651,38 @@ function PluginDetailPanel({ rows }: Readonly<{ rows: PluginVersion[] }>) {
           <div><dt>Installed</dt><dd>{formatDate(selected.created_at)}</dd></div>
         </dl>
       </div>
+      {hasDistribution(selected) && (
+        <div class="plugin-detail-card">
+          <h3>Distribution</h3>
+          <dl class="plugin-facts">
+            <div><dt>Source type</dt><dd>{selected.source_type}</dd></div>
+            <div><dt>Source ref</dt><dd class="mono">{selected.source_ref || '—'}</dd></div>
+            <div><dt>Install path</dt><dd>{selected.install_path || '—'}</dd></div>
+            {selected.source_commit && (
+              <div><dt>Commit</dt><dd class="mono">{truncateText(selected.source_commit, 16)}</dd></div>
+            )}
+            {selected.resolved_url && (
+              <div><dt>Resolved URL</dt><dd class="mono">{truncateText(selected.resolved_url, 48)}</dd></div>
+            )}
+          </dl>
+        </div>
+      )}
+      {(selected.install_log?.length ?? 0) > 0 && (
+        <div class="plugin-detail-card">
+          <h3>Install log</h3>
+          <ol class="plugin-install-log">
+            {selected.install_log!.map((entry) => (
+              <li key={`${entry.step}-${entry.at}`} class={entry.status === 'failed' ? 'failed' : 'ok'}>
+                <span class="mono">{entry.step}</span>
+                {entry.status === 'failed' && entry.failure_class && (
+                  <Badge kind="danger">{entry.failure_class}</Badge>
+                )}
+                {entry.detail && <span class="dim">{entry.detail}</span>}
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
       <div class="plugin-detail-card">
         <h3>Hooks</h3>
         <div class="chip-row vertical">
@@ -352,23 +712,56 @@ function PluginDetailPanel({ rows }: Readonly<{ rows: PluginVersion[] }>) {
   );
 }
 
-export function PluginsView() {
+export function PluginsView({ tab: initialTab = 'registry' }: Readonly<{ tab?: 'registry' | 'keyring' }>) {
   const state = useAsync(() => plugins.list());
   const [installOpen, setInstallOpen] = useState(false);
+  const [tab, setTab] = useState<'registry' | 'keyring'>(initialTab);
+
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab]);
 
   return (
     <Page
       title="Plugins"
-      subtitle="Install artifacts, validate compatibility, and control enabled versions."
+      subtitle={tab === 'keyring'
+        ? 'Manage trusted vendor signing keys for strict-mode installs.'
+        : 'Install artifacts, validate compatibility, and control enabled versions.'}
       eyebrow="runtime"
       actions={
         <div class="row wrap">
-          <button type="button" class="btn ghost" onClick={state.reload}><IconRefresh /> Refresh</button>
-          <button type="button" class="btn primary" onClick={() => setInstallOpen(true)}><IconArrowUp /> Install</button>
+          {tab === 'registry' && (
+            <>
+              <button type="button" class="btn ghost" onClick={state.reload}><IconRefresh /> Refresh</button>
+              <button type="button" class="btn primary" onClick={() => setInstallOpen(true)}><IconArrowUp /> Install</button>
+            </>
+          )}
+          {tab === 'keyring' && (
+            <button type="button" class="btn ghost" onClick={() => navigate('/plugins')}><IconPlug /> Registry</button>
+          )}
         </div>
       }
     >
-      <AsyncView state={state} loadingLabel="Loading plugins">
+      <div class="tabs" style="margin-bottom:16px;">
+        <button
+          type="button"
+          class={tab === 'registry' ? 'active' : ''}
+          onClick={() => { setTab('registry'); navigate('/plugins'); }}
+        >
+          Registry
+        </button>
+        <button
+          type="button"
+          class={tab === 'keyring' ? 'active' : ''}
+          onClick={() => { setTab('keyring'); navigate('/plugins/keyring'); }}
+        >
+          Keyring
+        </button>
+      </div>
+      {tab === 'keyring' ? (
+        <PluginsKeyringPanel />
+      ) : (
+        <AsyncView state={state} loadingLabel="Loading plugins">
         {(rows) => {
           const activeRows = rows.filter((item) => item.state !== 'uninstalled');
           const enabled = activeRows.filter((item) => item.state === 'enabled').length;
@@ -390,6 +783,7 @@ export function PluginsView() {
           );
         }}
       </AsyncView>
+      )}
       {installOpen && <InstallModal onClose={() => setInstallOpen(false)} onInstalled={state.reload} />}
     </Page>
   );

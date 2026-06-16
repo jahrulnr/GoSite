@@ -28,6 +28,8 @@ import (
 	"github.com/jahrulnr/gosite/internal/service/logs"
 	mountsvc "github.com/jahrulnr/gosite/internal/service/mount"
 	pluginsvc "github.com/jahrulnr/gosite/internal/service/plugin"
+	pluginremote "github.com/jahrulnr/gosite/internal/service/plugin/remote"
+	plugincatalog "github.com/jahrulnr/gosite/internal/service/plugin/catalog"
 	"github.com/jahrulnr/gosite/internal/service/plugin/hookbus"
 	"github.com/jahrulnr/gosite/internal/service/settings"
 	"github.com/jahrulnr/gosite/internal/service/ssl"
@@ -151,7 +153,10 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	if err := pluginSvc.Reconcile(context.Background()); err != nil {
 		slog.Warn("plugin reconcile failed", "err", err)
 	}
-	pluginHandler := handler.NewPluginHandler(pluginSvc)
+	pluginRemoteCfg := pluginremote.ConfigFromApp(cfg)
+	pluginRemoteSvc := pluginremote.NewService(pluginRemoteCfg)
+	pluginCatalogSvc := plugincatalog.NewService(cfg.PluginCatalogPath)
+	pluginHandler := handler.NewPluginHandler(pluginSvc, pluginRemoteSvc, pluginRemoteCfg, pluginCatalogSvc)
 	pluginConfigHandler := handler.NewConfigHandler(pluginConfigSvc)
 	pluginKeyringHandler := handler.NewKeyringHandler(cfg.PluginKeyringPath)
 
@@ -343,6 +348,10 @@ func registerCronRoutes(api *gin.RouterGroup, h *handler.CronHandler) {
 
 func registerPluginRoutes(api *gin.RouterGroup, h *handler.PluginHandler, configH *handler.ConfigHandler, keyH *handler.KeyringHandler) {
 	api.GET("/plugins", gin.WrapF(h.List))
+	api.GET("/plugins/catalog", gin.WrapF(h.CatalogList))
+	api.GET("/plugins/catalog/:vendor/:name", gin.WrapF(h.CatalogGet))
+	api.GET("/plugins/install/settings", gin.WrapF(h.InstallSettings))
+	api.POST("/plugins/install/resolve", gin.WrapF(h.Resolve))
 	api.POST("/plugins/install", gin.WrapF(h.Install))
 	api.POST("/plugins/:vendor/:name/enable", gin.WrapF(h.Enable))
 	api.POST("/plugins/:vendor/:name/disable", gin.WrapF(h.Disable))

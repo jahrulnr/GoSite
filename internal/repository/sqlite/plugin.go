@@ -45,6 +45,19 @@ type PluginVersion struct {
 	ConfigDeletedAt  *time.Time
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+	// Provenance (migration 007)
+	SourceType           string
+	SourceRef            string
+	ResolvedURL          string
+	ResolvedDigest       string
+	SigningKeyID         string
+	SourceCommit         string
+	BuilderImageDigest   string
+	SourceRepository     string
+	InstallPath          string
+	PermissionsAckAt     *time.Time
+	PermissionsAckedCaps string
+	InstallLog           string
 }
 
 // PluginRepository persists plugin registry records.
@@ -65,13 +78,20 @@ func (r *PluginRepository) Create(ctx context.Context, p PluginVersion) (PluginV
 			plugin_id, version, name, tier, api_version, min_gosite_version, rpc_version,
 			config_version, manifest_json, capabilities_json, ui_json, artifact_digest,
 			artifact_path, state, failure_class, failure_message, failure_at,
-			config_deleted_at, created_at, updated_at
+			config_deleted_at, created_at, updated_at,
+			source_type, source_ref, resolved_url, resolved_digest, signing_key_id,
+			source_commit, builder_image_digest, source_repository, install_path,
+			permissions_ack_at, permissions_acked_caps, install_log
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+			?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, p.PluginID, p.Version, p.Name, p.Tier, p.APIVersion, p.MinGoSiteVersion, p.RPCVersion,
 		p.ConfigVersion, p.ManifestJSON, p.CapabilitiesJSON, p.UIJSON, p.ArtifactDigest,
 		p.ArtifactPath, p.State, p.FailureClass, p.FailureMessage, nullTime(p.FailureAt),
-		nullTime(p.ConfigDeletedAt), now, now)
+		nullTime(p.ConfigDeletedAt), now, now,
+		p.SourceType, p.SourceRef, p.ResolvedURL, p.ResolvedDigest, p.SigningKeyID,
+		p.SourceCommit, p.BuilderImageDigest, p.SourceRepository, p.InstallPath,
+		nullTime(p.PermissionsAckAt), p.PermissionsAckedCaps, p.InstallLog)
 	if err != nil {
 		return PluginVersion{}, fmt.Errorf("insert plugin version: %w", err)
 	}
@@ -104,12 +124,19 @@ func (r *PluginRepository) CreateOrRetryInstall(ctx context.Context, p PluginVer
 				plugin_id, version, name, tier, api_version, min_gosite_version, rpc_version,
 				config_version, manifest_json, capabilities_json, ui_json, artifact_digest,
 				artifact_path, state, failure_class, failure_message, failure_at,
-				config_deleted_at, created_at, updated_at
+				config_deleted_at, created_at, updated_at,
+				source_type, source_ref, resolved_url, resolved_digest, signing_key_id,
+				source_commit, builder_image_digest, source_repository, install_path,
+				permissions_ack_at, permissions_acked_caps, install_log
 			)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', NULL, NULL, ?, ?)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', NULL, NULL, ?, ?,
+				?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`, p.PluginID, p.Version, p.Name, p.Tier, p.APIVersion, p.MinGoSiteVersion, p.RPCVersion,
 			p.ConfigVersion, p.ManifestJSON, p.CapabilitiesJSON, p.UIJSON, p.ArtifactDigest,
-			p.ArtifactPath, PluginStateInstalling, now, now)
+			p.ArtifactPath, PluginStateInstalling, now, now,
+			p.SourceType, p.SourceRef, p.ResolvedURL, p.ResolvedDigest, p.SigningKeyID,
+			p.SourceCommit, p.BuilderImageDigest, p.SourceRepository, p.InstallPath,
+			nullTime(p.PermissionsAckAt), p.PermissionsAckedCaps, p.InstallLog)
 		if err != nil {
 			return PluginVersion{}, fmt.Errorf("insert plugin version: %w", err)
 		}
@@ -127,11 +154,18 @@ func (r *PluginRepository) CreateOrRetryInstall(ctx context.Context, p PluginVer
 			SET name = ?, tier = ?, api_version = ?, min_gosite_version = ?, rpc_version = ?,
 				config_version = ?, manifest_json = ?, capabilities_json = ?, ui_json = ?,
 				artifact_digest = ?, artifact_path = ?, state = ?, failure_class = '',
-				failure_message = '', failure_at = NULL, config_deleted_at = NULL, updated_at = ?
+				failure_message = '', failure_at = NULL, config_deleted_at = NULL, updated_at = ?,
+				source_type = ?, source_ref = ?, resolved_url = ?, resolved_digest = ?,
+				signing_key_id = ?, source_commit = ?, builder_image_digest = ?,
+				source_repository = ?, install_path = ?, permissions_ack_at = ?,
+				permissions_acked_caps = ?, install_log = ?
 			WHERE id = ?
 		`, p.Name, p.Tier, p.APIVersion, p.MinGoSiteVersion, p.RPCVersion,
 			p.ConfigVersion, p.ManifestJSON, p.CapabilitiesJSON, p.UIJSON, p.ArtifactDigest,
-			p.ArtifactPath, PluginStateInstalling, now, id)
+			p.ArtifactPath, PluginStateInstalling, now,
+			p.SourceType, p.SourceRef, p.ResolvedURL, p.ResolvedDigest, p.SigningKeyID,
+			p.SourceCommit, p.BuilderImageDigest, p.SourceRepository, p.InstallPath,
+			nullTime(p.PermissionsAckAt), p.PermissionsAckedCaps, p.InstallLog, id)
 		if err != nil {
 			return PluginVersion{}, fmt.Errorf("retry plugin install: %w", err)
 		}
@@ -145,10 +179,7 @@ func (r *PluginRepository) CreateOrRetryInstall(ctx context.Context, p PluginVer
 // List returns all plugin records.
 func (r *PluginRepository) List(ctx context.Context) ([]PluginVersion, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, plugin_id, version, name, tier, api_version, min_gosite_version,
-			rpc_version, config_version, manifest_json, capabilities_json, ui_json,
-			artifact_digest, artifact_path, state, failure_class, failure_message,
-			failure_at, config_deleted_at, created_at, updated_at
+		SELECT `+pluginVersionColumns+`
 		FROM plugin_versions
 		ORDER BY plugin_id, version DESC
 	`)
@@ -171,10 +202,7 @@ func (r *PluginRepository) List(ctx context.Context) ([]PluginVersion, error) {
 // FindByRowID loads a plugin record by row id.
 func (r *PluginRepository) FindByRowID(ctx context.Context, id int64) (PluginVersion, error) {
 	row := r.db.QueryRowContext(ctx, `
-		SELECT id, plugin_id, version, name, tier, api_version, min_gosite_version,
-			rpc_version, config_version, manifest_json, capabilities_json, ui_json,
-			artifact_digest, artifact_path, state, failure_class, failure_message,
-			failure_at, config_deleted_at, created_at, updated_at
+		SELECT `+pluginVersionColumns+`
 		FROM plugin_versions WHERE id = ?
 	`, id)
 	return scanPluginVersion(row)
@@ -183,10 +211,7 @@ func (r *PluginRepository) FindByRowID(ctx context.Context, id int64) (PluginVer
 // Find loads a plugin version by plugin id and version.
 func (r *PluginRepository) Find(ctx context.Context, pluginID, version string) (PluginVersion, error) {
 	row := r.db.QueryRowContext(ctx, `
-		SELECT id, plugin_id, version, name, tier, api_version, min_gosite_version,
-			rpc_version, config_version, manifest_json, capabilities_json, ui_json,
-			artifact_digest, artifact_path, state, failure_class, failure_message,
-			failure_at, config_deleted_at, created_at, updated_at
+		SELECT `+pluginVersionColumns+`
 		FROM plugin_versions WHERE plugin_id = ? AND version = ?
 	`, pluginID, version)
 	return scanPluginVersion(row)
@@ -195,10 +220,7 @@ func (r *PluginRepository) Find(ctx context.Context, pluginID, version string) (
 // FindEnabled loads the currently enabled version for a plugin id.
 func (r *PluginRepository) FindEnabled(ctx context.Context, pluginID string) (PluginVersion, error) {
 	row := r.db.QueryRowContext(ctx, `
-		SELECT id, plugin_id, version, name, tier, api_version, min_gosite_version,
-			rpc_version, config_version, manifest_json, capabilities_json, ui_json,
-			artifact_digest, artifact_path, state, failure_class, failure_message,
-			failure_at, config_deleted_at, created_at, updated_at
+		SELECT `+pluginVersionColumns+`
 		FROM plugin_versions WHERE plugin_id = ? AND state = ?
 	`, pluginID, PluginStateEnabled)
 	return scanPluginVersion(row)
@@ -207,10 +229,7 @@ func (r *PluginRepository) FindEnabled(ctx context.Context, pluginID string) (Pl
 // ListEnabled returns every enabled plugin version.
 func (r *PluginRepository) ListEnabled(ctx context.Context) ([]PluginVersion, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, plugin_id, version, name, tier, api_version, min_gosite_version,
-			rpc_version, config_version, manifest_json, capabilities_json, ui_json,
-			artifact_digest, artifact_path, state, failure_class, failure_message,
-			failure_at, config_deleted_at, created_at, updated_at
+		SELECT `+pluginVersionColumns+`
 		FROM plugin_versions
 		WHERE state = ?
 		ORDER BY plugin_id ASC, version DESC
@@ -234,10 +253,7 @@ func (r *PluginRepository) ListEnabled(ctx context.Context) ([]PluginVersion, er
 // ListInstallable returns stable versions that can be enabled.
 func (r *PluginRepository) ListInstallable(ctx context.Context, pluginID string) ([]PluginVersion, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, plugin_id, version, name, tier, api_version, min_gosite_version,
-			rpc_version, config_version, manifest_json, capabilities_json, ui_json,
-			artifact_digest, artifact_path, state, failure_class, failure_message,
-			failure_at, config_deleted_at, created_at, updated_at
+		SELECT `+pluginVersionColumns+`
 		FROM plugin_versions
 		WHERE plugin_id = ? AND state IN (?, ?)
 		ORDER BY created_at DESC, id DESC
@@ -303,6 +319,19 @@ func (r *PluginRepository) DeleteUninstalled(ctx context.Context, pluginID, vers
 	return nil
 }
 
+// SetInstallLog updates the install audit log for a plugin version.
+func (r *PluginRepository) SetInstallLog(ctx context.Context, pluginID, version, installLog string) (PluginVersion, error) {
+	now := time.Now().UTC()
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE plugin_versions SET install_log = ?, updated_at = ?
+		WHERE plugin_id = ? AND version = ?
+	`, installLog, now, pluginID, version)
+	if err != nil {
+		return PluginVersion{}, fmt.Errorf("set install log: %w", err)
+	}
+	return r.Find(ctx, pluginID, version)
+}
+
 func (r *PluginRepository) setState(ctx context.Context, pluginID, version, state, failureClass, failureMessage string, failureAt *time.Time) (PluginVersion, error) {
 	now := time.Now().UTC()
 	_, err := r.db.ExecContext(ctx, `
@@ -322,12 +351,15 @@ type pluginScanner interface {
 
 func scanPluginVersion(row pluginScanner) (PluginVersion, error) {
 	var p PluginVersion
-	var failureAt, configDeletedAt, createdAt, updatedAt sql.NullTime
+	var failureAt, configDeletedAt, createdAt, updatedAt, permissionsAckAt sql.NullTime
 	err := row.Scan(&p.ID, &p.PluginID, &p.Version, &p.Name, &p.Tier, &p.APIVersion,
 		&p.MinGoSiteVersion, &p.RPCVersion, &p.ConfigVersion, &p.ManifestJSON,
 		&p.CapabilitiesJSON, &p.UIJSON, &p.ArtifactDigest, &p.ArtifactPath,
 		&p.State, &p.FailureClass, &p.FailureMessage, &failureAt, &configDeletedAt,
-		&createdAt, &updatedAt)
+		&createdAt, &updatedAt,
+		&p.SourceType, &p.SourceRef, &p.ResolvedURL, &p.ResolvedDigest, &p.SigningKeyID,
+		&p.SourceCommit, &p.BuilderImageDigest, &p.SourceRepository, &p.InstallPath,
+		&permissionsAckAt, &p.PermissionsAckedCaps, &p.InstallLog)
 	if err != nil {
 		return PluginVersion{}, err
 	}
@@ -344,6 +376,10 @@ func scanPluginVersion(row pluginScanner) (PluginVersion, error) {
 	}
 	if updatedAt.Valid {
 		p.UpdatedAt = updatedAt.Time
+	}
+	if permissionsAckAt.Valid {
+		t := permissionsAckAt.Time
+		p.PermissionsAckAt = &t
 	}
 	return p, nil
 }

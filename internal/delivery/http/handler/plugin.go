@@ -8,17 +8,30 @@ import (
 
 	"github.com/jahrulnr/gosite/internal/repository/sqlite"
 	pluginsvc "github.com/jahrulnr/gosite/internal/service/plugin"
+	"github.com/jahrulnr/gosite/internal/service/plugin/catalog"
+	"github.com/jahrulnr/gosite/internal/service/plugin/remote"
 	"github.com/jahrulnr/gosite/pkg/apperror"
 )
 
 // PluginHandler serves plugin installer and lifecycle endpoints.
 type PluginHandler struct {
-	svc *pluginsvc.Service
+	svc       *pluginsvc.Service
+	remote    *remote.Service
+	remoteCfg remote.Config
+	catalog   *catalog.Service
 }
 
 // NewPluginHandler returns a plugin handler.
-func NewPluginHandler(svc *pluginsvc.Service) *PluginHandler {
-	return &PluginHandler{svc: svc}
+func NewPluginHandler(svc *pluginsvc.Service, remoteSvc *remote.Service, remoteCfg remote.Config, catalogSvc *catalog.Service) *PluginHandler {
+	return &PluginHandler{svc: svc, remote: remoteSvc, remoteCfg: remoteCfg, catalog: catalogSvc}
+}
+
+type installLogStepJSON struct {
+	Step         string `json:"step"`
+	At           string `json:"at"`
+	Status       string `json:"status"`
+	FailureClass string `json:"failure_class,omitempty"`
+	Detail       string `json:"detail,omitempty"`
 }
 
 type pluginJSON struct {
@@ -39,6 +52,13 @@ type pluginJSON struct {
 	Manifest         map[string]any `json:"manifest"`
 	Capabilities     map[string]any `json:"capabilities"`
 	UI               map[string]any `json:"ui"`
+	SourceType       string         `json:"source_type,omitempty"`
+	SourceRef        string         `json:"source_ref,omitempty"`
+	ResolvedURL      string         `json:"resolved_url,omitempty"`
+	InstallPath      string         `json:"install_path,omitempty"`
+	SourceCommit     string         `json:"source_commit,omitempty"`
+	PermissionsAckAt *string        `json:"permissions_ack_at,omitempty"`
+	InstallLog       []installLogStepJSON `json:"install_log,omitempty"`
 	CreatedAt        string         `json:"created_at"`
 	UpdatedAt        string         `json:"updated_at"`
 }
@@ -59,7 +79,7 @@ func (h *PluginHandler) List(w http.ResponseWriter, r *http.Request) {
 
 // Install handles POST /plugins/install.
 func (h *PluginHandler) Install(w http.ResponseWriter, r *http.Request) {
-	input, err := readInstallInput(r)
+	input, err := h.readInstallInput(r)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -70,6 +90,40 @@ func (h *PluginHandler) Install(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]interface{}{"plugin": pluginDTO(plugin)})
+}
+
+// Resolve handles POST /plugins/install/resolve.
+func (h *PluginHandler) Resolve(w http.ResponseWriter, r *http.Request) {
+	if h.remote == nil {
+		writeError(w, apperror.New(apperror.CodeInvalidInput, remote.FailureRemoteInstallDisabled))
+		return
+	}
+	var body struct {
+		Source remote.Source `json:"source"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		writeError(w, err)
+		return
+	}
+	preview, err := h.remote.Resolve(r.Context(), body.Source)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"preview": preview})
+}
+
+// InstallSettings handles GET /plugins/install/settings.
+func (h *PluginHandler) InstallSettings(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"remote_install_enabled":  h.remoteCfg.Enabled,
+		"trust_mode":              h.remoteCfg.TrustMode,
+		"allowed_hosts":           h.remoteCfg.AllowedHosts,
+		"allow_unsigned":          h.remoteCfg.AllowUnsigned,
+		"github_token_configured": h.remoteCfg.GitHubTokenConfigured,
+		"gitlab_token_configured": h.remoteCfg.GitLabTokenConfigured,
+		"build_enabled":           h.remoteCfg.BuildEnabled,
+	})
 }
 
 // Enable handles POST /plugins/{vendor}/{name}/enable.
@@ -165,7 +219,7 @@ func (h *PluginHandler) Uninstall(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"plugin": pluginDTO(plugin)})
 }
 
-func readInstallInput(r *http.Request) (pluginsvc.InstallInput, error) {
+func (h *PluginHandler) readInstallInput(r *http.Request) (pluginsvc.InstallInput, error) {
 	contentType := r.Header.Get("Content-Type")
 	if strings.HasPrefix(contentType, "multipart/form-data") {
 		if err := r.ParseMultipartForm(64 << 20); err != nil {
@@ -188,13 +242,49 @@ func readInstallInput(r *http.Request) (pluginsvc.InstallInput, error) {
 	}
 
 	var body struct {
-		Name    string          `json:"name"`
-		SHA256  string          `json:"sha256"`
-		Content json.RawMessage `json:"content"`
+		Name           string          `json:"name"`
+		SHA256         string          `json:"sha256"`
+		Content        json.RawMessage `json:"content"`
+		Source         *remote.Source  `json:"source"`
+		PermissionsAck bool            `json:"permissions_ack"`
+		ResolveToken   string          `json:"resolveToken"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		return pluginsvc.InstallInput{}, err
 	}
+	if body.Source != nil {
+		if h.remote == nil {
+			return pluginsvc.InstallInput{}, apperror.New(apperror.CodeInvalidInput, remote.FailureRemoteInstallDisabled)
+		}
+		source := *body.Source
+		if strings.TrimSpace(body.ResolveToken) != "" {
+			source.ResolveToken = strings.TrimSpace(body.ResolveToken)
+		}
+		plan, data, err := h.remote.ResolveAndFetch(r.Context(), source, source.ResolveToken)
+		if err != nil {
+			return pluginsvc.InstallInput{}, err
+		}
+		name := strings.TrimSpace(body.Name)
+		if name == "" {
+			name = "plugin.zip"
+		}
+		return pluginsvc.InstallInput{
+			Name:           name,
+			Content:        data,
+			ExpectedSHA256: plan.SHA256,
+			PermissionsAck: body.PermissionsAck,
+			Provenance: &pluginsvc.InstallProvenance{
+				SourceType:       plan.SourceType,
+				SourceRef:        plan.SourceRef,
+				ResolvedURL:      plan.URL,
+				ResolvedDigest:   plan.ResolvedDigest,
+				SourceCommit:     plan.SourceCommit,
+				SourceRepository: plan.SourceRepository,
+				InstallPath:      plan.InstallPath,
+			},
+		}, nil
+	}
+
 	var content string
 	if err := json.Unmarshal(body.Content, &content); err != nil {
 		return pluginsvc.InstallInput{}, apperror.New(apperror.CodeInvalidInput, "content must be a json string")
@@ -227,6 +317,11 @@ func pluginDTO(plugin sqlite.PluginVersion) pluginJSON {
 		Manifest:         manifest,
 		Capabilities:     capabilities,
 		UI:               ui,
+		SourceType:       plugin.SourceType,
+		SourceRef:        plugin.SourceRef,
+		ResolvedURL:      plugin.ResolvedURL,
+		InstallPath:      plugin.InstallPath,
+		SourceCommit:     plugin.SourceCommit,
 		CreatedAt:        plugin.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 		UpdatedAt:        plugin.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 	}
@@ -234,7 +329,24 @@ func pluginDTO(plugin sqlite.PluginVersion) pluginJSON {
 		ts := plugin.FailureAt.UTC().Format("2006-01-02T15:04:05Z")
 		out.FailureAt = &ts
 	}
+	if plugin.PermissionsAckAt != nil {
+		ts := plugin.PermissionsAckAt.UTC().Format("2006-01-02T15:04:05Z")
+		out.PermissionsAckAt = &ts
+	}
+	out.InstallLog = decodeInstallLog(plugin.InstallLog)
 	return out
+}
+
+func decodeInstallLog(raw string) []installLogStepJSON {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || raw == "[]" {
+		return nil
+	}
+	var steps []installLogStepJSON
+	if err := json.Unmarshal([]byte(raw), &steps); err != nil {
+		return nil
+	}
+	return steps
 }
 
 func decodeJSONObject(raw string) map[string]any {

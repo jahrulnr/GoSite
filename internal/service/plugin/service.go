@@ -41,6 +41,7 @@ const (
 	FailureStopFailed         = "stop_failed"
 	FailureFSDeleteFailed     = "fs_delete_failed"
 	FailureConfigMigration    = "config_migration_failed"
+	FailureOperationProgress  = "operation_in_progress"
 	FailureUnknown            = "unknown"
 )
 
@@ -120,6 +121,19 @@ type InstallInput struct {
 	Name           string
 	Content        []byte
 	ExpectedSHA256 string
+	Provenance     *InstallProvenance
+	PermissionsAck bool
+}
+
+// InstallProvenance records how artifact bytes were obtained (wave G).
+type InstallProvenance struct {
+	SourceType       string
+	SourceRef        string
+	ResolvedURL      string
+	ResolvedDigest   string
+	SourceCommit     string
+	SourceRepository string
+	InstallPath      string
 }
 
 // RuntimeManager starts and stops plugin runtimes.
@@ -312,6 +326,7 @@ type Service struct {
 	allowUnsigned bool
 	keyringPath   string
 	hostVersion   string
+	opLock        *OpLock
 }
 
 // Option configures plugin service behavior.
@@ -372,6 +387,7 @@ func NewService(repo *sqlite.PluginRepository, storageRoot string, runtime Runti
 		validateTO:    5 * time.Second,
 		allowUnsigned: true,
 		hostVersion:   buildinfo.Version,
+		opLock:        NewOpLock(),
 	}
 	for _, opt := range opts {
 		opt(svc)
@@ -390,6 +406,7 @@ func (s *Service) List(ctx context.Context) ([]sqlite.PluginVersion, error) {
 
 // Install verifies, stores, and validates an artifact before marking it installed.
 func (s *Service) Install(ctx context.Context, in InstallInput) (sqlite.PluginVersion, error) {
+	ilog := newInstallLog()
 	if len(in.Content) == 0 {
 		return sqlite.PluginVersion{}, apperror.New(apperror.CodeInvalidInput, "plugin artifact is required")
 	}
@@ -399,20 +416,32 @@ func (s *Service) Install(ctx context.Context, in InstallInput) (sqlite.PluginVe
 	if expected := strings.TrimSpace(in.ExpectedSHA256); expected != "" && !strings.EqualFold(expected, digest) {
 		return sqlite.PluginVersion{}, apperror.New(apperror.CodePluginInvalid, "artifact sha256 mismatch")
 	}
+	ilog.ok("verify_digest")
 
 	manifest, manifestJSON, err := parseManifest(in.Content)
 	if err != nil {
 		return sqlite.PluginVersion{}, err
 	}
+	ilog.ok("parse_manifest")
 	if err := validateManifest(manifest); err != nil {
 		return sqlite.PluginVersion{}, err
 	}
 	if err := s.compatibilityCheck(manifest); err != nil {
 		return sqlite.PluginVersion{}, err
 	}
+	ilog.ok("compatibility")
 	if err := s.verifyArtifact(ctx, manifest, digest); err != nil {
 		return sqlite.PluginVersion{}, err
 	}
+	ilog.ok("verify_signature")
+	if in.Provenance != nil && needsPermissionAck(manifest) && !in.PermissionsAck {
+		return sqlite.PluginVersion{}, apperror.New(apperror.CodeInvalidInput, "permissions_ack required for remote install")
+	}
+
+	if !s.opLock.TryAcquire(manifest.ID) {
+		return sqlite.PluginVersion{}, apperror.New(apperror.CodeConflict, FailureOperationProgress)
+	}
+	defer s.opLock.Release(manifest.ID)
 
 	artifactDir, err := safePluginDir(s.storageDir, manifest.ID, manifest.Version)
 	if err != nil {
@@ -436,6 +465,7 @@ func (s *Service) Install(ctx context.Context, in InstallInput) (sqlite.PluginVe
 	if err := extractZipArtifact(in.Content, artifactDir); err != nil {
 		return sqlite.PluginVersion{}, err
 	}
+	ilog.ok("extract")
 
 	artifactPath := filepath.Join(artifactDir, digest+".artifact")
 	if err := os.WriteFile(artifactPath, in.Content, 0o644); err != nil {
@@ -447,6 +477,27 @@ func (s *Service) Install(ctx context.Context, in InstallInput) (sqlite.PluginVe
 
 	capsJSON, _ := json.Marshal(manifest.Capabilities)
 	uiJSON, _ := json.Marshal(manifest.UI)
+	sourceType, sourceRef, resolvedURL, resolvedDigest := "upload", "", "", ""
+	sourceCommit, sourceRepository, installPath := "", "", "upload"
+	if in.Provenance != nil {
+		sourceType = in.Provenance.SourceType
+		sourceRef = in.Provenance.SourceRef
+		resolvedURL = in.Provenance.ResolvedURL
+		resolvedDigest = in.Provenance.ResolvedDigest
+		sourceCommit = in.Provenance.SourceCommit
+		sourceRepository = in.Provenance.SourceRepository
+		installPath = in.Provenance.InstallPath
+		if installPath == "" {
+			installPath = "release"
+		}
+	}
+	var permissionsAckAt *time.Time
+	permissionsAckedCaps := ""
+	if in.PermissionsAck {
+		now := time.Now().UTC()
+		permissionsAckAt = &now
+		permissionsAckedCaps = string(capsJSON)
+	}
 	record, err := s.repo.CreateOrRetryInstall(ctx, sqlite.PluginVersion{
 		PluginID:         manifest.ID,
 		Version:          manifest.Version,
@@ -462,6 +513,16 @@ func (s *Service) Install(ctx context.Context, in InstallInput) (sqlite.PluginVe
 		ArtifactDigest:   digest,
 		ArtifactPath:     artifactPath,
 		State:            sqlite.PluginStateInstalling,
+		SourceType:       sourceType,
+		SourceRef:        sourceRef,
+		ResolvedURL:      resolvedURL,
+		ResolvedDigest:   resolvedDigest,
+		SourceCommit:     sourceCommit,
+		SourceRepository: sourceRepository,
+		InstallPath:      installPath,
+		PermissionsAckAt: permissionsAckAt,
+		PermissionsAckedCaps: permissionsAckedCaps,
+		InstallLog:           ilog.JSON(),
 	})
 	if err != nil {
 		_ = os.RemoveAll(artifactDir)
@@ -470,15 +531,21 @@ func (s *Service) Install(ctx context.Context, in InstallInput) (sqlite.PluginVe
 		}
 		return sqlite.PluginVersion{}, apperror.Wrap(apperror.CodeDatabase, "create plugin record failed", err)
 	}
+	ilog.ok("registry")
 
 	if err := s.runValidate(ctx, manifest, artifactDir); err != nil {
+		ilog.fail("validate", classifyValidationError(err), err.Error())
 		record, _ = s.repo.SetFailure(ctx, manifest.ID, manifest.Version, sqlite.PluginStateInstallFailed, classifyValidationError(err), err.Error())
+		record, _ = s.repo.SetInstallLog(ctx, manifest.ID, manifest.Version, ilog.JSON())
 		return record, err
 	}
+	ilog.ok("validate")
 	record, err = s.repo.SetState(ctx, manifest.ID, manifest.Version, sqlite.PluginStateInstalled)
 	if err != nil {
 		return sqlite.PluginVersion{}, apperror.Wrap(apperror.CodeDatabase, "mark plugin installed failed", err)
 	}
+	ilog.ok("done")
+	record, _ = s.repo.SetInstallLog(ctx, manifest.ID, manifest.Version, ilog.JSON())
 	return record, nil
 }
 
@@ -498,9 +565,20 @@ func (s *Service) Purge(ctx context.Context, pluginID, version string) error {
 
 // Enable starts a runtime, refreshes hooks, and marks one version enabled.
 func (s *Service) Enable(ctx context.Context, pluginID, version string) (sqlite.PluginVersion, error) {
+	if !s.opLock.TryAcquire(pluginID) {
+		return sqlite.PluginVersion{}, apperror.New(apperror.CodeConflict, FailureOperationProgress)
+	}
+	defer s.opLock.Release(pluginID)
+	return s.enableUnlocked(ctx, pluginID, version)
+}
+
+func (s *Service) enableUnlocked(ctx context.Context, pluginID, version string) (sqlite.PluginVersion, error) {
 	record, err := s.findForEnable(ctx, pluginID, version)
 	if err != nil {
 		return sqlite.PluginVersion{}, err
+	}
+	if record.SourceType != "" && record.SourceType != "upload" && needsPermissionAck(manifestFromRecord(record)) && record.PermissionsAckAt == nil {
+		return sqlite.PluginVersion{}, apperror.New(apperror.CodeInvalidInput, "permissions must be acknowledged before enable")
 	}
 	if record.State == sqlite.PluginStateEnableFailed && record.FailureClass == FailureCompensationFailed {
 		return sqlite.PluginVersion{}, apperror.New(apperror.CodeConflict, "plugin needs manual recovery before retry")
@@ -543,6 +621,14 @@ func (s *Service) Enable(ctx context.Context, pluginID, version string) (sqlite.
 
 // Disable removes hook targets, stops runtime, and returns the version to installed.
 func (s *Service) Disable(ctx context.Context, pluginID string) (sqlite.PluginVersion, error) {
+	if !s.opLock.TryAcquire(pluginID) {
+		return sqlite.PluginVersion{}, apperror.New(apperror.CodeConflict, FailureOperationProgress)
+	}
+	defer s.opLock.Release(pluginID)
+	return s.disableUnlocked(ctx, pluginID)
+}
+
+func (s *Service) disableUnlocked(ctx context.Context, pluginID string) (sqlite.PluginVersion, error) {
 	record, err := s.repo.FindEnabled(ctx, pluginID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -579,6 +665,11 @@ func (s *Service) Disable(ctx context.Context, pluginID string) (sqlite.PluginVe
 
 // SwitchEnabledVersion disables the current version and enables the target version.
 func (s *Service) SwitchEnabledVersion(ctx context.Context, pluginID, version string) (sqlite.PluginVersion, error) {
+	if !s.opLock.TryAcquire(pluginID) {
+		return sqlite.PluginVersion{}, apperror.New(apperror.CodeConflict, FailureOperationProgress)
+	}
+	defer s.opLock.Release(pluginID)
+
 	current, err := s.repo.FindEnabled(ctx, pluginID)
 	if err == nil {
 		if current.Version == version {
@@ -631,25 +722,23 @@ func (s *Service) SwitchEnabledVersion(ctx context.Context, pluginID, version st
 				return sqlite.PluginVersion{}, apperror.Wrap(apperror.CodeDatabase, "save migrated config failed", err)
 			}
 		}
-		if _, err := s.Disable(ctx, pluginID); err != nil {
-			return sqlite.PluginVersion{}, err
-		}
-		if _, err := s.Disable(ctx, pluginID); err != nil {
+		if _, err := s.disableUnlocked(ctx, pluginID); err != nil {
 			return sqlite.PluginVersion{}, err
 		}
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return sqlite.PluginVersion{}, apperror.Wrap(apperror.CodeDatabase, "find enabled plugin failed", err)
 	}
 
-	next, err := s.Enable(ctx, pluginID, version)
-	if err != nil && current.PluginID != "" {
-		return next, err
-	}
-	return next, err
+	return s.enableUnlocked(ctx, pluginID, version)
 }
 
 // Uninstall removes a stable, non-enabled plugin version and soft-deletes config.
 func (s *Service) Uninstall(ctx context.Context, pluginID, version string) (sqlite.PluginVersion, error) {
+	if !s.opLock.TryAcquire(pluginID) {
+		return sqlite.PluginVersion{}, apperror.New(apperror.CodeConflict, FailureOperationProgress)
+	}
+	defer s.opLock.Release(pluginID)
+
 	record, err := s.repo.Find(ctx, pluginID, version)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -1070,4 +1159,11 @@ func semverParts(v string) [3]int {
 		out[i] = n
 	}
 	return out
+}
+
+func needsPermissionAck(m Manifest) bool {
+	if len(m.Permissions) > 0 {
+		return true
+	}
+	return len(m.Capabilities.Hooks) > 0
 }

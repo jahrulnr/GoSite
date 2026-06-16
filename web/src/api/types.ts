@@ -283,6 +283,69 @@ export interface PluginManifest {
   [k: string]: unknown;
 }
 
+export interface PluginInstallSource {
+  type: 'url' | 'github-release' | 'gitlab-release' | 'git-ref' | 'github-build' | 'gitlab-build';
+  url?: string;
+  sha256?: string;
+  repo?: string;
+  tag?: string;
+}
+
+export interface PluginCatalogEntry {
+  plugin_id: string;
+  name: string;
+  description: string;
+  vendor: string;
+  source: PluginInstallSource;
+}
+
+export interface PluginResolvePreview {
+  plugin_id: string;
+  version: string;
+  tier: number;
+  signed: boolean;
+  keyId?: string;
+  sha256: string;
+  size: number;
+  url: string;
+  minGoSiteVersion?: string;
+  source_type: string;
+  source_ref: string;
+  install_path: string;
+  sourceCommit?: string;
+  sourceRepository?: string;
+  permissions: string[];
+  hooks: string[];
+  resolveToken?: string;
+  resolveExpiresAt?: string;
+}
+
+export interface PluginInstallSettings {
+  remote_install_enabled: boolean;
+  trust_mode: 'strict' | 'community' | 'dev';
+  allowed_hosts: string[];
+  allow_unsigned: boolean;
+  github_token_configured: boolean;
+  gitlab_token_configured: boolean;
+  build_enabled: boolean;
+}
+
+export interface PluginKeyringEntry {
+  vendor: string;
+  keyId: string;
+  publicKey: string;
+  createdAt?: string;
+  revokedAt?: string;
+}
+
+export interface PluginInstallLogStep {
+  step: string;
+  at: string;
+  status: 'ok' | 'failed';
+  failure_class?: string;
+  detail?: string;
+}
+
 export interface PluginVersion {
   id: number;
   plugin_id: string;
@@ -301,6 +364,13 @@ export interface PluginVersion {
   manifest: PluginManifest;
   capabilities: PluginCapabilities;
   ui: PluginUIContribution;
+  source_type?: string;
+  source_ref?: string;
+  resolved_url?: string;
+  install_path?: string;
+  source_commit?: string;
+  permissions_ack_at?: string;
+  install_log?: PluginInstallLogStep[];
   created_at: string;
   updated_at: string;
 }

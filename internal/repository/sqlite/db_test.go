@@ -69,5 +69,5 @@ func TestMigrate_Idempotent(t *testing.T) {
 
 	var count int
 	require.NoError(t, db.QueryRow(`SELECT COUNT(1) FROM schema_migrations`).Scan(&count))
-	assert.Equal(t, 6, count)
+	assert.Equal(t, 7, count)
 }
