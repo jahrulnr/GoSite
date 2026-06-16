@@ -33,7 +33,7 @@ How to keep `docs/` aligned with the codebase during active development.
 | `20-plugin-remote-distribution.md` body | Long spec still reads like a proposal in places | OK as design doc; impl truth in `*-impl.md` |
 | Wiki `Plugin-platform` / `Plugin-installer` pages | May lag until `make wiki-export` on `master` | Run export after doc PR merges |
 | `README_id.md` module diagram | Still 14 areas, no Plugins/Terminal | ✅ Fixed in README_id |
-| Core architecture docs | `architecture*.md`, `domain-model*.md`, `api-inventory*.md`, `dev-mount-testing*`, `nginx-repair*` lagged v1.3.1 | ✅ Fixed this pass |
+| Core architecture docs | Traffic model: panel `:8080` ∥ nginx `:80/:443` (gosite controls nginx, does not proxy websites) | ✅ Fixed |
 
 ## Checklist — ship a feature
 

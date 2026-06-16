@@ -7,7 +7,7 @@ GoSite feature flow diagrams. **Legacy BangunSite** sections (if any) are kept a
 | # | File | Feature | Status |
 |---|------|-------|--------|
 | 01 | [01-container-startup.md](./01-container-startup.md) | `start.sh`, `gosite init`, nginx-repair | ✅ |
-| 02 | [02-tls-proxy.md](./02-tls-proxy.md) | Panel routing nginx → gosite | ✅ |
+| 02 | [02-tls-proxy.md](./02-tls-proxy.md) | Panel `:8080` parallel to nginx website edge | ✅ |
 
 ## Auth & monitoring
 

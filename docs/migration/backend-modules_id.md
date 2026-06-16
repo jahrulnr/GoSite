@@ -79,7 +79,7 @@ infra/       → nginx, job worker, exec, filesystem
 |----------|---------|
 | PHP settings / FPM | Tidak relevan tanpa PHP panel |
 | Laravel Queue | Diganti `job_runs` + worker |
-| Go TLS proxy :8080 | API + SPA di `gosite serve`; nginx edge |
+| Go TLS proxy :8080 | Dihapus — panel di `gosite serve :8080`; nginx `:80/:443` untuk website (port paralel) |
 
 ## Kompatibilitas produksi
 

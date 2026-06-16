@@ -46,7 +46,7 @@ Dokumentasi runtime, API, dan migrasi dari **BangunSite (Laravel)** ke **GoSite 
 ┌─────────────────────────────────────────────────────────────┐
 │  Runtime & Infra                                            │
 │  ├── Container startup                                      │
-│  └── TLS proxy panel (:8080)                                │
+│  └── Panel HTTPS on :8080 (parallel to nginx)               │
 ├─────────────────────────────────────────────────────────────┤
 │  Auth & Session                                             │
 │  ├── HTTP Basic Auth (opsional)                             │

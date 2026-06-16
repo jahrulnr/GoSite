@@ -9,7 +9,7 @@
 
 ## Overview
 
-GoSite replaces a multi-process Laravel stack with a single Go service that exposes a REST API and embeds (or proxies) a Preact frontend. Nginx remains the edge reverse proxy; Certbot, Docker, and filesystem operations are orchestrated through the same storage layout as the legacy panel — so production vhosts stay compatible.
+GoSite is a single Go **control plane** on `:8080` plus **nginx** on `:80/:443` for hosted websites. Certbot, Docker, and filesystem operations share the BangunSite storage layout — production vhosts stay compatible.
 
 | Layer | Stack |
 |-------|-------|
@@ -88,14 +88,15 @@ make up    # build image (host network for DNS) + docker compose up -d
 make down
 ```
 
-After `make up`, the production stack listens on three ports:
+After `make up`, the stack exposes **two entry points**:
 
 | Port | URL | Purpose |
 |------|-----|---------|
-| `http://localhost/` | nginx default vhost | BangunSite welcome (from `/www/default`) |
-| `https://localhost/panel/` | nginx → Go SPA embed | Control panel UI (Preact) |
-| `http://localhost/api/...` | nginx → `:8080` | Panel REST API (proxied) |
-| `https://localhost:8080/health` | Go service | Liveness probe |
+| `http://localhost/` | nginx `:80` | Default welcome page (`/www/default`) |
+| `https://localhost:8080/` | gosite panel | SPA + `/api/v1/*` (TLS, `FE_EMBED=true`) |
+| `https://localhost:8080/health` | gosite | Liveness probe |
+
+Panel traffic does **not** go through nginx. Nginx only serves website vhosts on `:80/:443`.
 
 Default login (seeded by `gosite init` on first boot):
 
@@ -104,23 +105,20 @@ Default login (seeded by `gosite init` on first boot):
 | Basic auth | `admin` / `admin` |
 | Panel login | `admin@demo.com` / `123456` |
 
-> **Why `FE_EMBED=true` and `/panel/`?**
-> GoSite runs behind nginx as the default vhost, so the panel SPA is mounted at `/panel/` (rewrite-stripped) while `/` keeps the legacy BangunSite welcome and any vhosts under `/storage/webconfig/active.d/` continue to serve their domains unchanged. The API is reverse-proxied from `/api/` to `:8080`, and `proxy_ssl_verify off` is acceptable because nginx and gosite share the container's loopback.
+> **Ports:** Panel = published `8080` (BangunSoft prod: `1100→8080`). Websites = nginx `80/443`. See [docs/architecture.md](docs/architecture.md) and `compose.bangunsoft.yml`.
 
 > On networks that block public DNS (e.g. some ISP resolvers), `make build-docker` uses `--network=host` so image pulls use the host resolver. See [docs/README.md](docs/README.md#build-docker-di-jaringan-isp-yang-memblokir-dns-publik).
 
 ### Verifying the production stack
 
 ```bash
-curl -s -o /dev/null -w "/ -> %{http_code}\n" http://localhost/
-curl -s -o /dev/null -w "/panel/ -> %{http_code}\n" http://localhost/panel/
-curl -s -o /dev/null -w "/api/v1/auth/login -> %{http_code}\n" http://localhost/api/v1/auth/login
-curl -sk -o /dev/null -w "https :8080/health -> %{http_code}\n" https://localhost:8080/health
+curl -s -o /dev/null -w "/ (nginx) -> %{http_code}\n" http://localhost/
+curl -sk -o /dev/null -w "panel / -> %{http_code}\n" https://localhost:8080/
+curl -sk -o /dev/null -w "/health -> %{http_code}\n" https://localhost:8080/health
 
-# API with basic auth
-curl -sk -u admin:admin https://localhost/api/v1/auth/login
-curl -sk -u admin:admin https://localhost/api/v1/dashboard
-curl -sk -u admin:admin https://localhost/api/v1/database/tables
+# API with basic auth (on :8080)
+curl -sk -u admin:admin https://localhost:8080/api/v1/auth/login
+curl -sk -u admin:admin https://localhost:8080/api/v1/dashboard
 ```
 
 ## Configuration
@@ -183,28 +181,20 @@ docs/                Architecture, sequences, migration guides
 
 ## Architecture
 
-GoSite runs inside a single container: **Nginx** (80/443), **Go panel** (8080 HTTPS), and **Certbot**. Storage paths mirror BangunSite for drop-in migration.
+GoSite runs one container with **nginx** (`:80/:443`, websites) and **gosite** (`:8080`, panel). Storage paths mirror BangunSite for drop-in migration.
 
 ```mermaid
-flowchart LR
-    subgraph Client
-        Browser["Browser / API client"]
-    end
+flowchart TB
+    Browser["Browser"]
+    NGX["Nginx :80/:443\nwebsites"]
+    API["gosite :8080\npanel"]
+    STG["/storage"]
 
-    subgraph Container["gosite container"]
-        NGX["Nginx :80/:443"]
-        API["Go API :8080"]
-        DB[("SQLite")]
-        SOCK["docker.sock"]
-        STG["/storage volume"]
-    end
-
-    Browser --> NGX
-    Browser --> API
-    API --> DB
-    API --> STG
-    API --> SOCK
+    Browser -->|website traffic| NGX
+    Browser -->|panel traffic| API
     NGX --> STG
+    API --> STG
+    API -.->|config + reload| NGX
 ```
 
 Deep dive: [docs/architecture.md](docs/architecture.md) · [docs/nginx-repair.md](docs/nginx-repair.md) · Sequences: [docs/sequences/](docs/sequences/) · Wiki guide: [docs/wiki.md](docs/wiki.md)

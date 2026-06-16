@@ -4,40 +4,46 @@
 
 ## Current runtime
 
-A single Docker container runs **nginx** (edge) and **gosite serve** (API + SPA). Nginx is started from `start.sh`; reload/restart lifecycle is owned by Go.
+One Docker container runs **two independent listeners**. They do **not** proxy traffic to each other.
 
-| Process | Port | Role |
-|---------|------|------|
-| `nginx` | 80, 443 | Reverse proxy, vhosts from `active.d/`, default panel vhost |
-| `gosite serve` | 8080 (loopback) | REST API `/api/v1`, SPA `/panel/`, job worker, nginx watchdog |
+| Process | Published ports (compose) | Role |
+|---------|---------------------------|------|
+| `nginx` | `80`, `443` (+ UDP/QUIC) | **Website edge** — `active.d/` vhosts + default welcome under `/www` |
+| `gosite serve` | `8080` (prod: `1100→8080`) | **Control panel** — REST `/api/v1`, embedded SPA, job worker, nginx watchdog |
 
-Nginx proxies `/api/` → `gosite:8080`. No PHP or separate TLS proxy.
+**Traffic split** (`compose.yml`, `compose.prod.yml`, `compose.bangunsoft.yml`):
+
+- Panel users → **`https://<host>:8080`** (or `:1100` on BangunSoft) → `gosite` directly.
+- Website visitors → **`:80` / `:443`** → nginx only (static or `proxy_pass` upstream).
+- `gosite` **manages** nginx (write `site.d` / `active.d`, `nginx -t`, `nginx -s reload`, [nginx-repair](./nginx-repair.md)) but **hosted site traffic does not pass through gosite**.
+
+No PHP. No legacy BangunSite `server-proxy` binary.
 
 ```mermaid
-flowchart LR
-    subgraph Internet
-        P80[":80 / :443"]
+flowchart TB
+    subgraph Clients
+        Panel["Panel / API client"]
+        Visitor["Website visitor"]
     end
 
     subgraph Container["gosite container"]
-        NGX[Nginx]
-        APP[gosite serve]
-        WORKER[Job worker in-process]
-        SOCK[docker.sock]
+        APP["gosite serve :8080\nAPI + SPA + jobs"]
+        NGX["nginx :80 / :443"]
+        VHOST["active.d vhosts"]
+        WWW["default /www"]
         STG["/storage"]
-        PLG["plugin subprocesses / webhooks"]
     end
 
-    P80 --> NGX
-    NGX -->|"/api/*"| APP
-    NGX -->|active.d vhosts| STG
+    Panel -->|":8080 published"| APP
+    Visitor -->|":80 / :443 published"| NGX
+    NGX --> VHOST
+    NGX --> WWW
+    VHOST --> STG
     APP --> STG
-    APP --> WORKER
-    APP --> SOCK
-    APP --> PLG["plugin subprocesses / webhooks"]
+    APP -.->|"config, reload, repair"| NGX
 ```
 
-**Panel delivery:** Nginx serves `/panel/` (embedded Preact when `FE_EMBED=true`, else static from `internal/delivery/http/frontend/dist`). All feature UI calls `/api/v1/*` only.
+**Panel delivery:** SPA embedded in Go when `FE_EMBED=true`. Served at **`/` on `:8080`**, not via nginx. Dev: Vite `:5173` proxies `/api` → `https://localhost:8080`.
 
 ## Startup sequence
 
@@ -50,7 +56,7 @@ Details: [sequences/01-container-startup.md](./sequences/01-container-startup.md
 3. **`gosite nginx-repair`** — `nginx -t` + auto-fix ([nginx-repair.md](./nginx-repair.md))
 4. Stage `/var/setup` → `/etc/nginx`, `/storage/webconfig`
 5. `fstab_mounter.sh`
-6. `nginx` → `exec gosite serve` (watchdog in Go)
+6. `nginx` → `exec gosite serve` (two parallel processes; gosite supervises nginx reload)
 
 ## Go application layers
 

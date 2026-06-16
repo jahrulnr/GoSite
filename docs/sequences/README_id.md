@@ -7,7 +7,7 @@ Diagram alur fitur GoSite. Bagian **Legacy BangunSite** (jika ada) disimpan seba
 | # | File | Fitur | Status |
 |---|------|-------|--------|
 | 01 | [01-container-startup.md](./01-container-startup.md) | `start.sh`, `gosite init`, nginx-repair | ✅ |
-| 02 | [02-tls-proxy.md](./02-tls-proxy.md) | Panel routing nginx → gosite | ✅ |
+| 02 | [02-tls-proxy.md](./02-tls-proxy.md) | Panel `:8080` paralel dengan nginx edge website | ✅ |
 
 ## Auth & monitoring
 

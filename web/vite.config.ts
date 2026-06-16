@@ -6,7 +6,7 @@ import preact from '@preact/preset-vite';
 // - Outputs to ../internal/delivery/http/frontend/dist so Go can embed it.
 // - Dev server proxies /api and /health to the local Go panel (https, self-signed).
 export default defineConfig(({ command }) => ({
-  // When served behind nginx at /panel/, build assets with absolute base.
+  // Panel is served on :8080 directly; nginx handles websites on :80/:443 only.
   base: process.env.VITE_BASE_PATH || '/',
   plugins: [preact()],
   build: {
