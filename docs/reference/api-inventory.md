@@ -2,6 +2,8 @@
 
 > **Canonical contract:** [`api/openapi.yaml`](../api/openapi.yaml) and [`api/examples/`](../api/examples/).
 >
+> **Plugin permission strings:** [plugin-permissions.md](./plugin-permissions.md).
+>
 > This document maps **legacy BangunSite routes** to GoSite REST **and** lists **greenfield** endpoints (plugins, terminal, observability) as of **v1.3.1**.
 
 Legacy route mapping to the proposed Go REST API. JSON responses; consistent errors:
@@ -285,7 +287,7 @@ kill, multi-attach).
 
 ## Plugins
 
-Greenfield REST (no Laravel equivalent). Canonical detail: `api/openapi.yaml` (base install routes) + [sequence 19](sequences/19-plugin-installer.md) / [sequence 20](sequences/20-plugin-remote-distribution-impl.md).
+Greenfield REST (no Laravel equivalent). Canonical detail: `api/openapi.yaml` (base install routes) + [sequence 19](sequences/19-plugin-installer.md) / [sequence 20](sequences/20-plugin-remote-distribution-impl.md). Permission registry: [plugin-permissions.md](reference/plugin-permissions.md).
 
 | GoSite | Method | Purpose |
 |--------|--------|---------|

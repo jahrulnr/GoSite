@@ -283,7 +283,7 @@ Rekomendasi field:
     "loggingSink": true,
     "rulesAndRoles": "declarative"
   },
-  "permissions": ["logs:read", "nginx:reload:read-only"],
+  "permissions": ["logs:read", "nginx:read"],
   "entrypoints": {
     "validate": { "type": "go-plugin", "command": "plugin/validate" }
   },

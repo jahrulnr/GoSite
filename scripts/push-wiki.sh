@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Push docs/wiki-export/ to GitHub Wiki for GoSite.
+# Includes reference pages: API-reference, Plugin-permissions, Plugin-mcp, …
+# Run `make wiki-export` first after doc changes.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

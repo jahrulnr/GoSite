@@ -24,6 +24,7 @@ web/tsconfig.tsbuildinfo
 
 # Generated GitHub wiki export (source: docs/ → make wiki-export)
 docs/wiki-export/
+research/
 
 # Local deploy (never commit — may contain host/IP/credentials)
 scripts/*.local.sh

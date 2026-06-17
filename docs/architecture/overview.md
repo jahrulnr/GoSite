@@ -150,7 +150,8 @@ Certbot and website placeholder SSL share the `live/{domain}/` namespace. See [s
 | Plugin ADR | [plugin-platform.md](./plugin-platform.md) |
 | Installer + lifecycle | [sequences/19-plugin-installer.md](../sequences/19-plugin-installer.md) |
 | Remote distribution | [sequences/20-plugin-remote-distribution.md](../sequences/20-plugin-remote-distribution.md) |
-| API surface | [api-inventory.md](../reference/api-inventory.md), `api/openapi.yaml` |
+| MCP integration (design) | [sequences/21-plugin-mcp.md](../sequences/21-plugin-mcp.md) |
+| API surface | [api-inventory.md](../reference/api-inventory.md), [plugin-permissions.md](../reference/plugin-permissions.md), `api/openapi.yaml` |
 | Doc maintenance | [DOCS-MAINTENANCE.md](../DOCS-MAINTENANCE.md) |
 
 ## Legacy (BangunSite)

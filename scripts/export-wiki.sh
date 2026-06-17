@@ -67,6 +67,8 @@ rewrite_links() {
     -e "s|](\\./architecture/domain-model_id\\.md)|](Domain-model-id)|g" \
     -e "s|](\\./reference/api-inventory\\.md)|](API-reference${suf})|g" \
     -e "s|](\\./reference/api-inventory_id\\.md)|](API-reference-id)|g" \
+    -e "s|](\\./reference/plugin-permissions\\.md)|](Plugin-permissions${suf})|g" \
+    -e "s|](\\./reference/plugin-permissions_id\\.md)|](Plugin-permissions-id)|g" \
     -e "s|](\\./operations/nginx-repair\\.md)|](Nginx-auto-repair${suf})|g" \
     -e "s|](\\./operations/nginx-repair_id\\.md)|](Nginx-auto-repair-id)|g" \
     -e "s|](\\./guides/dev-mount-testing\\.md)|](Development${suf})|g" \
@@ -130,6 +132,8 @@ rewrite_links() {
     -e "s|](\\./sequences/19-plugin-installer_id\\.md)|](Plugin-installer-id)|g" \
     -e "s|](\\./sequences/20-plugin-remote-distribution\\.md)|](Plugin-remote-distribution${suf})|g" \
     -e "s|](\\./sequences/20-plugin-remote-distribution_id\\.md)|](Plugin-remote-distribution-id)|g" \
+    -e "s|](\\./sequences/21-plugin-mcp\\.md)|](Plugin-mcp${suf})|g" \
+    -e "s|](\\./sequences/21-plugin-mcp_id\\.md)|](Plugin-mcp-id)|g" \
     -e "s|](\\./19-plugin-installer\\.md)|](Plugin-installer${suf})|g" \
     -e "s|](\\./19-plugin-installer_id\\.md)|](Plugin-installer-id)|g" \
     -e "s|](\\./architecture/plugin-platform\\.md)|](Plugin-platform${suf})|g" \
@@ -159,6 +163,7 @@ rewrite_links() {
     -e "s|](docs/architecture/domain-model\\.md)|](Domain-model${suf})|g" \
     -e "s|](docs/domain-model\\.md)|](Domain-model${suf})|g" \
     -e "s|](docs/reference/api-inventory\\.md)|](API-reference${suf})|g" \
+    -e "s|](docs/reference/plugin-permissions\\.md)|](Plugin-permissions${suf})|g" \
     -e "s|](docs/api-inventory\\.md)|](API-reference${suf})|g" \
     -e "s|](docs/guides/wiki\\.md)|](Home${suf})|g" \
     -e "s|](docs/wiki\\.md)|](Home${suf})|g" \
@@ -171,6 +176,8 @@ rewrite_links() {
     -e "s|](\\../architecture/domain-model_id\\.md)|](Domain-model-id)|g" \
     -e "s|](\\../reference/api-inventory\\.md)|](API-reference${suf})|g" \
     -e "s|](\\../reference/api-inventory_id\\.md)|](API-reference-id)|g" \
+    -e "s|](\\../reference/plugin-permissions\\.md)|](Plugin-permissions${suf})|g" \
+    -e "s|](\\../reference/plugin-permissions_id\\.md)|](Plugin-permissions-id)|g" \
     -e "s|](\\../operations/nginx-repair\\.md)|](Nginx-auto-repair${suf})|g" \
     -e "s|](\\../operations/nginx-repair_id\\.md)|](Nginx-auto-repair-id)|g" \
     -e "s|](\\../guides/dev-mount-testing\\.md)|](Development${suf})|g" \
@@ -281,7 +288,7 @@ wiki_sanitize() {
       sed -i '/^$/N;/^\n$/d' "$file"
       strip_leading_blank "$file"
       ;;
-    Architecture|Domain-model|Nginx-auto-repair|Container-startup|Panel-routing|Authentication|Dashboard|Website-create|Website-enable-disable|Website-nginx-config|Website-delete|SSL-and-Certbot|Sequences-index|Plugin-installer|Plugin-platform|Plugin-remote-distribution)
+    Architecture|Domain-model|Nginx-auto-repair|Container-startup|Panel-routing|Authentication|Dashboard|Website-create|Website-enable-disable|Website-nginx-config|Website-delete|SSL-and-Certbot|Sequences-index|Plugin-installer|Plugin-platform|Plugin-remote-distribution|Plugin-mcp|Plugin-permissions)
       strip_leading_h1 "$file"
       ;;
     Migration|Operations|Observability|Development)
@@ -323,8 +330,8 @@ build_home() {
       echo "| Architecture | [Architecture](Architecture) · [Container-startup](Container-startup) · [Panel-routing](Panel-routing) |"
       echo "| Website & SSL | [Website-create](Website-create) · [Nginx-auto-repair](Nginx-auto-repair) · [SSL-and-Certbot](SSL-and-Certbot) |"
       echo "| Operations | [Operations](Operations) · [Observability](Observability) · [Dashboard](Dashboard) |"
-      echo "| Extensions | [Plugin-installer](Plugin-installer) · [Plugin-remote-distribution](Plugin-remote-distribution) · [Plugin-platform](Plugin-platform) · [templates](${BLOB}/plugins/_templates/) |"
-      echo "| Reference | [API-reference](API-reference) · [Sequences-index](Sequences-index) · [Migration](Migration) |"
+      echo "| Extensions | [Plugin-installer](Plugin-installer) · [Plugin-remote-distribution](Plugin-remote-distribution) · [Plugin-mcp](Plugin-mcp) · [Plugin-platform](Plugin-platform) · [templates](${BLOB}/plugins/_templates/) |"
+      echo "| Reference | [API-reference](API-reference) · [Plugin-permissions](Plugin-permissions) · [Sequences-index](Sequences-index) · [Migration](Migration) |"
     } > "$out"
   else
     {
@@ -343,8 +350,8 @@ build_home() {
       echo "| Arsitektur | [Architecture-id](Architecture-id) · [Container-startup-id](Container-startup-id) · [Panel-routing-id](Panel-routing-id) |"
       echo "| Website & SSL | [Website-create-id](Website-create-id) · [Nginx-auto-repair-id](Nginx-auto-repair-id) · [SSL-and-Certbot-id](SSL-and-Certbot-id) |"
       echo "| Operasi | [Operations-id](Operations-id) · [Observability-id](Observability-id) · [Dashboard-id](Dashboard-id) |"
-      echo "| Ekstensi | [Plugin-installer-id](Plugin-installer-id) · [Plugin-remote-distribution-id](Plugin-remote-distribution-id) · [Plugin-platform-id](Plugin-platform-id) · [template](${BLOB}/plugins/_templates/) |"
-      echo "| Referensi | [API-reference-id](API-reference-id) · [Sequences-index-id](Sequences-index-id) · [Migration-id](Migration-id) |"
+      echo "| Ekstensi | [Plugin-installer-id](Plugin-installer-id) · [Plugin-remote-distribution-id](Plugin-remote-distribution-id) · [Plugin-mcp-id](Plugin-mcp-id) · [Plugin-platform-id](Plugin-platform-id) · [template](${BLOB}/plugins/_templates/) |"
+      echo "| Referensi | [API-reference-id](API-reference-id) · [Plugin-permissions-id](Plugin-permissions-id) · [Sequences-index-id](Sequences-index-id) · [Migration-id](Migration-id) |"
     } > "$out"
   fi
 }
@@ -359,6 +366,7 @@ export_lang() {
   copy_page "$(doc_path architecture/overview.md "$lang")" "$OUT/Architecture${suf}.md"
   copy_page "$(doc_path architecture/domain-model.md "$lang")" "$OUT/Domain-model${suf}.md"
   copy_page "$(doc_path reference/api-inventory.md "$lang")" "$OUT/API-reference${suf}.md"
+  copy_page "$(doc_path reference/plugin-permissions.md "$lang")" "$OUT/Plugin-permissions${suf}.md"
   copy_page "$(doc_path operations/nginx-repair.md "$lang")" "$OUT/Nginx-auto-repair${suf}.md"
   copy_page "$(seq_path 02-tls-proxy.md "$lang")" "$OUT/Panel-routing${suf}.md"
   copy_page "$(seq_path 03-authentication.md "$lang")" "$OUT/Authentication${suf}.md"
@@ -371,6 +379,7 @@ export_lang() {
   copy_page "$(seq_path 01-container-startup.md "$lang")" "$OUT/Container-startup${suf}.md"
   copy_page "$(seq_path 19-plugin-installer.md "$lang")" "$OUT/Plugin-installer${suf}.md"
   copy_page "$(seq_path 20-plugin-remote-distribution.md "$lang")" "$OUT/Plugin-remote-distribution${suf}.md"
+  copy_page "$(seq_path 21-plugin-mcp.md "$lang")" "$OUT/Plugin-mcp${suf}.md"
   copy_page "$DOCS/architecture/plugin-platform.md" "$OUT/Plugin-platform${suf}.md"
   if [[ "$lang" == id ]]; then
     copy_page "$DOCS/sequences/README_id.md" "$OUT/Sequences-index${suf}.md"
@@ -442,7 +451,9 @@ write_sidebars() {
 ### Extensions
 - Plugin installer · [EN](Plugin-installer) · [ID](Plugin-installer-id)
 - Plugin remote distribution · [EN](Plugin-remote-distribution) · [ID](Plugin-remote-distribution-id)
+- Plugin MCP · [EN](Plugin-mcp) · [ID](Plugin-mcp-id)
 - Plugin platform · [EN](Plugin-platform) · [ID](Plugin-platform-id)
+- Plugin permissions · [EN](Plugin-permissions) · [ID](Plugin-permissions-id)
 - Plugin templates · [repo](${BLOB}/plugins/_templates/)
 
 ### Other

@@ -42,6 +42,9 @@ GoSite feature flow diagrams. **Legacy BangunSite** sections (if any) are kept a
 | 18 | [18-grafana-lite.md](./18-grafana-lite.md) | Traffic metrics | ✅ |
 | 19 | [19-plugin-installer.md](./19-plugin-installer.md) | Plugin installer + compatibility contract | ✅ |
 | 20 | [20-plugin-remote-distribution.md](./20-plugin-remote-distribution.md) | Remote install (GitHub/GitLab/URL) — wave G | ✅ |
+| 21 | [21-plugin-mcp.md](./21-plugin-mcp.md) | MCP plugin + integration access tokens — wave P6 | 📋 design |
+
+See also [plugin-permissions.md](../reference/plugin-permissions.md) for the canonical scope registry.
 
 ## Wiki GitHub
 

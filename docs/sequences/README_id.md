@@ -42,6 +42,9 @@ Diagram alur fitur GoSite. Bagian **Legacy BangunSite** (jika ada) disimpan seba
 | 18 | [18-grafana-lite.md](./18-grafana-lite.md) | Traffic metrics | ✅ |
 | 19 | [19-plugin-installer.md](./19-plugin-installer.md) | Plugin installer + compatibility contract | ✅ |
 | 20 | [20-plugin-remote-distribution.md](./20-plugin-remote-distribution.md) | Install remote GitHub/GitLab/URL — gelombang G | ✅ |
+| 21 | [21-plugin-mcp.md](./21-plugin-mcp.md) | Plugin MCP + token integrasi — gelombang P6 | 📋 desain |
+
+Lihat [plugin-permissions.md](../reference/plugin-permissions.md) untuk registry scope kanonik.
 
 ## Wiki GitHub
 
