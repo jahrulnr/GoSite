@@ -1,0 +1,24 @@
+{
+  "id": "template/mcp",
+  "name": "Template MCP (Tier 1)",
+  "version": "0.1.0",
+  "tier": 1,
+  "apiVersion": "gosite-plugin/1",
+  "minGoSiteVersion": "1.4.0",
+  "rpcVersion": "1",
+  "capabilities": {
+    "mcpServer": true,
+    "uiSidebar": true
+  },
+  "permissions": ["system:read", "websites:read"],
+  "entrypoints": {
+    "validate": { "type": "go-plugin", "command": "plugin/validate" },
+    "runtime": { "type": "go-plugin", "command": "plugin/gosite" },
+    "mcp": { "type": "stdio", "command": "plugin/mcp" }
+  },
+  "ui": {
+    "sidebar": [
+      { "label": "MCP Integration", "route": "/plugins/template/mcp/integration" }
+    ]
+  }
+}

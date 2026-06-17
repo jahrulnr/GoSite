@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/jahrulnr/gosite/internal/observability/grafanalite"
+	"github.com/jahrulnr/gosite/internal/observability/nginxlite"
 	"github.com/jahrulnr/gosite/internal/observability/splunklite"
 	"github.com/jahrulnr/gosite/internal/service/ssl"
 	"github.com/jahrulnr/gosite/internal/service/system"
@@ -16,6 +17,7 @@ type DashboardHandler struct {
 	ssl     *ssl.Service
 	splunk  *splunklite.Service
 	grafana *grafanalite.Service
+	nginx   *nginxlite.Service
 }
 
 // NewDashboardHandler returns a dashboard handler.
@@ -24,12 +26,14 @@ func NewDashboardHandler(
 	sslSvc *ssl.Service,
 	splunk *splunklite.Service,
 	grafana *grafanalite.Service,
+	nginx *nginxlite.Service,
 ) *DashboardHandler {
 	return &DashboardHandler{
 		system:  systemSvc,
 		ssl:     sslSvc,
 		splunk:  splunk,
 		grafana: grafana,
+		nginx:   nginx,
 	}
 }
 
@@ -62,12 +66,19 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 		recent = []splunklite.QueryEvent{}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	payload := map[string]interface{}{
 		"system":          info,
 		"traffic_summary": traffic,
 		"ssl_expiring":    expiring,
 		"recent_audit":    recent,
-	})
+	}
+	if h.nginx != nil {
+		if nginxStatus, err := h.nginx.Current(ctx); err == nil && nginxStatus.Available {
+			payload["nginx_status"] = nginxStatus
+		}
+	}
+
+	writeJSON(w, http.StatusOK, payload)
 }
 
 func (h *DashboardHandler) trafficSummary(ctx context.Context) interface{} {

@@ -1,0 +1,14 @@
+{
+  "id": "gosite/mcp",
+  "name": "GoSite MCP",
+  "repository": "https://github.com/jahrulnr/gosite",
+  "distribution": {
+    "apiVersion": "gosite-plugin-distribution/1",
+    "build": {
+      "language": "go",
+      "package": "./plugins/gosite/mcp",
+      "goVersion": "1.22"
+    },
+    "releases": []
+  }
+}

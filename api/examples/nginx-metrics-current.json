@@ -1,0 +1,16 @@
+{
+  "sample_ts": "2026-06-17T14:30:00Z",
+  "active": 24,
+  "reading": 2,
+  "writing": 5,
+  "waiting": 17,
+  "accepts": 184520,
+  "handled": 184520,
+  "requests": 184502,
+  "dropped_connections": 0,
+  "request_rate_per_sec": 12.45,
+  "accept_rate_per_sec": 12.47,
+  "handled_rate_per_sec": 12.47,
+  "counter_reset": false,
+  "available": true
+}

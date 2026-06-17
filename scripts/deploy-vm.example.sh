@@ -18,8 +18,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-echo "==> build frontend + image"
-make build-fe
+echo "==> build image"
 docker build --network=host -t "$PROD_IMAGE" .
 docker save "$PROD_IMAGE" | gzip > "$PROD_TAR"
 

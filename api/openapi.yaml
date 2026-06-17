@@ -1930,6 +1930,133 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /metrics/nginx/current:
+    get:
+      tags: [Metrics]
+      summary: Latest nginx stub_status snapshot
+      operationId: getNginxMetricsCurrent
+      description: |
+        Polls the most recent stub_status sample collected from
+        `GOSITE_NGINX_STUB_STATUS_URL` (default `http://127.0.0.1:18081/nginx_status`).
+        `request_rate_per_sec` is derived from the delta vs the previous sample.
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "200":
+          description: Current stub_status metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NginxStatusCurrent"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /metrics/nginx/series:
+    get:
+      tags: [Metrics]
+      summary: nginx stub_status time series
+      operationId: getNginxMetricsSeries
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/Range"
+      responses:
+        "200":
+          description: Connection state and request-rate series
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NginxStatusSeriesResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /metrics/nginx/vts/status:
+    get:
+      tags: [Metrics]
+      summary: VTS collector availability
+      operationId: getNginxVTSStatus
+      description: |
+        Returns whether VTS collection is enabled (`GOSITE_NGINX_VTS_URL` non-empty).
+        Production images compile nginx with nginx-module-vts.
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "200":
+          description: VTS feature flag for UI
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NginxVTSStatusResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /metrics/nginx/vts/servers:
+    get:
+      tags: [Metrics]
+      summary: VTS server zones (latest snapshot)
+      operationId: getNginxVTSServers
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 10
+      responses:
+        "200":
+          description: Ranked per-server_name rows from latest VTS poll
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [servers]
+                properties:
+                  servers:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/NginxVTSServerRow"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /metrics/nginx/vts/upstreams:
+    get:
+      tags: [Metrics]
+      summary: VTS upstream peers (latest snapshot)
+      operationId: getNginxVTSUpstreams
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 10
+      responses:
+        "200":
+          description: Ranked upstream peer rows from latest VTS poll
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [upstreams]
+                properties:
+                  upstreams:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/NginxVTSUpstreamRow"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /plugins:
     get:
       tags: [Plugins]
@@ -2355,6 +2482,156 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /plugins/permissions/registry:
+    get:
+      tags: [Plugins]
+      summary: List known integration scope strings
+      operationId: getPluginPermissionRegistry
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "200":
+          description: Scope registry for token picker
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  scopes:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        scope:
+                          type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /plugins/{vendor}/{name}/integration-tokens:
+    get:
+      tags: [Plugins]
+      summary: List integration access tokens for a plugin
+      operationId: listIntegrationTokens
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/PluginVendor"
+        - $ref: "#/components/parameters/PluginName"
+      responses:
+        "200":
+          description: Token metadata (no secrets)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationTokenListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Plugins]
+      summary: Create integration access token
+      operationId: createIntegrationToken
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/PluginVendor"
+        - $ref: "#/components/parameters/PluginName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IntegrationTokenCreateRequest"
+      responses:
+        "201":
+          description: Token created; secret shown once
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationTokenCreateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /plugins/{vendor}/{name}/integration-tokens/{tokenId}:
+    patch:
+      tags: [Plugins]
+      summary: Update integration token scopes
+      operationId: patchIntegrationToken
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/PluginVendor"
+        - $ref: "#/components/parameters/PluginName"
+        - name: tokenId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IntegrationTokenPatchRequest"
+      responses:
+        "200":
+          description: Updated token metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationTokenResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    delete:
+      tags: [Plugins]
+      summary: Revoke integration access token
+      operationId: revokeIntegrationToken
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/PluginVendor"
+        - $ref: "#/components/parameters/PluginName"
+        - name: tokenId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Revoked token metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationTokenResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /integration-tokens/self:
+    get:
+      tags: [Plugins]
+      summary: Introspect current integration token scopes
+      operationId: getIntegrationTokenSelf
+      security:
+        - basicAuth: []
+          accessToken: []
+      responses:
+        "200":
+          description: Token metadata for MCP startup
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationTokenSelfResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
 components:
   securitySchemes:
     sessionCookie:
@@ -2366,6 +2643,11 @@ components:
       type: http
       scheme: basic
       description: Required on all /api/v1 routes when AUTH_ENABLE=true
+    accessToken:
+      type: apiKey
+      in: header
+      name: X-Gosite-Access-Token
+      description: Scoped plugin integration token (gs_pat_*)
 
   parameters:
     WebsiteId:
@@ -2679,6 +2961,176 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/QueryEvent"
+        nginx_status:
+          $ref: "#/components/schemas/NginxStatusCurrent"
+          description: Present when stub_status samples exist
+
+    NginxStatusCurrent:
+      type: object
+      required:
+        - sample_ts
+        - active
+        - reading
+        - writing
+        - waiting
+        - accepts
+        - handled
+        - requests
+        - dropped_connections
+        - request_rate_per_sec
+        - accept_rate_per_sec
+        - handled_rate_per_sec
+        - counter_reset
+        - available
+      properties:
+        sample_ts:
+          type: string
+          format: date-time
+        active:
+          type: integer
+        reading:
+          type: integer
+        writing:
+          type: integer
+        waiting:
+          type: integer
+        accepts:
+          type: integer
+          format: int64
+        handled:
+          type: integer
+          format: int64
+        requests:
+          type: integer
+          format: int64
+        dropped_connections:
+          type: integer
+          format: int64
+          description: accepts minus handled from latest sample
+        request_rate_per_sec:
+          type: number
+          format: double
+          nullable: true
+          description: Delta requests / delta time; null after counter reset
+        accept_rate_per_sec:
+          type: number
+          format: double
+          nullable: true
+        handled_rate_per_sec:
+          type: number
+          format: double
+          nullable: true
+        counter_reset:
+          type: boolean
+          description: True when cumulative counters decreased vs previous sample (nginx restart)
+        available:
+          type: boolean
+
+    NginxStatusSeriesResponse:
+      type: object
+      required: [step, active, reading, writing, waiting, request_rate]
+      properties:
+        step:
+          type: string
+          description: Sample step (e.g. 30s)
+        active:
+          type: array
+          items:
+            $ref: "#/components/schemas/NginxMetricsSeriesPoint"
+        reading:
+          type: array
+          items:
+            $ref: "#/components/schemas/NginxMetricsSeriesPoint"
+        writing:
+          type: array
+          items:
+            $ref: "#/components/schemas/NginxMetricsSeriesPoint"
+        waiting:
+          type: array
+          items:
+            $ref: "#/components/schemas/NginxMetricsSeriesPoint"
+        request_rate:
+          type: array
+          items:
+            $ref: "#/components/schemas/NginxRateSeriesPoint"
+
+    NginxMetricsSeriesPoint:
+      type: array
+      prefixItems:
+        - type: string
+          format: date-time
+        - type: number
+      minItems: 2
+      maxItems: 2
+
+    NginxRateSeriesPoint:
+      type: array
+      prefixItems:
+        - type: string
+          format: date-time
+        - type: number
+          nullable: true
+      minItems: 2
+      maxItems: 2
+      description: Rate is null when cumulative counter reset between samples
+
+    NginxVTSStatusResponse:
+      type: object
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+        hint:
+          type: string
+
+    NginxVTSServerRow:
+      type: object
+      required: [server_name, requests, in_bytes, out_bytes, request_msec]
+      properties:
+        server_name:
+          type: string
+        requests:
+          type: integer
+        in_bytes:
+          type: integer
+        out_bytes:
+          type: integer
+        request_msec:
+          type: number
+          format: double
+        sample_ts:
+          type: string
+          format: date-time
+
+    NginxVTSUpstreamRow:
+      type: object
+      required:
+        - upstream_name
+        - server_addr
+        - requests
+        - in_bytes
+        - out_bytes
+        - response_msec
+        - down
+      properties:
+        upstream_name:
+          type: string
+        server_addr:
+          type: string
+        requests:
+          type: integer
+        in_bytes:
+          type: integer
+        out_bytes:
+          type: integer
+        response_msec:
+          type: number
+          format: double
+        down:
+          type: boolean
+        sample_ts:
+          type: string
+          format: date-time
 
     ExpiringCert:
       type: object
@@ -3855,6 +4307,103 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PluginKeyringEntry"
+
+    IntegrationToken:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        plugin_id:
+          type: string
+        label:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        created_under_version:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    IntegrationTokenListResponse:
+      type: object
+      properties:
+        tokens:
+          type: array
+          items:
+            $ref: "#/components/schemas/IntegrationToken"
+
+    IntegrationTokenResponse:
+      type: object
+      properties:
+        token:
+          $ref: "#/components/schemas/IntegrationToken"
+
+    IntegrationTokenCreateRequest:
+      type: object
+      required: [label, scopes]
+      properties:
+        label:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        expires_at:
+          type: string
+          format: date-time
+
+    IntegrationTokenPatchRequest:
+      type: object
+      required: [scopes]
+      properties:
+        scopes:
+          type: array
+          items:
+            type: string
+
+    IntegrationTokenCreateResponse:
+      type: object
+      properties:
+        token:
+          $ref: "#/components/schemas/IntegrationToken"
+        secret:
+          type: object
+          properties:
+            token:
+              type: string
+              description: Plaintext gs_pat_* shown once
+
+    IntegrationTokenSelfResponse:
+      type: object
+      properties:
+        plugin_id:
+          type: string
+        label:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
 
     MessageResponse:
       type: object

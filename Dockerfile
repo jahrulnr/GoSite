@@ -47,6 +47,11 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
+COPY docker/nginx-vts/build.sh /tmp/build-nginx-vts.sh
+RUN chmod +x /tmp/build-nginx-vts.sh && /tmp/build-nginx-vts.sh && rm -f /tmp/build-nginx-vts.sh
+
+ENV GOSITE_NGINX_VTS_URL="http://127.0.0.1:18082/status/format/json"
+
 RUN mkdir -p /storage /var/setup \
     && rm -f /etc/fstab
 

@@ -6,6 +6,7 @@
 - `internal/observability/grafanalite/`
 - Audit write hook using `contracts.AuditWriter`
 - `docs/sequences/17-splunk-lite.md`, `18-grafana-lite.md`
+- Cross-link: [22-nginx-metrics.md](../sequences/22-nginx-metrics.md) (real-time nginx; separate wave SA-8)
 
 ## Required tests
 

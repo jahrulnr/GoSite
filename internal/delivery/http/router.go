@@ -18,6 +18,7 @@ import (
 	"github.com/jahrulnr/gosite/internal/infra/job"
 	"github.com/jahrulnr/gosite/internal/infra/nginx"
 	"github.com/jahrulnr/gosite/internal/observability/grafanalite"
+	"github.com/jahrulnr/gosite/internal/observability/nginxlite"
 	"github.com/jahrulnr/gosite/internal/observability/splunklite"
 	"github.com/jahrulnr/gosite/internal/repository/sqlite"
 	"github.com/jahrulnr/gosite/internal/service/auth"
@@ -86,15 +87,18 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 
 	logRepo := sqlite.NewLogEventRepository(db)
 	metricsRepo := sqlite.NewTrafficMetricsRepository(db)
+	nginxStatusRepo := sqlite.NewNginxStatusRepository(db)
+	nginxVTSRepo := sqlite.NewNginxVTSRepository(db)
 	savedRepo := sqlite.NewSavedQueryRepository(db)
 	splunkSvc := splunklite.NewService(auditRepo, jobRepo, logRepo, savedRepo, cfg.AuditRetentionDays, cfg.LogEventsRetentionDays)
 	grafanaSvc := grafanalite.NewService(metricsRepo)
+	nginxMetricsSvc := nginxlite.NewService(nginxStatusRepo, nginxVTSRepo, cfg.NginxVTSStatusURL)
 	logDir := cfg.LogsDir()
 	logsSvc := logs.NewService(logDir, websiteRepo)
 	queryMetaSvc := splunklite.NewMetaService(logsSvc, logDir)
 	logIngestor := splunklite.NewLogIngestor(logRepo, logDir)
 	splunkSvc.SetIngestor(logIngestor)
-	obsHandler := handler.NewObservabilityHandler(splunkSvc, queryMetaSvc, logIngestor, grafanaSvc)
+	obsHandler := handler.NewObservabilityHandler(splunkSvc, queryMetaSvc, logIngestor, grafanaSvc, nginxMetricsSvc)
 
 	systemSvc := system.NewService(logDir, nil, system.CommandAdapter{Runner: cmd})
 	settingsSvc := settings.NewService(users)
@@ -106,7 +110,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	logsHandler := handler.NewLogsHandler(logsSvc)
 	databaseHandler := handler.NewDatabaseHandler(databaseSvc)
 	uimetaHandler := handler.NewUIMetaHandler(uimetaSvc)
-	dashboardHandler := handler.NewDashboardHandler(systemSvc, sslSvc, splunkSvc, grafanaSvc)
+	dashboardHandler := handler.NewDashboardHandler(systemSvc, sslSvc, splunkSvc, grafanaSvc, nginxMetricsSvc)
 
 	dockerClient, err := dockerinfra.NewClient("")
 	var dockerSvc contracts.DockerClient
@@ -132,6 +136,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	cronHandler := handler.NewCronHandler(cronSvc, worker)
 
 	pluginConfigRepo := sqlite.NewPluginConfigRepository(db)
+	pluginAccessTokenRepo := sqlite.NewPluginAccessTokenRepository(db)
 	pluginCipher, err := secrets.NewCipher(secrets.NewDerivedSource(cfg.Storage))
 	if err != nil {
 		slog.Warn("plugin secret cipher disabled", "err", err)
@@ -140,6 +145,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 		pluginConfigRepo,
 		pluginsvc.WithCipher(pluginCipher),
 	)
+	integrationTokenSvc := pluginsvc.NewIntegrationTokenService(pluginAccessTokenRepo, pluginRepo, splunklite.NewAuditWriter(auditRepo))
 	pluginSvc := pluginsvc.NewService(
 		pluginRepo,
 		cfg.Storage,
@@ -149,6 +155,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 		pluginsvc.WithKeyringPath(cfg.PluginKeyringPath),
 		pluginsvc.WithHostVersion(cfg.AppVersion),
 		pluginsvc.WithConfigRepo(pluginConfigRepo),
+		pluginsvc.WithIntegrationTokens(integrationTokenSvc),
 	)
 	if err := pluginSvc.Reconcile(context.Background()); err != nil {
 		slog.Warn("plugin reconcile failed", "err", err)
@@ -159,6 +166,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	pluginHandler := handler.NewPluginHandler(pluginSvc, pluginRemoteSvc, pluginRemoteCfg, pluginCatalogSvc)
 	pluginConfigHandler := handler.NewConfigHandler(pluginConfigSvc)
 	pluginKeyringHandler := handler.NewKeyringHandler(cfg.PluginKeyringPath)
+	integrationTokenHandler := handler.NewIntegrationTokenHandler(integrationTokenSvc, authSvc, users)
 
 	supervisor := pluginsvc.NewHealthSupervisor(
 		pluginRepo,
@@ -211,23 +219,30 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	}
 
 	protected := api.Group("")
-	protected.Use(middleware.RequireSession(authSvc))
-	registerWebsiteRoutes(protected, websiteHandler)
-	registerNginxRoutes(protected, nginxHandler)
+	protected.Use(middleware.RequireSessionOrAccessToken(authSvc, integrationTokenSvc))
+	registerWebsiteRoutes(protected, websiteHandler, integrationTokenSvc)
+	registerNginxRoutes(protected, nginxHandler, integrationTokenSvc)
 	registerSSLRoutes(protected, sslHandler)
-	registerDockerRoutes(protected, dockerHandler)
+	registerDockerRoutes(protected, dockerHandler, integrationTokenSvc)
 	registerFilesRoutes(protected, filesHandler)
 	registerMountRoutes(protected, mountHandler)
 	registerCronRoutes(protected, cronHandler)
 	registerObservabilityRoutes(protected, obsHandler)
-	registerDashboardRoutes(protected, dashboardHandler)
-	registerSystemRoutes(protected, systemHandler)
-	registerSettingsRoutes(protected, settingsHandler)
+	registerDashboardRoutes(protected, dashboardHandler, integrationTokenSvc)
+	registerSystemRoutes(protected, systemHandler, integrationTokenSvc)
+	sessionOnly := protected.Group("")
+	sessionOnly.Use(middleware.RequireSessionOnly())
+	registerSettingsRoutes(sessionOnly, settingsHandler)
 	registerLogsRoutes(protected, logsHandler)
 	registerDatabaseRoutes(protected, databaseHandler)
 	registerUIMetaRoutes(protected, uimetaHandler)
-	registerTerminalRoutes(protected, terminalHandler)
-	registerPluginRoutes(protected, pluginHandler, pluginConfigHandler, pluginKeyringHandler)
+	registerTerminalRoutes(sessionOnly, terminalHandler)
+	registerPluginRoutes(sessionOnly, pluginHandler, pluginConfigHandler, pluginKeyringHandler, integrationTokenHandler)
+
+	api.GET("/integration-tokens/self",
+		middleware.RequireAccessTokenOnly(integrationTokenSvc),
+		gin.WrapF(integrationTokenHandler.Self),
+	)
 
 	if cfg.FEEmbed {
 		frontend.Register(engine, frontend.DistFS)
@@ -236,15 +251,17 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	return engine
 }
 
-func registerDashboardRoutes(api *gin.RouterGroup, h *handler.DashboardHandler) {
+func registerDashboardRoutes(api *gin.RouterGroup, h *handler.DashboardHandler, tokens *pluginsvc.IntegrationTokenService) {
+	_ = tokens
 	api.GET("/dashboard", gin.WrapF(h.Get))
 }
 
-func registerSystemRoutes(api *gin.RouterGroup, h *handler.SystemHandler) {
-	api.GET("/system/info", gin.WrapF(h.Info))
-	api.GET("/system/network", gin.WrapF(h.Network))
-	api.GET("/system/disk-io", gin.WrapF(h.DiskIO))
-	api.GET("/system/nginx-traffic", gin.WrapF(h.NginxTraffic))
+func registerSystemRoutes(api *gin.RouterGroup, h *handler.SystemHandler, tokens *pluginsvc.IntegrationTokenService) {
+	api.GET("/system/info", middleware.RequireScope("system:read"), gin.WrapF(h.Info))
+	api.GET("/system/network", middleware.RequireScope("system:read"), gin.WrapF(h.Network))
+	api.GET("/system/disk-io", middleware.RequireScope("system:read"), gin.WrapF(h.DiskIO))
+	api.GET("/system/nginx-traffic", middleware.RequireScope("system:read"), gin.WrapF(h.NginxTraffic))
+	_ = tokens
 }
 
 func registerSettingsRoutes(api *gin.RouterGroup, h *handler.SettingsHandler) {
@@ -281,26 +298,28 @@ func purgeExpiredSessions(repo *sqlite.SessionRepository) {
 	}
 }
 
-func registerWebsiteRoutes(api *gin.RouterGroup, h *handler.WebsiteHandler) {
-	api.GET("/websites", gin.WrapF(h.List))
-	api.POST("/websites", gin.WrapF(h.Create))
-	api.POST("/websites/validate", gin.WrapF(h.Validate))
-	api.GET("/websites/:id", gin.WrapF(h.Get))
-	api.PUT("/websites/:id", gin.WrapF(h.Update))
-	api.DELETE("/websites/:id", gin.WrapF(h.Delete))
-	api.PATCH("/websites/:id/toggle", gin.WrapF(h.Toggle))
-	api.GET("/websites/:id/nginx-config", gin.WrapF(h.GetNginxConfig))
-	api.PUT("/websites/:id/nginx-config", gin.WrapF(h.UpdateNginxConfig))
-	api.POST("/websites/:id/nginx-config/test", gin.WrapF(h.TestNginxConfig))
+func registerWebsiteRoutes(api *gin.RouterGroup, h *handler.WebsiteHandler, tokens *pluginsvc.IntegrationTokenService) {
+	api.GET("/websites", middleware.RequireScope("websites:read"), gin.WrapF(h.List))
+	api.POST("/websites", middleware.RequireScope("websites:write"), gin.WrapF(h.Create))
+	api.POST("/websites/validate", middleware.RequireScope("websites:read"), gin.WrapF(h.Validate))
+	api.GET("/websites/:id", middleware.RequireScope("websites:read"), gin.WrapF(h.Get))
+	api.PUT("/websites/:id", middleware.RequireScope("websites:write"), gin.WrapF(h.Update))
+	api.DELETE("/websites/:id", middleware.RequireScope("websites:write"), gin.WrapF(h.Delete))
+	api.PATCH("/websites/:id/toggle", middleware.RequireScope("websites:write"), gin.WrapF(h.Toggle))
+	api.GET("/websites/:id/nginx-config", middleware.RequireScope("websites:read"), gin.WrapF(h.GetNginxConfig))
+	api.PUT("/websites/:id/nginx-config", middleware.RequireScope("websites:write"), gin.WrapF(h.UpdateNginxConfig))
+	api.POST("/websites/:id/nginx-config/test", middleware.RequireScope("websites:read"), gin.WrapF(h.TestNginxConfig))
+	_ = tokens
 }
 
-func registerNginxRoutes(api *gin.RouterGroup, h *handler.NginxHandler) {
-	api.GET("/nginx/default", gin.WrapF(h.GetDefault))
-	api.PUT("/nginx/default", gin.WrapF(h.UpdateDefault))
-	api.GET("/nginx/global", gin.WrapF(h.GetGlobal))
-	api.PUT("/nginx/global", gin.WrapF(h.UpdateGlobal))
-	api.POST("/nginx/test", gin.WrapF(h.Test))
-	api.POST("/nginx/reload", gin.WrapF(h.Reload))
+func registerNginxRoutes(api *gin.RouterGroup, h *handler.NginxHandler, tokens *pluginsvc.IntegrationTokenService) {
+	api.GET("/nginx/default", middleware.RequireScope("nginx:read"), gin.WrapF(h.GetDefault))
+	api.PUT("/nginx/default", middleware.RequireScope("nginx:manage"), gin.WrapF(h.UpdateDefault))
+	api.GET("/nginx/global", middleware.RequireScope("nginx:read"), gin.WrapF(h.GetGlobal))
+	api.PUT("/nginx/global", middleware.RequireScope("nginx:manage"), gin.WrapF(h.UpdateGlobal))
+	api.POST("/nginx/test", middleware.RequireScope("nginx:read"), gin.WrapF(h.Test))
+	api.POST("/nginx/reload", middleware.RequireScope("nginx:manage"), gin.WrapF(h.Reload))
+	_ = tokens
 }
 
 func registerSSLRoutes(api *gin.RouterGroup, h *handler.SSLHandler) {
@@ -310,11 +329,12 @@ func registerSSLRoutes(api *gin.RouterGroup, h *handler.SSLHandler) {
 	api.GET("/websites/:id/ssl/certbot/stream", gin.WrapF(h.CertbotStream))
 }
 
-func registerDockerRoutes(api *gin.RouterGroup, h *handler.DockerHandler) {
-	api.GET("/docker/containers", gin.WrapF(h.List))
-	api.POST("/docker/containers/:id/restart", gin.WrapF(h.Restart))
-	api.POST("/docker/containers/:id/stop", gin.WrapF(h.Stop))
-	api.GET("/docker/containers/:id/logs", gin.WrapF(h.Logs))
+func registerDockerRoutes(api *gin.RouterGroup, h *handler.DockerHandler, tokens *pluginsvc.IntegrationTokenService) {
+	api.GET("/docker/containers", middleware.RequireScope("docker:read"), gin.WrapF(h.List))
+	api.POST("/docker/containers/:id/restart", middleware.RequireScope("docker:manage"), gin.WrapF(h.Restart))
+	api.POST("/docker/containers/:id/stop", middleware.RequireScope("docker:manage"), gin.WrapF(h.Stop))
+	api.GET("/docker/containers/:id/logs", middleware.RequireScope("docker:read"), gin.WrapF(h.Logs))
+	_ = tokens
 }
 
 func registerFilesRoutes(api *gin.RouterGroup, h *handler.FilesHandler) {
@@ -346,7 +366,7 @@ func registerCronRoutes(api *gin.RouterGroup, h *handler.CronHandler) {
 	api.GET("/cronjobs/:id/run/stream", gin.WrapF(h.RunStream))
 }
 
-func registerPluginRoutes(api *gin.RouterGroup, h *handler.PluginHandler, configH *handler.ConfigHandler, keyH *handler.KeyringHandler) {
+func registerPluginRoutes(api *gin.RouterGroup, h *handler.PluginHandler, configH *handler.ConfigHandler, keyH *handler.KeyringHandler, tokenH *handler.IntegrationTokenHandler) {
 	api.GET("/plugins", gin.WrapF(h.List))
 	api.GET("/plugins/catalog", gin.WrapF(h.CatalogList))
 	api.GET("/plugins/catalog/:vendor/:name", gin.WrapF(h.CatalogGet))
@@ -364,6 +384,12 @@ func registerPluginRoutes(api *gin.RouterGroup, h *handler.PluginHandler, config
 	api.GET("/plugins/keyring", gin.WrapF(keyH.List))
 	api.POST("/plugins/keyring", gin.WrapF(keyH.Add))
 	api.DELETE("/plugins/keyring", gin.WrapF(keyH.Revoke))
+
+	api.GET("/plugins/permissions/registry", gin.WrapF(tokenH.Registry))
+	api.GET("/plugins/:vendor/:name/integration-tokens", gin.WrapF(tokenH.List))
+	api.POST("/plugins/:vendor/:name/integration-tokens", gin.WrapF(tokenH.Create))
+	api.PATCH("/plugins/:vendor/:name/integration-tokens/:tokenId", gin.WrapF(tokenH.Patch))
+	api.DELETE("/plugins/:vendor/:name/integration-tokens/:tokenId", gin.WrapF(tokenH.Delete))
 }
 
 func registerObservabilityRoutes(api *gin.RouterGroup, h *handler.ObservabilityHandler) {
@@ -379,6 +405,11 @@ func registerObservabilityRoutes(api *gin.RouterGroup, h *handler.ObservabilityH
 	api.GET("/metrics/traffic/top-sites", gin.WrapF(h.TrafficTopSites))
 	api.GET("/metrics/traffic/status-codes", gin.WrapF(h.TrafficStatusCodes))
 	api.GET("/metrics/traffic/summary", gin.WrapF(h.TrafficSummary))
+	api.GET("/metrics/nginx/current", gin.WrapF(h.NginxCurrent))
+	api.GET("/metrics/nginx/series", gin.WrapF(h.NginxSeries))
+	api.GET("/metrics/nginx/vts/status", gin.WrapF(h.NginxVTSStatus))
+	api.GET("/metrics/nginx/vts/servers", gin.WrapF(h.NginxVTSServers))
+	api.GET("/metrics/nginx/vts/upstreams", gin.WrapF(h.NginxVTSUpstreams))
 }
 
 func registerTerminalRoutes(api *gin.RouterGroup, h *handler.TerminalHandler) {

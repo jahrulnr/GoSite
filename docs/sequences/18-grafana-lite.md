@@ -4,6 +4,8 @@ Pre-aggregated nginx traffic metrics for dashboard charts — replaces legacy fu
 
 **Status:** ✅ Implemented — `internal/observability/grafanalite`
 
+For real-time connection metrics (stub_status) and per-vhost VTS, see [22-nginx-metrics.md](./22-nginx-metrics.md).
+
 ## Collector (background)
 
 ```mermaid

@@ -202,12 +202,30 @@ Flag install remote plugin: `GET /plugins/install/settings`.
 
 ## Grafana Lite (seq 18)
 
+Agregasi traffic dari access log. Melengkapi metrik nginx real-time di [seq 22](../sequences/22-nginx-metrics_id.md).
+
 | Method | Path | Query |
 |--------|------|-------|
 | GET | `/api/v1/metrics/traffic/series` | `range=24h&step=5m&site=` |
 | GET | `/api/v1/metrics/traffic/top-sites` | `range=1h&limit=10` |
 | GET | `/api/v1/metrics/traffic/status-codes` | `range=24h&site=` |
 | GET | `/api/v1/metrics/traffic/summary` | `range=1h` |
+
+---
+
+## Metrik nginx (seq 22 — stub_status + VTS)
+
+Collector co-located; tanpa Prometheus. Wajib session; scope plugin `metrics:read`.
+
+| Method | Path | Query | Catatan |
+|--------|------|-------|---------|
+| GET | `/api/v1/metrics/nginx/current` | — | stub_status terbaru + request rate |
+| GET | `/api/v1/metrics/nginx/series` | `range=1h` | Seri koneksi + rate |
+| GET | `/api/v1/metrics/nginx/vts/status` | — | Probe VTS enabled |
+| GET | `/api/v1/metrics/nginx/vts/servers` | `limit=10` | Per `server_name` (snapshot terbaru) |
+| GET | `/api/v1/metrics/nginx/vts/upstreams` | `limit=10` | Per upstream peer |
+
+Env: `GOSITE_NGINX_STUB_STATUS_URL`, `GOSITE_NGINX_VTS_URL`. OpenAPI: `api/openapi.yaml`. Lihat [22-nginx-metrics_id.md](../sequences/22-nginx-metrics_id.md).
 
 ---
 

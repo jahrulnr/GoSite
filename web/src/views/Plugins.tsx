@@ -10,6 +10,7 @@ import { useAction, useAsync } from '../lib/hooks';
 import { navigate } from '../lib/router';
 import { useStore } from '../lib/store';
 import { PluginsKeyringPanel } from './PluginsKeyring';
+import { PluginMCPIntegrationView } from './PluginMCPIntegration';
 
 type InstallMode = 'artifact' | 'url' | 'github' | 'gitlab' | 'catalog' | 'manifest';
 
@@ -846,6 +847,9 @@ export function PluginContributionView({ path }: Readonly<{ path: string }>) {
             );
           }
           const schema = enabled.ui.configSchema ?? enabled.manifest.ui?.configSchema;
+          if (parsed.route.endsWith('/integration')) {
+            return <PluginMCPIntegrationView plugin={enabled} />;
+          }
           return (
             <div class="plugin-contribution">
               <section class="card">

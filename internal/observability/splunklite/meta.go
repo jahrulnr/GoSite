@@ -167,6 +167,8 @@ func systemSources() []QuerySourceMeta {
 			QuickFilters: []QueryOption{
 				{Value: "action:login", Label: "Sign-ins"},
 				{Value: "action:logout", Label: "Sign-outs"},
+				{Value: "action:integration_token.created", Label: "Integration tokens"},
+				{Value: "action:integration_token.used", Label: "Token API use"},
 				{Value: "status:failed", Label: "Failed"},
 			},
 			Examples: []string{"action:login", "user:admin@demo.com", "domain:example.com"},

@@ -1,6 +1,6 @@
 # Permission & scope plugin
 
-**Status:** Registry kanonik (target v1.4). **Enforcement** token integrasi (`gs_pat_*`) direncanakan di [sequence 21](../sequences/21-plugin-mcp.md) (P6-host-auth). Saat ini `permissions` manifest hanya **dideklarasikan dan di-ack** saat install.
+**Status:** Registry kanonik (target v1.4). **Enforcement** token integrasi (`gs_pat_*`) direncanakan di [sequence 21](../sequences/21-plugin-mcp.md) (P6-host-auth) — detail [integration-tokens.md](./integration-tokens.md). Saat ini `permissions` manifest hanya **dideklarasikan dan di-ack** saat install.
 
 **Sumber route:** `internal/delivery/http/router.go` · EN lengkap: [plugin-permissions.md](./plugin-permissions.md)
 

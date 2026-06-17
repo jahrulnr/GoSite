@@ -21,7 +21,10 @@ var allowedTables = map[string]struct{}{
 	"audit_logs":      {},
 	"job_runs":        {},
 	"log_events":      {},
-	"traffic_metrics": {},
+	"traffic_metrics":          {},
+	"nginx_status_samples":     {},
+	"nginx_vts_server_samples": {},
+	"nginx_vts_upstream_samples": {},
 	"saved_queries":   {},
 }
 

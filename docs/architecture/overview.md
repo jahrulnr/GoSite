@@ -89,7 +89,8 @@ Before irreversible side effects (nginx reload, SSL issue, job run, Docker actio
 | `mount` | `internal/service/mount` | fstab |
 | `logs` | `internal/service/logs` | Log viewer |
 | `splunklite` | `internal/observability/splunklite` | Audit + log query |
-| `grafanalite` | `internal/observability/grafanalite` | Traffic metrics |
+| `grafanalite` | `internal/observability/grafanalite` | Traffic metrics (log buckets) |
+| `nginxlite` | `internal/observability/nginxlite` | stub_status + VTS (localhost poll) |
 | `database` | `internal/service/database` | SQLite viewer |
 | `system` | `internal/service/system` | CPU, RAM, disk, network |
 | `settings` | `internal/service/settings` | User profile |
@@ -121,6 +122,17 @@ Production `nginx -t` loads **all** active vhosts + `http.d/default.conf`.
 
 Website validate uses isolated `config/webconfig/nginx.conf` (single vhost file, no side effects on `site.d`).
 
+## Nginx observability (no Prometheus)
+
+Production image rebuilds nginx with **nginx-module-vts** (`docker/nginx-vts/build.sh`). Internal-only status endpoints:
+
+| Endpoint | Module | Polled by |
+|----------|--------|-----------|
+| `127.0.0.1:18081/nginx_status` | stub_status | `nginxlite.Collector` (30s) |
+| `127.0.0.1:18082/status/format/json` | VTS | `nginxlite.VTSCollector` (30s) |
+
+Access-log traffic buckets remain in Grafana Lite (5m). Details: [sequences/22-nginx-metrics.md](../sequences/22-nginx-metrics.md).
+
 ## SSL & Let's Encrypt
 
 | Symlink | Target |
@@ -150,7 +162,8 @@ Certbot and website placeholder SSL share the `live/{domain}/` namespace. See [s
 | Plugin ADR | [plugin-platform.md](./plugin-platform.md) |
 | Installer + lifecycle | [sequences/19-plugin-installer.md](../sequences/19-plugin-installer.md) |
 | Remote distribution | [sequences/20-plugin-remote-distribution.md](../sequences/20-plugin-remote-distribution.md) |
-| MCP integration (design) | [sequences/21-plugin-mcp.md](../sequences/21-plugin-mcp.md) |
+| MCP integration (design) | [sequences/21-plugin-mcp.md](../sequences/21-plugin-mcp.md) · [plugin-integration-auth.md](./plugin-integration-auth.md) · [integration-tokens.md](../reference/integration-tokens.md) · [mcp-tools.md](../reference/mcp-tools.md) · [guides/mcp-operator.md](../guides/mcp-operator.md) |
+| Nginx metrics (stub_status + VTS) | [sequences/22-nginx-metrics.md](../sequences/22-nginx-metrics.md) |
 | API surface | [api-inventory.md](../reference/api-inventory.md), [plugin-permissions.md](../reference/plugin-permissions.md), `api/openapi.yaml` |
 | Doc maintenance | [DOCS-MAINTENANCE.md](../DOCS-MAINTENANCE.md) |
 

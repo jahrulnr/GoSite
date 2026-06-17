@@ -1,6 +1,6 @@
 # Plugin permissions & integration scopes
 
-**Status:** Canonical registry (v1.4 target). **Runtime enforcement** for integration tokens (`gs_pat_*`) is planned in [sequence 21](../sequences/21-plugin-mcp.md) (P6-host-auth). Today manifest `permissions` are **declared and acked** at install; the host does not yet reject API calls by scope string.
+**Status:** Canonical registry (v1.4). **Runtime enforcement** for integration tokens (`gs_pat_*`) is implemented in P6-host-auth — see [integration-tokens.md](./integration-tokens.md).
 
 **Source of truth for routes:** `internal/delivery/http/router.go` · **Contract:** [`api/openapi.yaml`](../../api/openapi.yaml)
 
@@ -132,13 +132,13 @@ Job worker events are also visible in Splunk-lite query UI; scope `query:read` c
 |-------|--------|-------|
 | `logs:read` | `GET /logs/sites`, `GET /logs?domain=&type=` | Per-site access/error logs |
 
-### Observability (Splunk-lite & Grafana-lite)
+### Observability (Splunk-lite, Grafana-lite, nginx metrics)
 
 | Scope | Routes |
 |-------|--------|
 | `query:read` | `GET /query/meta`, `GET/POST /query`, `GET /query/tail`, `GET /query/saved` |
 | `query:write` | `POST /query/saved`, `PATCH /query/saved/{id}`, `DELETE /query/saved/{id}` |
-| `metrics:read` | `GET /metrics/traffic/series`, `top-sites`, `status-codes`, `summary` |
+| `metrics:read` | `GET /metrics/traffic/*`, `GET /metrics/nginx/current`, `GET /metrics/nginx/series`, `GET /metrics/nginx/vts/*` |
 
 ### Database viewer
 
@@ -222,18 +222,21 @@ Split `nginx:read` vs `nginx:manage` so operators can issue test-only tokens wit
 
 ## Implementation checklist (P6-host-auth)
 
-- [ ] `pkg/pluginperm` — registry constant + `Valid(scope string) bool`
+- [x] `pkg/pluginperm` — registry constant + `Valid(scope string) bool`
 - [ ] Install/resolve — warn on unknown `permissions[]`
-- [ ] Middleware — `RequireScope("websites:read")` per route group
-- [ ] `GET /api/v1/plugins/permissions/registry` — machine-readable list for UI picker
-- [ ] OpenAPI — integration token paths + scope enum
-- [ ] Tests — token without scope gets 403 on protected route
+- [x] Middleware — `RequireScope("websites:read")` per route group
+- [x] `GET /api/v1/plugins/permissions/registry` — machine-readable list for UI picker
+- [x] OpenAPI — integration token paths + scope enum
+- [x] Tests — token without scope gets 403 on protected route
 
 ## Related docs
 
 | Topic | Document |
 |-------|----------|
-| MCP operator flow | [21-plugin-mcp.md](../sequences/21-plugin-mcp.md) |
+| MCP operator flow | [mcp-operator.md](../guides/mcp-operator.md) |
+| MCP sequence index | [21-plugin-mcp.md](../sequences/21-plugin-mcp.md) |
+| Integration tokens API | [integration-tokens.md](./integration-tokens.md) |
+| MCP tools & manifest | [mcp-tools.md](./mcp-tools.md) |
 | Plugin platform | [plugin-platform.md](../architecture/plugin-platform.md) |
 | Installer & ack | [19-plugin-installer.md](../sequences/19-plugin-installer.md) |
 | API routes | [api-inventory.md](./api-inventory.md) |

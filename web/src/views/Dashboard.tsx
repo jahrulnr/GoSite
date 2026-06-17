@@ -36,7 +36,7 @@ export function DashboardView() {
   const state = useAsync(() => dashboard.get());
   const network = useAsync(() => system.network());
   const diskIO = useAsync(() => system.diskIO());
-  useInterval(state.reload, 15000);
+  useInterval(state.reload, 5000);
 
   return (
     <Page title="Dashboard" subtitle="Fresh backend snapshot, refreshed every 15 seconds" eyebrow="mission">
@@ -62,6 +62,18 @@ export function DashboardView() {
                 <MetricTile label="Storage" value={storage ? formatKiB(storage.used) : '—'} sub={storage ? `${formatKiB(storage.available)} available` : 'No disk sample'} percent={storagePercent} tone={diskTone} />
                 <MetricTile label="Requests · 1h" value={formatNumber(traffic.total?.requests ?? traffic.requests)} sub={formatBytes(traffic.total?.bytes ?? traffic.bytes)} />
               </div>
+
+              {data.nginx_status?.available && (
+                <div class="grid cols-4">
+                  <MetricTile label="Nginx active" value={formatNumber(data.nginx_status.active)} sub={`${data.nginx_status.request_rate_per_sec != null ? data.nginx_status.request_rate_per_sec.toFixed(2) : '—'} req/s`} tone="info" />
+                  <MetricTile label="Reading" value={formatNumber(data.nginx_status.reading)} sub="stub_status" />
+                  <MetricTile label="Writing" value={formatNumber(data.nginx_status.writing)} sub="stub_status" />
+                  <MetricTile label="Waiting" value={formatNumber(data.nginx_status.waiting)} sub="keep-alive idle" />
+                  {data.nginx_status.dropped_connections > 0 && (
+                    <MetricTile label="Dropped" value={formatNumber(data.nginx_status.dropped_connections)} sub="accepts − handled" tone="danger" />
+                  )}
+                </div>
+              )}
 
               <div class="grid cols-3">
                 <Card title="Network I/O">

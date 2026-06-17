@@ -24,7 +24,7 @@ const META: UiMetaResponse = {
   navigation: [],
   files: { roots: [], actions: [] },
   logs: { tail_kinds: [] },
-  nginx: { test: { enabled: true }, reload: { enabled: true } },
+  nginx: { test: { enabled: true }, reload: { enabled: true }, stub_status: { enabled: false }, vts: { enabled: false } },
   cron: { run_every_options: [], manual_run: { enabled: true } },
   mounts: { default_options: '', dump_default: '', fsck_default: '', fs_types: [], example: '' },
   traffic: { ranges: [] },
