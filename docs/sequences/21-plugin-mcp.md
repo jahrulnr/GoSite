@@ -59,7 +59,8 @@ Hosting panels in the wild ship **external MCP servers** that wrap REST (Portain
 Summary — full guide: [mcp-operator.md](../guides/mcp-operator.md).
 
 ```text
-1. Install plugin gosite/mcp       → permissions_ack (manifest ceiling)
+0. (bundled, seq 23) gosite/mcp seeded on init — installed, disabled by default
+1. Install plugin gosite/mcp       → only if not bundled; permissions_ack (manifest ceiling)
 2. Enable plugin                   → Integration / MCP tab visible
 3. Generate access token           → label, optional expiry
 4. Select scope whitelist          → subset of manifest permissions
@@ -132,8 +133,13 @@ P6c           →  Streamable HTTP MCP (TLS, Origin, PLUGIN_MCP_ALLOWED_HOSTS) �
 | Audit `used` volume | Per-call with 60s dedup per `token_id+route` |
 | Label uniqueness | Optional per `plugin_id`; audit always uses token UUID |
 
+## Built-in install (seq 23)
+
+When [23-builtin-plugins.md](./23-builtin-plugins.md) ships, step 1 (manual install) is skipped for `gosite/mcp` on default images — operators **enable** only. Remote/catalog install remains an upgrade path.
+
 ## References
 
+- [23-builtin-plugins.md](./23-builtin-plugins.md)
 - [plugin-integration-auth.md](../architecture/plugin-integration-auth.md)
 - [integration-tokens.md](../reference/integration-tokens.md)
 - [mcp-tools.md](../reference/mcp-tools.md)

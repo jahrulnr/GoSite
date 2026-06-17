@@ -57,6 +57,9 @@ type Config struct {
 	PluginBuildCPU           float64
 	PluginBuildImage         string
 	PluginCatalogPath        string
+	PluginBundledEnabled     bool
+	PluginBundledPath        string
+	PluginBundledAutoEnable  bool
 
 	ListenAddr string
 	TLSCert    string
@@ -162,6 +165,9 @@ func Load() Config {
 		PluginBuildCPU:            envFloat("PLUGIN_BUILD_CPU_LIMIT", 2.0),
 		PluginBuildImage:          envOr("PLUGIN_BUILD_IMAGE", "golang:1.22-bookworm"),
 		PluginCatalogPath:         envOr("PLUGIN_CATALOG_PATH", ""),
+		PluginBundledEnabled:      envBool("PLUGIN_BUNDLED_ENABLED", true),
+		PluginBundledPath:         envOr("PLUGIN_BUNDLED_PATH", ""),
+		PluginBundledAutoEnable:   envBool("PLUGIN_BUNDLED_AUTO_ENABLE", false),
 
 		ListenAddr: envOr("LISTEN_ADDR", ":8080"),
 		TLSCert:    envOr("TLS_CERT", filepath.Join(storage, "webconfig/ssl/live/default/cert.pem")),

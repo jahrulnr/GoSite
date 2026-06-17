@@ -26,6 +26,7 @@ import (
 
 	"github.com/jahrulnr/gosite/internal/buildinfo"
 	"github.com/jahrulnr/gosite/internal/repository/sqlite"
+	"github.com/jahrulnr/gosite/internal/service/plugin/bundled"
 	"github.com/jahrulnr/gosite/pkg/apperror"
 )
 
@@ -328,6 +329,10 @@ type Service struct {
 	keyringPath       string
 	hostVersion       string
 	opLock            *OpLock
+	bundled           *bundled.Service
+	bundledEnabled    bool
+	bundledAutoEnable bool
+	appEnv            string
 }
 
 // Option configures plugin service behavior.
@@ -376,6 +381,18 @@ func WithConfigMigrator(migrator ConfigMigrator) Option {
 	return func(s *Service) {
 		if migrator != nil {
 			s.migrator = migrator
+		}
+	}
+}
+
+// WithBundled configures official plugins shipped with the GoSite release.
+func WithBundled(path string, enabled, autoEnable bool, appEnv string) Option {
+	return func(s *Service) {
+		s.bundledEnabled = enabled
+		s.bundledAutoEnable = autoEnable
+		s.appEnv = strings.TrimSpace(appEnv)
+		if enabled {
+			s.bundled = bundled.NewService(path)
 		}
 	}
 }
@@ -440,11 +457,11 @@ func (s *Service) Install(ctx context.Context, in InstallInput) (sqlite.PluginVe
 		return sqlite.PluginVersion{}, err
 	}
 	ilog.ok("compatibility")
-	if err := s.verifyArtifact(ctx, manifest, digest); err != nil {
+	if err := s.verifyArtifact(ctx, manifest, digest, isBundledInstall(in)); err != nil {
 		return sqlite.PluginVersion{}, err
 	}
 	ilog.ok("verify_signature")
-	if in.Provenance != nil && needsPermissionAck(manifest) && !in.PermissionsAck {
+	if in.Provenance != nil && in.Provenance.SourceType != bundledSourceType && needsPermissionAck(manifest) && !in.PermissionsAck {
 		return sqlite.PluginVersion{}, apperror.New(apperror.CodeInvalidInput, "permissions_ack required for remote install")
 	}
 
@@ -459,10 +476,17 @@ func (s *Service) Install(ctx context.Context, in InstallInput) (sqlite.PluginVe
 	}
 	existing, existingErr := s.repo.Find(ctx, manifest.ID, manifest.Version)
 	if existingErr == nil {
-		if existing.State != sqlite.PluginStateInstallFailed {
+		switch existing.State {
+		case sqlite.PluginStateInstallFailed:
+			_ = os.RemoveAll(artifactDir)
+		case sqlite.PluginStateUninstalled:
+			if !isBundledInstall(in) {
+				return sqlite.PluginVersion{}, apperror.New(apperror.CodeConflict, "plugin version already exists")
+			}
+			_ = os.RemoveAll(artifactDir)
+		default:
 			return sqlite.PluginVersion{}, apperror.New(apperror.CodeConflict, "plugin version already exists")
 		}
-		_ = os.RemoveAll(artifactDir)
 	} else if !errors.Is(existingErr, sql.ErrNoRows) {
 		return sqlite.PluginVersion{}, apperror.Wrap(apperror.CodeDatabase, "find existing plugin failed", existingErr)
 	}
@@ -543,7 +567,7 @@ func (s *Service) Install(ctx context.Context, in InstallInput) (sqlite.PluginVe
 	}
 	ilog.ok("registry")
 
-	if err := s.runValidate(ctx, manifest, artifactDir); err != nil {
+	if err := s.runValidate(ctx, manifest, artifactDir, isBundledInstall(in)); err != nil {
 		ilog.fail("validate", classifyValidationError(err), err.Error())
 		record, _ = s.repo.SetFailure(ctx, manifest.ID, manifest.Version, sqlite.PluginStateInstallFailed, classifyValidationError(err), err.Error())
 		record, _ = s.repo.SetInstallLog(ctx, manifest.ID, manifest.Version, ilog.JSON())
@@ -786,6 +810,9 @@ func (s *Service) Uninstall(ctx context.Context, pluginID, version string) (sqli
 
 // Reconcile enforces registry truth on startup.
 func (s *Service) Reconcile(ctx context.Context) error {
+	if err := s.SeedBundled(ctx); err != nil {
+		return err
+	}
 	records, err := s.repo.List(ctx)
 	if err != nil {
 		return apperror.Wrap(apperror.CodeDatabase, "list plugins failed", err)
@@ -844,13 +871,16 @@ func (s *Service) refreshEnabled(ctx context.Context) error {
 	return s.dispatcher.Refresh(ctx, enabled)
 }
 
-func (s *Service) runValidate(ctx context.Context, manifest Manifest, artifactDir string) error {
+func (s *Service) runValidate(ctx context.Context, manifest Manifest, artifactDir string, skip bool) error {
 	validateCtx, cancel := context.WithTimeout(ctx, s.validateTO)
 	defer cancel()
 	select {
 	case <-validateCtx.Done():
 		return validateCtx.Err()
 	default:
+	}
+	if skip {
+		return nil
 	}
 	if manifest.Tier == 1 {
 		validate := manifest.Entrypoints["validate"]
@@ -878,9 +908,12 @@ func (s *Service) runValidate(ctx context.Context, manifest Manifest, artifactDi
 	return nil
 }
 
-func (s *Service) verifyArtifact(ctx context.Context, manifest Manifest, digest string) error {
+func (s *Service) verifyArtifact(ctx context.Context, manifest Manifest, digest string, bundledTrust bool) error {
 	if expected := strings.TrimSpace(manifest.Artifact.SHA256); expected != "" && !strings.EqualFold(expected, digest) {
 		return apperror.New(apperror.CodePluginInvalid, "manifest artifact sha256 mismatch")
+	}
+	if bundledTrust {
+		return nil
 	}
 	if len(manifest.Signatures) == 0 {
 		if s.allowUnsigned {

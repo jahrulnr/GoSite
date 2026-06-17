@@ -10,11 +10,15 @@ FROM golang:1.26.4-bookworm AS gobuilder
 ARG VERSION=dev
 
 WORKDIR /src
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends zip \
+    && rm -rf /var/lib/apt/lists/*
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
 COPY --from=webbuilder /src/internal/delivery/http/frontend/dist ./internal/delivery/http/frontend/dist
+RUN make bundled-plugins
 RUN CGO_ENABLED=0 go build -ldflags "-X github.com/jahrulnr/gosite/internal/buildinfo.Version=${VERSION}" -o /out/gosite ./cmd/gosite
 
 FROM nginx:1.30.2-trixie
@@ -28,6 +32,8 @@ ENV WEB_PATH="/www"
 ENV TEMPLATES_DIR="/var/setup"
 ENV MIGRATIONS_DIR="/app/migrations"
 ENV LISTEN_ADDR=":8080"
+ENV PLUGIN_BUNDLED_PATH="/app/bundled-plugins"
+ENV PLUGIN_BUNDLED_ENABLED="true"
 ENV FE_EMBED="true"
 ENV TLS_ENABLE="true"
 
@@ -56,6 +62,7 @@ RUN mkdir -p /storage /var/setup \
     && rm -f /etc/fstab
 
 COPY --from=gobuilder /out/gosite /usr/local/bin/gosite
+COPY --from=gobuilder /src/dist/bundled-plugins /app/bundled-plugins
 COPY ./migrations /app/migrations
 COPY ./config/nginx /var/setup/nginx
 COPY ./config/webconfig /var/setup/webconfig

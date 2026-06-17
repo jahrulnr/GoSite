@@ -58,7 +58,8 @@ Rollback on failed nginx reload (existing pattern in `website.Toggle`) applies t
 4. **P3 — Tier 0 + config** — Implemented: HTTP webhooks (`Tier0Caller`), encrypted plugin config (`plugin_configs`), host-rendered sidebar/config forms.
 5. **P4 — Remote distribution** — Implemented (wave G, v1.3.1): URL/GitHub/GitLab/git-ref/catalog install, provenance, install log, keyring UI, optional Docker build — [sequence 20](../sequences/20-plugin-remote-distribution.md).
 6. **P6 — MCP integration** — Design ([sequence 21](../sequences/21-plugin-mcp.md)): plugin access tokens (`gs_pat_*`), scoped dynamic MCP tools, official `gosite/mcp` Tier 1 plugin. Layer docs: [plugin-integration-auth.md](./plugin-integration-auth.md), [integration-tokens.md](../reference/integration-tokens.md), [mcp-tools.md](../reference/mcp-tools.md), [mcp-operator.md](../guides/mcp-operator.md); scope registry [plugin-permissions.md](../reference/plugin-permissions.md).
-7. **P5+ — Deferred** — WASM sandbox (tier 2), tier-0 webhook token generalization, egress policies, marketplace publishing, tier 3 `.so` community support, Streamable HTTP MCP (P6c).
+7. **P7 — Built-in plugins** — Design ([sequence 23](../sequences/23-builtin-plugins.md)): official plugins ship in the GoSite image, seeded as `installed` / disabled by default; first target `gosite/mcp`. Tracker: [WAVE-PLUGIN-B.md](../implementation/WAVE-PLUGIN-B.md).
+8. **P5+ — Deferred** — WASM sandbox (tier 2), tier-0 webhook token generalization, egress policies, marketplace publishing, tier 3 `.so` community support, Streamable HTTP MCP (P6c).
 
 ## Alternatives considered
 

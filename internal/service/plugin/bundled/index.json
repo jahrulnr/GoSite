@@ -1,0 +1,11 @@
+{
+  "apiVersion": "gosite-plugin-bundled/1",
+  "plugins": [
+    {
+      "plugin_id": "gosite/mcp",
+      "artifact": "gosite-mcp.zip",
+      "permissions_pre_ack": true,
+      "restorable": true
+    }
+  ]
+}

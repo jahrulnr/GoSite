@@ -4,19 +4,21 @@ How operators connect AI clients (Cursor, Claude Desktop, OpenClaw) to GoSite vi
 
 **Status:** Design — wave P6
 
-**Prerequisites:** Install and enable `gosite/mcp`; generate a scoped `gs_pat_*` token in the Integration tab.
+**Prerequisites:** On default GoSite images, `gosite/mcp` is **pre-installed** (built-in, disabled). **Enable** the plugin, then generate a scoped `gs_pat_*` token in the Integration tab.
 
 ## Operator flow
 
 ```text
-1. Install plugin gosite/mcp       → permissions_ack (manifest ceiling)
-2. Enable plugin                   → Integration / MCP tab visible
-3. Generate access token           → label, optional expiry
-4. Select scope whitelist          → subset of manifest permissions
-5. (Later) Edit scope whitelist    → PATCH scopes on existing token
-6. Copy gs_pat_* once              → mcp.json / Cursor MCP settings
-7. AI client spawns MCP stdio      → tools/list = scoped subset only
+0. (automatic) gosite/mcp seeded on init — installed, disabled by default
+1. Enable plugin                   → Integration / MCP tab visible
+2. Generate access token           → label, optional expiry
+3. Select scope whitelist          → subset of manifest permissions
+4. (Later) Edit scope whitelist    → PATCH scopes on existing token
+5. Copy gs_pat_* once              → mcp.json / Cursor MCP settings
+6. AI client spawns MCP stdio      → tools/list = scoped subset only
 ```
+
+Manual install (upload / GitHub / catalog) is only needed on air-gapped hosts with `PLUGIN_BUNDLED_ENABLED=false` or when upgrading outside the bundled version.
 
 ```mermaid
 flowchart TD

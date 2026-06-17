@@ -156,6 +156,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 		pluginsvc.WithHostVersion(cfg.AppVersion),
 		pluginsvc.WithConfigRepo(pluginConfigRepo),
 		pluginsvc.WithIntegrationTokens(integrationTokenSvc),
+		pluginsvc.WithBundled(cfg.PluginBundledPath, cfg.PluginBundledEnabled, cfg.PluginBundledAutoEnable, cfg.AppEnv),
 	)
 	if err := pluginSvc.Reconcile(context.Background()); err != nil {
 		slog.Warn("plugin reconcile failed", "err", err)
@@ -376,6 +377,7 @@ func registerPluginRoutes(api *gin.RouterGroup, h *handler.PluginHandler, config
 	api.POST("/plugins/:vendor/:name/enable", gin.WrapF(h.Enable))
 	api.POST("/plugins/:vendor/:name/disable", gin.WrapF(h.Disable))
 	api.POST("/plugins/:vendor/:name/switch", gin.WrapF(h.Switch))
+	api.POST("/plugins/:vendor/:name/restore-bundled", gin.WrapF(h.RestoreBundled))
 	api.DELETE("/plugins/:vendor/:name/versions/:version", gin.WrapF(h.Uninstall))
 
 	api.GET("/plugins/:vendor/:name/versions/:version/config", gin.WrapF(configH.Get))

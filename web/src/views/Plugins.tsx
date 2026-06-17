@@ -94,9 +94,14 @@ function permissions(plugin: PluginVersion) {
 
 function sourceDisplayLabel(sourceType?: string) {
   if (!sourceType || sourceType === 'upload') return 'upload';
+  if (sourceType === 'bundled') return 'built-in';
   if (sourceType === 'github-release') return 'github';
   if (sourceType === 'url') return 'url';
   return sourceType;
+}
+
+function isBundledPlugin(plugin: PluginVersion) {
+  return plugin.source_type === 'bundled';
 }
 
 function truncateText(value: string, max = 40) {
@@ -542,7 +547,12 @@ function PluginActions({ plugin, group, reload }: Readonly<{ plugin: PluginVersi
 function PluginRegistry({ rows, reload }: Readonly<{ rows: PluginVersion[]; reload: () => void }>) {
   const groups = useMemo(() => groupPlugins(rows), [rows]);
   if (!groups.length) {
-    return <EmptyState title="No plugins installed" hint="Install an artifact or manifest to create the first registry record." />;
+    return (
+      <EmptyState
+        title="No plugins installed"
+        hint="Official built-in plugins ship with GoSite — run init or enable GoSite MCP from the registry after seeding."
+      />
+    );
   }
   return (
     <div class="plugin-registry">
@@ -555,6 +565,7 @@ function PluginRegistry({ rows, reload }: Readonly<{ rows: PluginVersion[]; relo
             </div>
             <div class="row wrap">
               {group.enabled ? <Badge kind="ok">enabled {group.enabled.version}</Badge> : <Badge kind="off">disabled</Badge>}
+              {group.latest && isBundledPlugin(group.latest) && <Badge kind="info">built-in</Badge>}
               <Badge kind="info">tier {group.latest?.tier ?? '—'}</Badge>
             </div>
           </div>
@@ -654,9 +665,9 @@ function PluginDetailPanel({ rows }: Readonly<{ rows: PluginVersion[] }>) {
       </div>
       {hasDistribution(selected) && (
         <div class="plugin-detail-card">
-          <h3>Distribution</h3>
+          <h3>{selected.source_type === 'bundled' ? 'Built-in' : 'Distribution'}</h3>
           <dl class="plugin-facts">
-            <div><dt>Source type</dt><dd>{selected.source_type}</dd></div>
+            <div><dt>Source type</dt><dd>{sourceDisplayLabel(selected.source_type)}</dd></div>
             <div><dt>Source ref</dt><dd class="mono">{selected.source_ref || '—'}</dd></div>
             <div><dt>Install path</dt><dd>{selected.install_path || '—'}</dd></div>
             {selected.source_commit && (

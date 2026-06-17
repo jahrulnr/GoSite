@@ -44,8 +44,9 @@ GoSite feature flow diagrams. **Legacy BangunSite** sections (if any) are kept a
 | 19 | [19-plugin-installer.md](./19-plugin-installer.md) | Plugin installer + compatibility contract | ✅ |
 | 20 | [20-plugin-remote-distribution.md](./20-plugin-remote-distribution.md) | Remote install (GitHub/GitLab/URL) — wave G | ✅ |
 | 21 | [21-plugin-mcp.md](./21-plugin-mcp.md) | MCP plugin + integration access tokens — wave P6 | 🚧 P6-host-auth shipped |
+| 23 | [23-builtin-plugins.md](./23-builtin-plugins.md) | Built-in plugins (ship with GoSite, disabled by default) — wave B | 📋 design |
 
-Impl companion: [21-plugin-mcp-impl.md](./21-plugin-mcp-impl.md). Layer docs: [plugin-integration-auth.md](../architecture/plugin-integration-auth.md), [integration-tokens.md](../reference/integration-tokens.md), [mcp-tools.md](../reference/mcp-tools.md), [mcp-operator.md](../guides/mcp-operator.md).
+Impl companion: [21-plugin-mcp-impl.md](./21-plugin-mcp-impl.md), [23-builtin-plugins-impl.md](./23-builtin-plugins-impl.md). Layer docs: [plugin-integration-auth.md](../architecture/plugin-integration-auth.md), [integration-tokens.md](../reference/integration-tokens.md), [mcp-tools.md](../reference/mcp-tools.md), [mcp-operator.md](../guides/mcp-operator.md).
 
 See also [plugin-permissions.md](../reference/plugin-permissions.md) for the canonical scope registry.
 

@@ -44,8 +44,9 @@ Diagram alur fitur GoSite. Bagian **Legacy BangunSite** (jika ada) disimpan seba
 | 19 | [19-plugin-installer.md](./19-plugin-installer.md) | Plugin installer + compatibility contract | ✅ |
 | 20 | [20-plugin-remote-distribution.md](./20-plugin-remote-distribution.md) | Install remote GitHub/GitLab/URL — gelombang G | ✅ |
 | 21 | [21-plugin-mcp.md](./21-plugin-mcp.md) | Plugin MCP + token integrasi — gelombang P6 | 📋 desain |
+| 23 | [23-builtin-plugins.md](./23-builtin-plugins.md) | Plugin built-in (ikut rilis GoSite, default disabled) — gelombang B | 📋 desain |
 
-Companion impl: [21-plugin-mcp-impl.md](./21-plugin-mcp-impl.md). Dokumen layer: [plugin-integration-auth.md](../architecture/plugin-integration-auth.md), [integration-tokens.md](../reference/integration-tokens.md), [mcp-tools.md](../reference/mcp-tools.md), [mcp-operator.md](../guides/mcp-operator.md).
+Companion impl: [21-plugin-mcp-impl.md](./21-plugin-mcp-impl.md), [23-builtin-plugins-impl.md](./23-builtin-plugins-impl.md). Dokumen layer: [plugin-integration-auth.md](../architecture/plugin-integration-auth.md), [integration-tokens.md](../reference/integration-tokens.md), [mcp-tools.md](../reference/mcp-tools.md), [mcp-operator.md](../guides/mcp-operator.md).
 
 Lihat [plugin-permissions.md](../reference/plugin-permissions.md) untuk registry scope kanonik.
 

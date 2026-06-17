@@ -219,6 +219,21 @@ func (h *PluginHandler) Uninstall(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"plugin": pluginDTO(plugin)})
 }
 
+// RestoreBundled handles POST /plugins/{vendor}/{name}/restore-bundled.
+func (h *PluginHandler) RestoreBundled(w http.ResponseWriter, r *http.Request) {
+	pluginID, err := pluginIDFromPath(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	plugin, err := h.svc.RestoreBundled(r.Context(), pluginID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"plugin": pluginDTO(plugin)})
+}
+
 func (h *PluginHandler) readInstallInput(r *http.Request) (pluginsvc.InstallInput, error) {
 	contentType := r.Header.Get("Content-Type")
 	if strings.HasPrefix(contentType, "multipart/form-data") {

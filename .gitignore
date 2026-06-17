@@ -4,6 +4,9 @@
 *.out
 coverage.out
 
+# Bundled plugin release artifacts (built via make bundled-plugins)
+dist/bundled-plugins/
+
 # Local runtime data
 /data/
 /logs/

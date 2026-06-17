@@ -46,6 +46,12 @@ export WEB_PATH="${WEB_PATH:-$STORAGE/www}"
 mkdir -p "$ETC_DIR"
 
 cd "$ROOT"
+if [[ ! -f "$ROOT/dist/bundled-plugins/gosite-mcp.zip" ]]; then
+  echo "dev-api-setup: building bundled plugins"
+  make -C "$ROOT" bundled-plugins
+fi
+export PLUGIN_BUNDLED_PATH="${PLUGIN_BUNDLED_PATH:-$ROOT/dist/bundled-plugins}"
+
 go run ./cmd/gosite migrate
 go run ./cmd/gosite init || true
 
