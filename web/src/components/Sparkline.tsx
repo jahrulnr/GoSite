@@ -1,22 +1,25 @@
-import type { SeriesPoint } from '../api/types';
-
 interface SparklineProps {
-  points: SeriesPoint[];
+  points: Array<[string, number | null]>;
   label?: string;
   height?: number;
   stroke?: string;
 }
 
-function pathFromPoints(points: SeriesPoint[], width: number, height: number): string {
+function pathFromPoints(points: Array<[string, number | null]>, width: number, height: number): string {
   if (points.length === 0) return '';
-  const values = points.map(([, v]) => v);
+  const numeric: Array<[string, number]> = [];
+  for (const [ts, v] of points) {
+    if (v != null) numeric.push([ts, v]);
+  }
+  if (numeric.length === 0) return '';
+  const values = numeric.map(([, v]) => v);
   const min = Math.min(...values);
   const max = Math.max(...values);
   const span = max - min || 1;
-  const step = points.length > 1 ? width / (points.length - 1) : 0;
+  const step = numeric.length > 1 ? width / (numeric.length - 1) : 0;
 
-  return points
-    .map(([_, value], i) => {
+  return numeric
+    .map(([, value], i) => {
       const x = i * step;
       const y = height - ((value - min) / span) * (height - 4) - 2;
       return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
@@ -30,7 +33,8 @@ export function Sparkline({ points, label, height = 72, stroke = 'var(--accent)'
   }
   const width = 320;
   const d = pathFromPoints(points, width, height);
-  const last = points[points.length - 1]?.[1] ?? 0;
+  const last = points[points.length - 1]?.[1];
+  const lastLabel = last == null ? '—' : last.toLocaleString();
 
   return (
     <div class="sparkline">
@@ -39,7 +43,7 @@ export function Sparkline({ points, label, height = 72, stroke = 'var(--accent)'
         <path d={d} fill="none" stroke={stroke} stroke-width="2" stroke-linecap="round" />
         <path d={`${d} L${width},${height} L0,${height} Z`} fill={stroke} opacity="0.12" stroke="none" />
       </svg>
-      <div class="sparkline-meta mono">{last.toLocaleString()} latest</div>
+      <div class="sparkline-meta mono">{lastLabel} latest</div>
     </div>
   );
 }

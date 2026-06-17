@@ -18,7 +18,7 @@ gosite/
 │   │   ├── job/             # worker, SSE stream
 │   │   ├── commander/
 │   │   └── docker/
-│   ├── observability/       # splunklite, grafanalite
+│   ├── observability/       # splunklite, grafanalite, nginxlite
 │   ├── repository/sqlite/
 │   └── service/             # auth, website, ssl, cron, files, …
 ├── web/                     # Preact SPA
@@ -71,6 +71,7 @@ infra/       → nginx, job worker, exec, filesystem
 | Mount manager | `service/mount` |
 | Cron scheduler + worker SSE | `service/cron`, `infra/job` |
 | Splunk Lite, Grafana Lite | `observability/*` |
+| Metrik nginx (stub_status + VTS) | `observability/nginxlite` — [seq 22](../sequences/22-nginx-metrics_id.md) |
 | DB viewer | `service/database` |
 
 ### Tidak di-port / deprecated

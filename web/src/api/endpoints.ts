@@ -16,12 +16,19 @@ import type {
   LogTailResponse,
   Mount,
   NetworkTraffic,
+  NginxStatusCurrent,
+  NginxStatusSeriesResponse,
+  NginxVTSStatusResponse,
+  NginxVTSServerRow,
+  NginxVTSUpstreamRow,
   PluginInstallSettings,
   PluginInstallSource,
   PluginCatalogEntry,
   PluginKeyringEntry,
   PluginResolvePreview,
   PluginVersion,
+  IntegrationToken,
+  IntegrationTokenCreateResponse,
   QueryEvent,
   QueryMetaResponse,
   QueryResponse,
@@ -234,6 +241,16 @@ export const plugins = {
     if (!vendor || !name) throw new Error('Plugin id must be vendor/name');
     return http.get<{ entry: PluginCatalogEntry }>(`/plugins/catalog/${encodeURIComponent(vendor)}/${encodeURIComponent(name)}`).then((r) => r.entry);
   },
+  listIntegrationTokens: (pluginID: string) =>
+    http.get<{ tokens: IntegrationToken[] }>(`${pluginPath(pluginID)}/integration-tokens`).then((r) => r.tokens ?? []),
+  createIntegrationToken: (pluginID: string, body: { label: string; scopes: string[]; expires_at?: string }) =>
+    http.post<IntegrationTokenCreateResponse>(`${pluginPath(pluginID)}/integration-tokens`, body),
+  updateIntegrationToken: (pluginID: string, tokenId: string, scopes: string[]) =>
+    http.patch<{ token: IntegrationToken }>(`${pluginPath(pluginID)}/integration-tokens/${encodeURIComponent(tokenId)}`, { scopes }),
+  revokeIntegrationToken: (pluginID: string, tokenId: string) =>
+    http.del<{ token: IntegrationToken }>(`${pluginPath(pluginID)}/integration-tokens/${encodeURIComponent(tokenId)}`),
+  permissionRegistry: () =>
+    http.get<{ scopes: Array<{ scope: string }> }>('/plugins/permissions/registry').then((r) => r.scopes ?? []),
 };
 
 // ---- Logs ----
@@ -369,6 +386,14 @@ export const metrics = {
     http.get<StatusCodesResponse>('/metrics/traffic/status-codes', { range }),
   summary: (range: string) =>
     http.get<TrafficMetricsSummary>('/metrics/traffic/summary', { range }),
+  nginxCurrent: () => http.get<NginxStatusCurrent>('/metrics/nginx/current'),
+  nginxSeries: (range: string) =>
+    http.get<NginxStatusSeriesResponse>('/metrics/nginx/series', { range }),
+  nginxVTSStatus: () => http.get<NginxVTSStatusResponse>('/metrics/nginx/vts/status'),
+  nginxVTSServers: (limit = 10) =>
+    http.get<{ servers: NginxVTSServerRow[] }>('/metrics/nginx/vts/servers', { limit }),
+  nginxVTSUpstreams: (limit = 10) =>
+    http.get<{ upstreams: NginxVTSUpstreamRow[] }>('/metrics/nginx/vts/upstreams', { limit }),
 };
 
 export const rootHealth = (signal?: AbortSignal) => rootRequest<unknown>('/health', signal);

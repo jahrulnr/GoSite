@@ -54,8 +54,10 @@ type FilesMeta struct {
 }
 
 type NginxMeta struct {
-	Test   Capability `json:"test"`
-	Reload Capability `json:"reload"`
+	Test       Capability `json:"test"`
+	Reload     Capability `json:"reload"`
+	StubStatus Capability `json:"stub_status"`
+	VTS        Capability `json:"vts"`
 }
 
 type CronMeta struct {
@@ -183,6 +185,16 @@ func (s *Service) Get() Response {
 		Nginx: NginxMeta{
 			Test:   Capability{Enabled: true, Mode: nginxMode, Label: "Test config", Hint: nginxHint},
 			Reload: Capability{Enabled: true, Mode: nginxMode, Label: "Reload nginx", Hint: nginxHint},
+			StubStatus: Capability{
+				Enabled: s.cfg.AppEnv != "local" && s.cfg.NginxStubStatusURL != "",
+				Label:   "stub_status",
+				Hint:    "Real-time nginx connection metrics from the built-in stub_status module.",
+			},
+			VTS: Capability{
+				Enabled: s.cfg.NginxVTSStatusURL != "",
+				Label:   "VTS",
+				Hint:    "Per-upstream metrics require nginx-module-vts (Wave 2).",
+			},
 		},
 		Cron: CronMeta{
 			RunEveryOptions: []Option{

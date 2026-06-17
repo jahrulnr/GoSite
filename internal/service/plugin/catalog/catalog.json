@@ -1,3 +1,16 @@
 {
-  "entries": []
+  "entries": [
+    {
+      "plugin_id": "gosite/mcp",
+      "name": "GoSite MCP",
+      "description": "Official stdio MCP bridge — dynamic tools from integration token scopes",
+      "vendor": "gosite",
+      "source": {
+        "type": "github-release",
+        "repo": "jahrulnr/gosite",
+        "tag": "main",
+        "installPath": "build"
+      }
+    }
+  ]
 }

@@ -16,13 +16,15 @@ sequenceDiagram
     participant SSL as ssl.Service
     participant Splunk as splunklite.Service
     participant Graf as grafanalite.Service
+    participant NGX as nginxlite.Service
 
     UI->>H: GET /dashboard
     H->>Sys: Info()
     H->>Graf: Summary(1h) — fallback nginx traffic
+    H->>NGX: Current() — optional stub_status
     H->>SSL: ListExpiring(30)
     H->>Splunk: RecentAudit(10)
-    H-->>UI: { system, traffic_summary, ssl_expiring, recent_audit }
+    H-->>UI: { system, traffic_summary, nginx_status?, ssl_expiring, recent_audit }
 ```
 
 Response sections:
@@ -31,6 +33,7 @@ Response sections:
 |-----|--------|
 | `system` | CPU, memory, storage (`/proc`, `df`) |
 | `traffic_summary` | Grafana Lite `Summary(1h)` atau fallback `system.NginxTraffic` |
+| `nginx_status` | (opsional) stub_status terbaru + `request_rate_per_sec` — lihat [22-nginx-metrics.md](./22-nginx-metrics.md) |
 | `ssl_expiring` | Cert expiry ≤ 30 hari |
 | `recent_audit` | 10 audit log terakhir |
 
@@ -53,6 +56,10 @@ Chart traffic memakai pre-aggregated buckets — see [18-grafana-lite.md](./18-g
 
 Collector runs every 5 minutes in the background (`internal/app/app.go`).
 
+### Nginx metrics (stub_status + VTS)
+
+Real-time connection and per-vhost metrics — see [22-nginx-metrics.md](./22-nginx-metrics.md). Collectors poll localhost every 30 seconds; UI on `/metrics` tab **Nginx** and optional Dashboard cards.
+
 ---
 
 ## Legacy BangunSite
@@ -72,3 +79,4 @@ Collector runs every 5 minutes in the background (`internal/app/app.go`).
 | `internal/delivery/http/handler/dashboard.go` | Aggregator |
 | `internal/service/system` | Host metrics |
 | `internal/observability/grafanalite` | Traffic buckets |
+| `internal/observability/nginxlite` | stub_status + VTS samples |

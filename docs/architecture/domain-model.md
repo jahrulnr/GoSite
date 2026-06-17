@@ -75,6 +75,18 @@ Certbot and manual cron runs share the same worker (`internal/infra/job/worker.g
 
 Observability tables from migration `002_gosite_extensions.sql`. Splunk Lite queries audit + log tail; Grafana Lite aggregates `traffic_metrics`.
 
+### `nginx_status_samples`, `nginx_vts_*_samples` (GoSite)
+
+Real-time nginx metrics from [seq 22](../sequences/22-nginx-metrics.md):
+
+| Table | Source | Retention |
+|-------|--------|-----------|
+| `nginx_status_samples` | stub_status poll (30s) | `LOG_EVENTS_RETENTION_DAYS` |
+| `nginx_vts_server_samples` | VTS `serverZones` | same |
+| `nginx_vts_upstream_samples` | VTS `upstreamZones` peers | same |
+
+Migrations: `009_nginx_status_samples.sql`, `010_nginx_vts_samples.sql`.
+
 ### `plugin_versions` (GoSite)
 
 Registry row per `(plugin_id, version)`. State machine: `installing` → `installed` → `enabling` → `enabled` → … (see [sequences/19-plugin-installer.md](./sequences/19-plugin-installer.md)).
@@ -86,6 +98,19 @@ Key columns: `tier`, `manifest_json`, `capabilities_json`, `ui_json`, `artifact_
 ### `plugin_configs` (GoSite)
 
 Per-version config: `config_json` (plaintext fields), `secrets_encrypted` (AES-256-GCM blob), `config_version`.
+
+### `plugin_access_tokens` (GoSite — planned P6-host-auth)
+
+Integration tokens for MCP and future tier-0 webhooks. See [integration-tokens.md](../reference/integration-tokens.md).
+
+| Column | Notes |
+|--------|-------|
+| `id` | UUID PK |
+| `plugin_id` | Stable `vendor/name` FK — survives version switch |
+| `created_under_version` | Semver at create (audit only) |
+| `label`, `token_hash`, `scopes_json` | Operator label; SHA-256 hash; JSON scope array |
+| `created_by_user_id` | FK → users |
+| `created_at`, `expires_at`, `revoked_at`, `last_used_at` | Lifecycle; `last_used_at` updated every use |
 
 ### Plugin keyring (filesystem)
 
@@ -198,4 +223,6 @@ stateDiagram-v2
 | `GITHUB_TOKEN` / `GITLAB_TOKEN` | — | Optional private repo / rate limits |
 | `PLUGIN_BUILD_ENABLED` | true in dev | Docker build fallback (G2b) |
 | `TERMINAL_STICKY_TTL` | 12h | PTY session sticky reattach window |
+| `GOSITE_NGINX_STUB_STATUS_URL` | `http://127.0.0.1:18081/nginx_status` | stub_status collector; empty disables |
+| `GOSITE_NGINX_VTS_URL` | `http://127.0.0.1:18082/status/format/json` in prod image | VTS collector; empty disables |
 | `FE_EMBED` | false | Embed built SPA in Go binary |

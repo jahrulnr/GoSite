@@ -9,11 +9,11 @@ Dokumentasi runtime, API, dan migrasi dari **BangunSite (Laravel)** ke **GoSite 
 | Kategori | Status |
 |----------|--------|
 | Arsitektur & domain model | Selaras v1.3.1 — lihat [DOCS-MAINTENANCE.md](./DOCS-MAINTENANCE.md) |
-| Sequence 01–20 + nginx-repair | Diperbarui (seq 20 = gelombang G, v1.3.1) |
+| Sequence 01–22 + nginx-repair | Diperbarui (seq 22 = metrik nginx SA-8) |
 | Template plugin | `plugins/_templates/` |
 | `api/openapi.yaml` | Kontrak API — wave G plugin routes ✅ |
 | `migration/` | Referensi legacy BangunSite |
-| `implementation/` | WAVE-SA-1..7 + [WAVE-PLUGIN-G](./implementation/WAVE-PLUGIN-G.md) |
+| `implementation/` | WAVE-SA-1..8 + [WAVE-PLUGIN-G](./implementation/WAVE-PLUGIN-G.md) + [WAVE-PLUGIN-P6](./implementation/WAVE-PLUGIN-P6.md) |
 
 ## Sumber kebenaran
 

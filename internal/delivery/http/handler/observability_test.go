@@ -7,9 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jahrulnr/gosite/internal/delivery/http/handler"
 	"github.com/jahrulnr/gosite/internal/observability/grafanalite"
+	"github.com/jahrulnr/gosite/internal/observability/nginxlite"
 	"github.com/jahrulnr/gosite/internal/observability/splunklite"
 	"github.com/jahrulnr/gosite/internal/repository/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -40,7 +42,7 @@ func setupObservabilityHandler(t *testing.T) *handler.ObservabilityHandler {
 
 	splunkSvc := splunklite.NewService(auditRepo, jobRepo, logRepo, savedRepo, 90, 14)
 	metricsRepo := sqlite.NewTrafficMetricsRepository(db)
-	return handler.NewObservabilityHandler(splunkSvc, nil, nil, grafanalite.NewService(metricsRepo))
+	return handler.NewObservabilityHandler(splunkSvc, nil, nil, grafanalite.NewService(metricsRepo), nil)
 }
 
 func TestObservability_QueryGetBatch(t *testing.T) {
@@ -75,4 +77,29 @@ func TestObservability_QueryGetSSEStream(t *testing.T) {
 	assert.Contains(t, body, `"type":"event"`)
 	assert.Contains(t, body, `"type":"done"`)
 	assert.True(t, strings.Contains(body, "data: "))
+}
+
+func TestObservability_NginxCurrent(t *testing.T) {
+	t.Parallel()
+	dbPath := filepath.Join(t.TempDir(), "gosite.db")
+	db, err := sqlite.Open(dbPath)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	require.NoError(t, sqlite.Migrate(db, migrationsDir(t)))
+
+	repo := sqlite.NewNginxStatusRepository(db)
+	require.NoError(t, repo.InsertSample(httptest.NewRequest(http.MethodGet, "/", nil).Context(), sqlite.NginxStatusSample{
+		SampleTS: time.Now().UTC(), Active: 12, Requests: 50,
+	}))
+	h := handler.NewObservabilityHandler(nil, nil, nil, nil, nginxlite.NewService(repo, nil, ""))
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics/nginx/current", nil)
+	rec := httptest.NewRecorder()
+	h.NginxCurrent(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var body nginxlite.CurrentResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	assert.True(t, body.Available)
+	assert.Equal(t, 12, body.Active)
 }

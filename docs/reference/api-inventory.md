@@ -215,12 +215,30 @@ Plugin remote-install host flags: `GET /plugins/install/settings` (read-only env
 
 ## Grafana Lite (seq 18)
 
+Log-based traffic aggregation. Complements real-time nginx metrics in [seq 22](./sequences/22-nginx-metrics.md).
+
 | Method | Path | Query |
 |--------|------|-------|
 | GET | `/api/v1/metrics/traffic/series` | `range=24h&step=5m&site=` |
 | GET | `/api/v1/metrics/traffic/top-sites` | `range=1h&limit=10` |
 | GET | `/api/v1/metrics/traffic/status-codes` | `range=24h&site=` |
 | GET | `/api/v1/metrics/traffic/summary` | `range=1h` |
+
+---
+
+## Nginx metrics (seq 22 — stub_status + VTS)
+
+Co-located collectors; no Prometheus. Session required; scope `metrics:read` for plugins.
+
+| Method | Path | Query | Notes |
+|--------|------|-------|-------|
+| GET | `/api/v1/metrics/nginx/current` | — | Latest stub_status + request rate |
+| GET | `/api/v1/metrics/nginx/series` | `range=1h` | Connection + rate series |
+| GET | `/api/v1/metrics/nginx/vts/status` | — | VTS enabled probe |
+| GET | `/api/v1/metrics/nginx/vts/servers` | `limit=10` | Per-`server_name` (latest snapshot) |
+| GET | `/api/v1/metrics/nginx/vts/upstreams` | `limit=10` | Per-upstream peer (latest snapshot) |
+
+Env: `GOSITE_NGINX_STUB_STATUS_URL`, `GOSITE_NGINX_VTS_URL`. OpenAPI: `api/openapi.yaml` (Metrics tag). See [22-nginx-metrics.md](../sequences/22-nginx-metrics.md).
 
 ---
 

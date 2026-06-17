@@ -4,107 +4,45 @@ Perluasan dari [19-plugin-installer_id.md](./19-plugin-installer_id.md) dan [20-
 
 **Status:** Desain — belum diimplementasi
 
+**Keputusan dikunci:** 2026-06-17
+
 Dokumen EN lengkap: [21-plugin-mcp.md](./21-plugin-mcp.md).
 
-## Runtime
+## Peta dokumen
 
-Panel dan MCP memanggil **`gosite serve :8080`** langsung. Nginx `:80`/`:443` hanya **website edge** — bukan jalur auth panel/MCP. Lihat [overview.md](../architecture/overview.md).
+| Topik | Lokasi |
+|-------|--------|
+| Index sequence | `sequences/21-plugin-mcp.md` |
+| Tracker implementasi | `sequences/21-plugin-mcp-impl.md`, `implementation/WAVE-PLUGIN-P6.md` |
+| Auth mesin | [plugin-integration-auth.md](../architecture/plugin-integration-auth.md) |
+| API token, DB, lifecycle | [integration-tokens.md](../reference/integration-tokens.md) |
+| Tool MCP & manifest | [mcp-tools.md](../reference/mcp-tools.md) |
+| Panduan operator `mcp.json` | [mcp-operator.md](../guides/mcp-operator.md) |
+| Registry scope | [plugin-permissions.md](../reference/plugin-permissions.md) |
 
-## Masalah
+## Ringkasan
 
-Operator ingin klien AI (Cursor, Claude, OpenClaw) memanggil GoSite secara imperatif tanpa panel. Menyimpan **email/password panel** di `mcp.json` tidak aman: sesi penuh, revoke lemah, tanpa scope per tool.
+- Plugin katalog **`gosite/mcp`** (Tier 1, monorepo) + `@gosite/mcp` stdio (repo terpisah).
+- Auth mesin: Basic panel (opsional) + `gs_pat_*` scoped.
+- Alur: install → enable → generate token + scope → salin ke AI client → `tools/list` dinamis.
 
-## Tujuan
-
-- Plugin katalog **`gosite/mcp`** (Tier 1) + opsional server stdio komunitas.
-- Auth mesin: Basic Auth panel (Gin, opsional) + **token akses** `gs_pat_*` dari UI plugin.
-- **Alur operator:** install plugin → generate token → **pilih whitelist scope** → salin ke AI → `tools/list` dinamis.
-- Lifecycle token: **generate**, **edit scope**, **revoke** (banyak token per plugin).
-
-## Alur operator (dikunci)
-
-```text
-1. Install gosite/mcp + ack permissions manifest
-2. Enable plugin
-3. Generate access token (label, expiry opsional)
-4. Pilih scope whitelist (subset manifest)
-5. (Nanti) Edit whitelist pada token yang ada
-6. Salin gs_pat_* sekali → mcp.json
-7. Install MCP di klien AI → tools/list sesuai scope token
-```
-
-**Manifest `permissions`** = plafon keras. Scope token ⊆ manifest.
-
-## Auth
-
-| Klien | L1 | L2 |
-|-------|----|----|
-| Browser | Basic panel (Gin, opsional) | Cookie session |
-| MCP | Basic panel (opsional) | Header `X-Gosite-Access-Token: gs_pat_…` |
-
-**Ditolak produksi:** password panel di env MCP.
-
-## API token (P6-host-auth)
-
-| Method | Path | Fungsi |
-|--------|------|--------|
-| `POST` | `/api/v1/plugins/{id}/integration-tokens` | Buat token + pilih scope |
-| `GET` | `/api/v1/plugins/{id}/integration-tokens` | Daftar (tanpa secret) |
-| `PATCH` | `…/integration-tokens/{tokenId}` | **Edit whitelist scope** |
-| `DELETE` | `…/integration-tokens/{tokenId}` | Revoke |
-| `GET` | `/api/v1/integration-tokens/self` | Introspeksi scope (dari MCP) |
-
-## Scope ↔ tool MCP
-
-| Scope | Tool |
-|-------|------|
-| `system:read` | `system` |
-| `websites:read` / `websites:write` | `websites` |
-| `nginx:read` | `nginx` |
-| `nginx:manage` | `nginx` (reload) |
-| `docker:manage` | `docker` |
-| `jobs:read` | `jobs` |
-| `plugins:read` | `plugins` |
-
-**`tools/list` dinamis** — agent hanya melihat tool yang scope-nya ada di whitelist token.
-
-## Contoh mcp.json
-
-```json
-{
-  "mcpServers": {
-    "gosite": {
-      "command": "npx",
-      "args": ["-y", "@gosite/mcp"],
-      "env": {
-        "GOSITE_URL": "https://panel.example.com:8080",
-        "GOSITE_BASIC_USER": "admin",
-        "GOSITE_BASIC_PASS": "admin",
-        "GOSITE_ACCESS_TOKEN": "gs_pat_..."
-      }
-    }
-  }
-}
-```
-
-## Gelombang implementasi
+## Gelombang
 
 ```text
-P6-host-auth  →  DB token, middleware, API, UI generate/edit/revoke
-P6a           →  dokumentasi + template eksternal stdio
-P6b           →  plugin resmi gosite/mcp + tier1-mcp template
-P6c           →  HTTP MCP remote (TLS, allowlist) — nanti
+P6-host-auth → P6a (dokumen + stdio) → P6b (plugin resmi) → P6c (HTTP, blocked)
 ```
 
-## Di luar scope gelombang 1
+## Keputusan (dikunci)
 
-- Route Gin `/mcp` di core
-- OAuth MCP
-- WASM tier 2
-- Password panel di env MCP (produksi)
+| Topik | Keputusan |
+|-------|-----------|
+| Rotasi token | Revoke + buat baru (UUID baru) |
+| FK token | `plugin_id`, bukan `plugin_version_id` |
+| Disable vs uninstall | Suspend vs hard-revoke |
+| Rekonsiliasi switch | Setelah switch committed; auto-truncate; `scopes_truncated` → `revoked` jika kosong |
+| Re-introspect | Lazy 403/401; retry hanya jika tool masih di registry |
+| `last_used_at` | Update tiap call; dedup 60s hanya audit log |
+| Artifact | Tier-1 monorepo; stdio komunitas repo terpisah |
+| go-sdk | P6a experimental; P6b tunggu post-GA |
 
-## Referensi
-
-- [overview.md](../architecture/overview.md)
-- [plugin-platform.md](../architecture/plugin-platform.md)
-- [03-authentication.md](./03-authentication.md)
+Detail: [21-plugin-mcp.md](./21-plugin-mcp.md) · [21-plugin-mcp-impl.md](./21-plugin-mcp-impl.md)

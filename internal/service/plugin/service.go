@@ -316,17 +316,18 @@ func (m *ProcessRuntimeManager) EnsureStopped(ctx context.Context, plugin sqlite
 
 // Service manages plugin install and lifecycle operations.
 type Service struct {
-	repo          *sqlite.PluginRepository
-	configRepo    *sqlite.PluginConfigRepository
-	storageDir    string
-	runtime       RuntimeManager
-	dispatcher    HookDispatcher
-	migrator      ConfigMigrator
-	validateTO    time.Duration
-	allowUnsigned bool
-	keyringPath   string
-	hostVersion   string
-	opLock        *OpLock
+	repo              *sqlite.PluginRepository
+	configRepo        *sqlite.PluginConfigRepository
+	storageDir        string
+	runtime           RuntimeManager
+	dispatcher        HookDispatcher
+	migrator          ConfigMigrator
+	integrationTokens *IntegrationTokenService
+	validateTO        time.Duration
+	allowUnsigned     bool
+	keyringPath       string
+	hostVersion       string
+	opLock            *OpLock
 }
 
 // Option configures plugin service behavior.
@@ -357,6 +358,15 @@ func WithConfigRepo(repo *sqlite.PluginConfigRepository) Option {
 	return func(s *Service) {
 		if repo != nil {
 			s.configRepo = repo
+		}
+	}
+}
+
+// WithIntegrationTokens wires integration token lifecycle hooks.
+func WithIntegrationTokens(svc *IntegrationTokenService) Option {
+	return func(s *Service) {
+		if svc != nil {
+			s.integrationTokens = svc
 		}
 	}
 }
@@ -616,6 +626,9 @@ func (s *Service) enableUnlocked(ctx context.Context, pluginID, version string) 
 		_ = s.refreshEnabled(ctx)
 		return failed, apperror.Wrap(apperror.CodePluginOperation, "refresh plugin hooks failed", err)
 	}
+	if s.integrationTokens != nil {
+		_ = s.integrationTokens.ReconcileAfterSwitch(ctx, record.PluginID, manifestFromRecord(record), "")
+	}
 	return record, nil
 }
 
@@ -764,6 +777,9 @@ func (s *Service) Uninstall(ctx context.Context, pluginID, version string) (sqli
 	record, err = s.repo.MarkConfigDeleted(ctx, record.PluginID, record.Version)
 	if err != nil {
 		return sqlite.PluginVersion{}, apperror.Wrap(apperror.CodeDatabase, "mark plugin uninstalled failed", err)
+	}
+	if s.integrationTokens != nil && !s.pluginHasRemainingVersions(ctx, pluginID) {
+		_ = s.integrationTokens.RevokeAllForPlugin(ctx, pluginID, "")
 	}
 	return record, nil
 }
@@ -1166,4 +1182,17 @@ func needsPermissionAck(m Manifest) bool {
 		return true
 	}
 	return len(m.Capabilities.Hooks) > 0
+}
+
+func (s *Service) pluginHasRemainingVersions(ctx context.Context, pluginID string) bool {
+	rows, err := s.repo.List(ctx)
+	if err != nil {
+		return true
+	}
+	for _, row := range rows {
+		if row.PluginID == pluginID && row.State != sqlite.PluginStateUninstalled {
+			return true
+		}
+	}
+	return false
 }

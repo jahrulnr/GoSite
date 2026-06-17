@@ -11,22 +11,30 @@ import (
 	"time"
 
 	"github.com/jahrulnr/gosite/internal/observability/grafanalite"
+	"github.com/jahrulnr/gosite/internal/observability/nginxlite"
 	"github.com/jahrulnr/gosite/internal/observability/splunklite"
 	"github.com/jahrulnr/gosite/internal/repository/sqlite"
 	"github.com/jahrulnr/gosite/pkg/apperror"
 )
 
-// ObservabilityHandler serves Splunk Lite and Grafana Lite endpoints.
+// ObservabilityHandler serves Splunk Lite, Grafana Lite, and nginx metrics endpoints.
 type ObservabilityHandler struct {
 	splunk   *splunklite.Service
 	meta     *splunklite.MetaService
 	ingestor *splunklite.LogIngestor
 	grafana  *grafanalite.Service
+	nginx    *nginxlite.Service
 }
 
 // NewObservabilityHandler returns an observability handler.
-func NewObservabilityHandler(splunk *splunklite.Service, meta *splunklite.MetaService, ingestor *splunklite.LogIngestor, grafana *grafanalite.Service) *ObservabilityHandler {
-	return &ObservabilityHandler{splunk: splunk, meta: meta, ingestor: ingestor, grafana: grafana}
+func NewObservabilityHandler(
+	splunk *splunklite.Service,
+	meta *splunklite.MetaService,
+	ingestor *splunklite.LogIngestor,
+	grafana *grafanalite.Service,
+	nginx *nginxlite.Service,
+) *ObservabilityHandler {
+	return &ObservabilityHandler{splunk: splunk, meta: meta, ingestor: ingestor, grafana: grafana, nginx: nginx}
 }
 
 // QueryMeta handles GET /query/meta.
@@ -488,6 +496,83 @@ func (h *ObservabilityHandler) TrafficSummary(w http.ResponseWriter, r *http.Req
 		return
 	}
 	writeJSON(w, http.StatusOK, res)
+}
+
+// NginxCurrent handles GET /metrics/nginx/current.
+func (h *ObservabilityHandler) NginxCurrent(w http.ResponseWriter, r *http.Request) {
+	if h.nginx == nil {
+		writeJSON(w, http.StatusOK, nginxlite.CurrentResponse{Available: false})
+		return
+	}
+	res, err := h.nginx.Current(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+// NginxSeries handles GET /metrics/nginx/series.
+func (h *ObservabilityHandler) NginxSeries(w http.ResponseWriter, r *http.Request) {
+	if h.nginx == nil {
+		writeJSON(w, http.StatusOK, nginxlite.SeriesResponse{Step: "30s"})
+		return
+	}
+	res, err := h.nginx.Series(r.Context(), r.URL.Query().Get("range"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+// NginxVTSStatus handles GET /metrics/nginx/vts/status.
+func (h *ObservabilityHandler) NginxVTSStatus(w http.ResponseWriter, r *http.Request) {
+	if h.nginx == nil {
+		writeJSON(w, http.StatusOK, nginxlite.VTSStatusResponse{Enabled: false})
+		return
+	}
+	writeJSON(w, http.StatusOK, h.nginx.VTSStatus())
+}
+
+// NginxVTSServers handles GET /metrics/nginx/vts/servers.
+func (h *ObservabilityHandler) NginxVTSServers(w http.ResponseWriter, r *http.Request) {
+	if h.nginx == nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"servers": []interface{}{}})
+		return
+	}
+	limit := 10
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	rows, err := h.nginx.VTSServers(r.Context(), limit)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"servers": rows})
+}
+
+// NginxVTSUpstreams handles GET /metrics/nginx/vts/upstreams.
+func (h *ObservabilityHandler) NginxVTSUpstreams(w http.ResponseWriter, r *http.Request) {
+	if h.nginx == nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"upstreams": []interface{}{}})
+		return
+	}
+	limit := 10
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	rows, err := h.nginx.VTSUpstreams(r.Context(), limit)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"upstreams": rows})
 }
 
 // contextWithClient returns a child context that is cancelled both when the

@@ -20,13 +20,24 @@ export function useAsync<T>(loader: (signal: AbortSignal) => Promise<T>, deps: u
   const [tick, setTick] = useState(0);
   const loaderRef = useRef(loader);
   loaderRef.current = loader;
+  const dataRef = useRef<T>();
+  dataRef.current = data;
+  const depsRef = useRef<unknown[] | null>(null);
 
   useEffect(() => {
     const ctrl = new AbortController();
     let active = true;
-    setLoading(true);
+    const prevDeps = depsRef.current;
+    const depsChanged =
+      prevDeps === null ||
+      deps.length !== prevDeps.length ||
+      deps.some((dep, index) => dep !== prevDeps[index]);
+    const keepStale = !depsChanged && dataRef.current !== undefined;
+    if (!keepStale) {
+      setLoading(true);
+      setData(undefined);
+    }
     setError(undefined);
-    setData(undefined);
     loaderRef
       .current(ctrl.signal)
       .then((res) => {
@@ -47,6 +58,10 @@ export function useAsync<T>(loader: (signal: AbortSignal) => Promise<T>, deps: u
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tick, ...deps]);
+
+  useEffect(() => {
+    depsRef.current = deps;
+  }, deps);
 
   const reload = useCallback(() => setTick((t) => t + 1), []);
   return { data, error, loading, reload };

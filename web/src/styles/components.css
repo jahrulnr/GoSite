@@ -2404,6 +2404,89 @@ code {
   max-height: 520px;
 }
 
+.integration-token-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.integration-token-row {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 14px 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.integration-token-row.revoked {
+  opacity: 0.72;
+}
+
+.integration-token-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.integration-token-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.integration-token-scopes,
+.integration-token-edit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.integration-scope-group {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  background: var(--bg-elevated);
+}
+
+.integration-scope-title {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.integration-scope-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.integration-scope-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.integration-secret-card {
+  margin: 16px 0;
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--border));
+}
+
+.integration-mcp-json {
+  max-height: 280px;
+  margin-top: 10px;
+}
+
 @media (max-width: 1100px) {
   .plugin-layout {
     grid-template-columns: 1fr;
