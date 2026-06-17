@@ -105,7 +105,7 @@ Default login (seeded by `gosite init` on first boot):
 | Basic auth | `admin` / `admin` |
 | Panel login | `admin@demo.com` / `123456` |
 
-> **Ports:** Panel = published `8080` (BangunSoft prod: `1100→8080`). Websites = nginx `80/443`. See [docs/architecture.md](docs/architecture.md) and `compose.bangunsoft.yml`.
+> **Ports:** Panel = published `8080` (BangunSoft prod: `1100→8080`). Websites = nginx `80/443`. See [docs/architecture/overview.md](docs/architecture/overview.md) and `compose.bangunsoft.yml`.
 
 > On networks that block public DNS (e.g. some ISP resolvers), `make build-docker` uses `--network=host` so image pulls use the host resolver. See [docs/README.md](docs/README.md#build-docker-di-jaringan-isp-yang-memblokir-dns-publik).
 
@@ -197,17 +197,17 @@ flowchart TB
     API -.->|config + reload| NGX
 ```
 
-Deep dive: [docs/architecture.md](docs/architecture.md) · [docs/nginx-repair.md](docs/nginx-repair.md) · Sequences: [docs/sequences/](docs/sequences/) · Wiki guide: [docs/wiki.md](docs/wiki.md)
+Deep dive: [docs/architecture/overview.md](docs/architecture/overview.md) · [docs/operations/nginx-repair.md](docs/operations/nginx-repair.md) · Sequences: [docs/sequences/](docs/sequences/) · Wiki guide: [docs/guides/wiki.md](docs/guides/wiki.md)
 
 ## Migration from BangunSite
 
 GoSite preserves `/storage`, `/www`, and nginx vhost layout. The docs tree maps every legacy Laravel route to the new REST API:
 
-1. [docs/architecture.md](docs/architecture.md) — runtime & module boundaries
-2. [docs/domain-model.md](docs/domain-model.md) — entities & filesystem
-3. [docs/nginx-repair.md](docs/nginx-repair.md) — nginx test + auto-repair fallback
-4. [docs/api-inventory.md](docs/api-inventory.md) — API map + OpenAPI
-5. [docs/wiki.md](docs/wiki.md) — suggested GitHub wiki structure
+1. [docs/architecture/overview.md](docs/architecture/overview.md) — runtime & module boundaries
+2. [docs/architecture/domain-model.md](docs/architecture/domain-model.md) — entities & filesystem
+3. [docs/operations/nginx-repair.md](docs/operations/nginx-repair.md) — nginx test + auto-repair fallback
+4. [docs/reference/api-inventory.md](docs/reference/api-inventory.md) — API map + OpenAPI
+5. [docs/guides/wiki.md](docs/guides/wiki.md) — suggested GitHub wiki structure
 
 ## License
 

@@ -42,7 +42,7 @@ Only files in `active.d/` are served as additional vhosts.
 ## Notes
 
 - Toggle **calls `nginx reload`** (with test + auto-repair) — improvement over legacy
-- See [nginx-repair.md](../nginx-repair.md) for fallback when config is broken
+- See [nginx-repair.md](../operations/nginx-repair.md) for fallback when config is broken
 
 ## GoSite
 

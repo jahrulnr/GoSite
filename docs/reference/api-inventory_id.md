@@ -91,7 +91,7 @@ Mapping route legacy ke usulan API REST untuk backend Go. Format respons JSON; e
 | `gosite init` | First-boot storage + migrate + seed |
 | `gosite migrate` | Apply migrations |
 | `gosite serve` | HTTP API + SPA |
-| `gosite nginx-repair` | `nginx -t` + auto-fix aman ([nginx-repair.md](./nginx-repair_id.md)) |
+| `gosite nginx-repair` | `nginx -t` + auto-fix aman ([nginx-repair.md](../operations/nginx-repair_id.md)) |
 | `gosite plugin list\|resolve\|install\|catalog` | CLI operator plugin (gelombang G) |
 
 Dipanggil dari `config/start.sh` sebelum nginx + gosite serve.
@@ -220,7 +220,7 @@ Flag install remote plugin: `GET /plugins/install/settings`.
 | GET/PUT | `/api/v1/nginx/global` | `nginx.conf` |
 | GET/PUT | `/api/v1/nginx/default` | `http.d/default.conf` |
 
-Setiap reload internal memanggil [nginx auto-repair](./nginx-repair_id.md) terlebih dahulu.
+Setiap reload internal memanggil [nginx auto-repair](../operations/nginx-repair_id.md) terlebih dahulu.
 
 ---
 

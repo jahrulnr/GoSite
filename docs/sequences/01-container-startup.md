@@ -65,7 +65,7 @@ Cron renewal and manual runs are handled by the **job worker** inside `gosite se
 
 ### Boot nginx repair
 
-`gosite nginx-repair` runs **after** the default SSL cert is created so fallback repair can point vhosts to the default cert. See [nginx-repair.md](../nginx-repair.md).
+`gosite nginx-repair` runs **after** the default SSL cert is created so fallback repair can point vhosts to the default cert. See [nginx-repair.md](../operations/nginx-repair.md).
 
 ---
 

@@ -55,4 +55,4 @@ make contract-check
 
 ## Related docs
 
-- [`docs/api-inventory.md`](../docs/api-inventory.md) — Laravel migration map (redirects here)
+- [`docs/reference/api-inventory.md`](../docs/reference/api-inventory.md) — Laravel migration map (redirects here)

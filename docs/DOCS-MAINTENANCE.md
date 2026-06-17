@@ -9,11 +9,13 @@ How to keep `docs/` aligned with the codebase during active development.
 | Layer | Path | Audience | Update when |
 |-------|------|----------|-------------|
 | **Contract** | `api/openapi.yaml` | API consumers, codegen | New/changed HTTP routes |
-| **Architecture** | `docs/architecture.md`, `docs/architecture/` | Contributors | New backend modules, runtime changes |
+| **Architecture** | `docs/architecture/` | Contributors | New backend modules, runtime changes, ADRs |
+| **Reference** | `docs/reference/` | API mapping | Legacy Laravel map, endpoint summaries |
+| **Operations** | `docs/operations/` | Operators, contributors | Runtime behaviour (nginx repair, etc.) |
+| **Guides** | `docs/guides/` | Contributors, wiki maintainers | Dev setup, localization, wiki export |
 | **Sequences** | `docs/sequences/*.md` | Feature design + review | New feature or behaviour change |
 | **Implementation tracker** | `docs/implementation/`, `*-impl.md` | Agents / implementers | Wave start/complete |
 | **Migration map** | `docs/migration/` | BangunSite → GoSite | Legacy mapping only; not for new features |
-| **API inventory** | `docs/api-inventory.md` | Legacy Laravel → REST map | New REST areas (summary table) |
 | **Wiki export** | `docs/wiki-export/` (gitignored) | End users | After user-facing doc changes → `make wiki-export` |
 | **Plugin templates** | `plugins/_templates/docs/` | Plugin authors | Manifest/hook contract changes |
 
@@ -26,8 +28,8 @@ How to keep `docs/` aligned with the codebase during active development.
 | Sequence 20 header | Said "Proposed" while wave G shipped | ✅ Fixed — status **Implemented** |
 | `sequences/README` | Seq 20 marked 📋 Proposed | ✅ Fixed |
 | `architecture/plugin-platform.md` | Remote distribution listed under P4+ deferred | ✅ Fixed — P4 remote install |
-| `architecture.md` | No `plugin` module row | ✅ Fixed |
-| `api-inventory.md` | No Plugins section | ✅ Fixed |
+| `architecture/overview.md` | No `plugin` module row | ✅ Fixed |
+| `reference/api-inventory.md` | No Plugins section | ✅ Fixed |
 | `implementation/` | Only WAVE-SA-1..7; no plugin waves | ✅ Added WAVE-PLUGIN + G tracker link |
 | `api/openapi.yaml` | Wave G plugin routes added (v1.3.1 doc pass) | ✅ |
 | `20-plugin-remote-distribution.md` body | Long spec still reads like a proposal in places | OK as design doc; impl truth in `*-impl.md` |
@@ -40,7 +42,7 @@ How to keep `docs/` aligned with the codebase during active development.
 1. **Sequence** — add or update `docs/sequences/NN-*.md` (+ `_id` stub if bilingual wiki)
 2. **Impl tracker** — `*-impl.md` or `docs/implementation/WAVE-*.md` with checkboxes
 3. **OpenAPI** — paths, schemas, examples under `api/`
-4. **Architecture** — module table in `architecture.md`; ADR in `architecture/` if architectural
+4. **Architecture** — module table in `architecture/overview.md`; ADR in `architecture/` if architectural
 5. **API inventory** — one summary section (legacy map is optional for greenfield endpoints)
 6. **Index** — `docs/sequences/README.md` status column
 7. **Root README** — `docs/README.md` document status table if major area added
@@ -64,4 +66,4 @@ How to keep `docs/` aligned with the codebase during active development.
 
 - [sequences/README.md](./sequences/README.md) — feature index
 - [implementation/README.md](./implementation/README.md) — wave index
-- [wiki.md](./wiki.md) — GitHub wiki export
+- [guides/wiki.md](./guides/wiki.md) — GitHub wiki export

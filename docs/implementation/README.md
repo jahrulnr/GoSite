@@ -30,8 +30,8 @@ Subagent-oriented implementation plan for the GoSite oneshot backend.
 
 ## References
 
-- [architecture.md](../architecture.md)
+- [architecture/overview.md](../architecture/overview.md)
 - [architecture/plugin-platform.md](../architecture/plugin-platform.md)
-- [api-inventory.md](../api-inventory.md)
+- [reference/api-inventory.md](../reference/api-inventory.md)
 - [sequences/](../sequences/)
 - [DOCS-MAINTENANCE.md](../DOCS-MAINTENANCE.md)

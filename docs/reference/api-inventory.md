@@ -93,7 +93,7 @@ Legacy route mapping to the proposed Go REST API. JSON responses; consistent err
 | `gosite init` | First-boot storage + migrate + seed |
 | `gosite migrate` | Apply migrations |
 | `gosite serve` | HTTP API + SPA |
-| `gosite nginx-repair` | `nginx -t` + safe auto-fix ([nginx-repair.md](./nginx-repair.md)) |
+| `gosite nginx-repair` | `nginx -t` + safe auto-fix ([nginx-repair.md](../operations/nginx-repair.md)) |
 | `gosite plugin list\|resolve\|install\|catalog` | Plugin operator CLI (wave G) |
 
 Invoked from `config/start.sh` before nginx + `gosite serve`.
@@ -231,7 +231,7 @@ Plugin remote-install host flags: `GET /plugins/install/settings` (read-only env
 | GET/PUT | `/api/v1/nginx/global` | `nginx.conf` |
 | GET/PUT | `/api/v1/nginx/default` | `http.d/default.conf` |
 
-Every internal reload calls [nginx auto-repair](./nginx-repair.md) first.
+Every internal reload calls [nginx auto-repair](../operations/nginx-repair.md) first.
 
 ---
 

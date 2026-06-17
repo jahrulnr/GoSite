@@ -3,8 +3,8 @@
 Runtime, API, and migration docs for **GoSite** (Go + Preact hosting panel).
 
 > **Languages:** English (this file) · [Bahasa Indonesia](./README_id.md)  
-> **GitHub wiki:** [wiki.md](./wiki.md) · [wiki_id.md](./wiki_id.md)  
-> **Convention:** [LOCALIZATION.md](./LOCALIZATION.md)
+> **GitHub wiki:** [guides/wiki.md](./guides/wiki.md) · [guides/wiki_id.md](./guides/wiki_id.md)  
+> **Convention:** [guides/localization.md](./guides/localization.md)
 
 ## Document status
 
@@ -30,19 +30,17 @@ Runtime, API, and migration docs for **GoSite** (Go + Preact hosting panel).
 
 ## Document map
 
-| Document | Description |
-|----------|-------------|
-| [architecture.md](./architecture.md) | Container runtime, Go modules, persistent paths |
-| [architecture/plugin-platform.md](./architecture/plugin-platform.md) | Plugin ADR (tier 0–3, hooks, remote install) |
-| [DOCS-MAINTENANCE.md](./DOCS-MAINTENANCE.md) | Doc layers, drift audit, ship/release checklist |
-| [domain-model.md](./domain-model.md) | SQLite entities & filesystem artifacts |
-| [api-inventory.md](./api-inventory.md) | REST API map |
-| [nginx-repair.md](./nginx-repair.md) | `nginx -t` fallback + auto-fix |
-| [wiki.md](./wiki.md) | GitHub wiki export guide |
+| Folder / file | Description |
+|---------------|-------------|
+| [architecture/](./architecture/) | Runtime overview, domain model, plugin ADR |
+| [reference/](./reference/) | API inventory (legacy map + greenfield) |
+| [operations/](./operations/) | Nginx auto-repair |
+| [guides/](./guides/) | Dev setup, wiki export, localization |
 | [sequences/](./sequences/) | Mermaid flow diagrams per feature |
-| [plugins/_templates/](../plugins/_templates/) | Plugin development scaffolds |
-| [migration/](./migration/) | BangunSite migration notes |
 | [implementation/](./implementation/) | Implementation wave trackers (SA + plugin) |
+| [migration/](./migration/) | BangunSite migration notes |
+| [plugins/_templates/](../plugins/_templates/) | Plugin development scaffolds |
+| [DOCS-MAINTENANCE.md](./DOCS-MAINTENANCE.md) | Doc layers, drift audit, release checklist |
 
 ## Wiki export
 

@@ -25,7 +25,7 @@ GoSite feature flow diagrams. **Legacy BangunSite** sections (if any) are kept a
 | 07 | [07-website-nginx-config.md](./07-website-nginx-config.md) | Edit & test nginx config | ✅ |
 | 08 | [08-website-ssl.md](./08-website-ssl.md) | Certbot job + SSE, manual SSL | ✅ |
 | 09 | [09-website-delete.md](./09-website-delete.md) | Delete + clean flag | ✅ |
-| — | [../nginx-repair.md](../nginx-repair.md) | Auto-repair sebelum reload | ✅ |
+| — | [../operations/nginx-repair.md](../operations/nginx-repair.md) | Auto-repair sebelum reload | ✅ |
 
 ## Server operations
 
@@ -45,10 +45,10 @@ GoSite feature flow diagrams. **Legacy BangunSite** sections (if any) are kept a
 
 ## Wiki GitHub
 
-Wiki page layout: [../wiki.md](../wiki.md).
+Wiki page layout: [../guides/wiki.md](../guides/wiki.md).
 
 ## Cara pakai
 
 1. Read the relevant sequence module
-2. Cross-check with [api-inventory.md](../api-inventory.md) and `api/openapi.yaml`
-3. For nginx/SSL: [nginx-repair.md](../nginx-repair.md)
+2. Cross-check with [api-inventory.md](../reference/api-inventory.md) and `api/openapi.yaml`
+3. For nginx/SSL: [nginx-repair.md](../operations/nginx-repair.md)

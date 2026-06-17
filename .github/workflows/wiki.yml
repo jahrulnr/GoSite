@@ -5,7 +5,7 @@ on:
     paths:
       - 'docs/**'
       - '!docs/wiki-export/**'
-      - 'docs/export-wiki.sh'
+      - 'scripts/export-wiki.sh'
       - 'scripts/push-wiki.sh'
       - 'Makefile'
       - '.github/workflows/wiki.yml'
@@ -13,7 +13,7 @@ on:
     paths:
       - 'docs/**'
       - '!docs/wiki-export/**'
-      - 'docs/export-wiki.sh'
+      - 'scripts/export-wiki.sh'
       - 'scripts/push-wiki.sh'
       - 'Makefile'
       - '.github/workflows/wiki.yml'

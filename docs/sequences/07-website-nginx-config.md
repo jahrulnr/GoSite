@@ -60,7 +60,7 @@ Isolated test file: `config/webconfig/nginx.conf` — loads only one vhost, with
 
 ## Reload & auto-repair
 
-Every `Reload()` calls `TestAndRepair` on the full production config before `nginx -s reload`. See [nginx-repair.md](../nginx-repair.md).
+Every `Reload()` calls `TestAndRepair` on the full production config before `nginx -s reload`. See [nginx-repair.md](../operations/nginx-repair.md).
 
 ## API summary
 

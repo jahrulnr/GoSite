@@ -60,7 +60,7 @@ File test terisolasi: `config/webconfig/nginx.conf` — hanya memuat satu vhost,
 
 ## Reload & auto-repair
 
-Setiap `Reload()` memanggil `TestAndRepair` pada config produksi penuh sebelum `nginx -s reload`. Lihat [nginx-repair.md](../nginx-repair_id.md).
+Setiap `Reload()` memanggil `TestAndRepair` pada config produksi penuh sebelum `nginx -s reload`. Lihat [nginx-repair.md](../operations/nginx-repair_id.md).
 
 ## API ringkas
 

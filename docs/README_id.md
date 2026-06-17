@@ -2,7 +2,7 @@
 
 Dokumentasi runtime, API, dan migrasi dari **BangunSite (Laravel)** ke **GoSite (Go + Preact)**.
 
-> **Wiki GitHub:** struktur halaman wiki disarankan di [wiki.md](./wiki_id.md).
+> **Wiki GitHub:** struktur halaman wiki disarankan di [guides/wiki.md](./guides/wiki_id.md).
 
 ## Status dokumen
 
@@ -31,11 +31,11 @@ Dokumentasi runtime, API, dan migrasi dari **BangunSite (Laravel)** ke **GoSite 
 
 | Dokumen | Isi |
 |---------|-----|
-| [architecture.md](./architecture_id.md) | Runtime container, modul Go, path persisten |
-| [domain-model.md](./domain-model_id.md) | Entitas SQLite & filesystem |
-| [api-inventory.md](./api-inventory_id.md) | Route legacy → REST GoSite |
-| [nginx-repair.md](./nginx-repair_id.md) | Fallback `nginx -t` + auto-fix |
-| [wiki.md](./wiki_id.md) | Panduan struktur wiki GitHub |
+| [architecture/overview.md](./architecture/overview_id.md) | Runtime container, modul Go, path persisten |
+| [architecture/domain-model.md](./architecture/domain-model_id.md) | Entitas SQLite & filesystem |
+| [reference/api-inventory.md](./reference/api-inventory_id.md) | Route legacy → REST GoSite |
+| [operations/nginx-repair.md](./operations/nginx-repair_id.md) | Fallback `nginx -t` + auto-fix |
+| [guides/wiki.md](./guides/wiki_id.md) | Panduan struktur wiki GitHub |
 | [sequences/](./sequences/) | Diagram alur per fitur (Mermaid) |
 | [migration/](./migration/) | Pembagian paket & fase migrasi |
 
@@ -97,17 +97,17 @@ Dokumentasi runtime, API, dan migrasi dari **BangunSite (Laravel)** ke **GoSite 
 1. **API-first** — Preact SPA di `/panel/`, kontrak di OpenAPI.
 2. **Side-effect di OS** — nginx, certbot, docker, mount via `internal/infra`.
 3. **Storage kompatibel** — path `/storage`, symlink `/etc/nginx`, `/etc/letsencrypt` sama seperti BangunSite.
-4. **Test sebelum reload** — `nginx -t` + [auto-repair](./nginx-repair_id.md) sebelum `nginx -s reload`.
+4. **Test sebelum reload** — `nginx -t` + [auto-repair](./operations/nginx-repair_id.md) sebelum `nginx -s reload`.
 5. **Satu modul = satu sequence** di `sequences/` untuk review fitur.
 
 ## Urutan baca yang disarankan
 
-1. [architecture.md](./architecture_id.md) — runtime GoSite
-2. [domain-model.md](./domain-model_id.md) — data & file
-3. [nginx-repair.md](./nginx-repair_id.md) — fallback nginx
-4. [sequences/README.md](./sequences/README.md) — alur per fitur
-5. [api-inventory.md](./api-inventory_id.md) + `api/openapi.yaml`
-6. [wiki.md](./wiki_id.md) — jika membangun wiki GitHub
+1. [architecture/overview.md](./architecture/overview_id.md) — runtime GoSite
+2. [architecture/domain-model.md](./architecture/domain-model_id.md) — data & file
+3. [operations/nginx-repair.md](./operations/nginx-repair_id.md) — fallback nginx
+4. [sequences/README.md](./sequences/README_id.md) — alur per fitur
+5. [reference/api-inventory.md](./reference/api-inventory_id.md) + `api/openapi.yaml`
+6. [guides/wiki.md](./guides/wiki_id.md) — jika membangun wiki GitHub
 
 ## Build Docker di jaringan ISP yang memblokir DNS publik
 

@@ -9,7 +9,7 @@ How to publish bilingual docs to the GitHub wiki.
 | `docs/*.md` | English (primary) | `Architecture.md`, `Home.md`, … |
 | `docs/*_id.md` | Indonesian | `Architecture-id.md`, `Home-id.md`, … |
 
-See [LOCALIZATION.md](./LOCALIZATION.md).
+See [LOCALIZATION.md](./localization.md).
 
 ## Export
 
@@ -47,10 +47,10 @@ cd /tmp/gosite.wiki && git add -A && git commit -m "docs: sync wiki bilingual" &
 | Wiki page | Source (EN) | Source (ID) |
 |-----------|-------------|-------------|
 | Home | README excerpt | docs/README_id.md |
-| Architecture | architecture.md | architecture_id.md |
-| Domain model | domain-model.md | domain-model_id.md |
-| API reference | api-inventory.md | api-inventory_id.md |
-| Nginx auto-repair | nginx-repair.md | nginx-repair_id.md |
+| Architecture | architecture/overview.md | architecture/overview_id.md |
+| Domain model | architecture/domain-model.md | architecture/domain-model_id.md |
+| API reference | reference/api-inventory.md | reference/api-inventory_id.md |
+| Nginx auto-repair | operations/nginx-repair.md | operations/nginx-repair_id.md |
 | Sequences | sequences/*.md | sequences/*_id.md |
 | Plugin installer | sequences/19-plugin-installer.md | sequences/19-plugin-installer_id.md |
 | Plugin platform (ADR) | architecture/plugin-platform.md | _(EN; same page exported as Plugin-platform-id)_ |

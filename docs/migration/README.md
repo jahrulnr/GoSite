@@ -22,5 +22,5 @@ New GoSite features after BangunSite cutover are documented in **sequences/** an
 ## Suggested steps
 
 1. Deploy the latest image (`make up`) and verify the production stack
-2. Review [api-inventory.md](../api-inventory.md) and `api/openapi.yaml` against handlers
+2. Review [api-inventory.md](../reference/api-inventory.md) and `api/openapi.yaml` against handlers
 3. After `docs/` changes: [DOCS-MAINTENANCE.md](../DOCS-MAINTENANCE.md) checklist → `make wiki-export`
