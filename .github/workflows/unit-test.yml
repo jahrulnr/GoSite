@@ -1,0 +1,81 @@
+name: Unit Tests
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - '.github/workflows/unit-test.yml'
+      - 'go.mod'
+      - 'go.sum'
+      - 'cmd/**'
+      - 'internal/**'
+      - 'pkg/**'
+      - 'plugins/**'
+      - 'web/**'
+      - 'Makefile'
+  pull_request:
+    paths:
+      - '.github/workflows/unit-test.yml'
+      - 'go.mod'
+      - 'go.sum'
+      - 'cmd/**'
+      - 'internal/**'
+      - 'pkg/**'
+      - 'plugins/**'
+      - 'web/**'
+      - 'Makefile'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unit-test-${{ github.repository }}-${{ github.event_name == 'push' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Go unit tests
+        run: go test -count=1 ./...
+
+      - name: Contract tests
+        run: make contract-check
+
+      - name: Bundled plugin vet
+        run: make -C plugins/gosite/mcp vet
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
