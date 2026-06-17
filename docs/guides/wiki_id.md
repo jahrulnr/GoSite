@@ -9,7 +9,7 @@ Cara menerbitkan dokumentasi bilingual ke wiki GitHub.
 | `docs/*.md` | English (utama) | `Architecture.md`, `Home.md`, … |
 | `docs/*_id.md` | Indonesia | `Architecture-id.md`, `Home-id.md`, … |
 
-Lihat [LOCALIZATION_id.md](./LOCALIZATION_id.md) — catatan: gunakan [LOCALIZATION.md](./LOCALIZATION.md) versi EN.
+Lihat [localization_id.md](./localization_id.md) — catatan: gunakan [localization.md](./localization.md) versi EN.
 
 ## Export
 
@@ -43,7 +43,7 @@ cd /tmp/gosite.wiki && git add -A && git commit -m "docs: sync wiki bilingual" &
 | Halaman wiki | Sumber (EN) | Sumber (ID) |
 |--------------|-------------|-------------|
 | Home | cuplikan README | docs/README_id.md |
-| Architecture | architecture.md | architecture_id.md |
+| Architecture | architecture/overview.md | architecture/overview_id.md |
 | Plugin installer | sequences/19-plugin-installer.md | sequences/19-plugin-installer_id.md |
 | Plugin platform (ADR) | architecture/plugin-platform.md | _(EN; diekspor sebagai Plugin-platform-id)_ |
 | Template dev plugin | [plugins/_templates/](../plugins/_templates/) | path repo yang sama |

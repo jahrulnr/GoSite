@@ -25,7 +25,7 @@ Diagram alur fitur GoSite. Bagian **Legacy BangunSite** (jika ada) disimpan seba
 | 07 | [07-website-nginx-config.md](./07-website-nginx-config.md) | Edit & test nginx config | ✅ |
 | 08 | [08-website-ssl.md](./08-website-ssl.md) | Certbot job + SSE, manual SSL | ✅ |
 | 09 | [09-website-delete.md](./09-website-delete.md) | Delete + clean flag | ✅ |
-| — | [../nginx-repair.md](../nginx-repair_id.md) | Auto-repair sebelum reload | ✅ |
+| — | [../operations/nginx-repair.md](../operations/nginx-repair_id.md) | Auto-repair sebelum reload | ✅ |
 
 ## Operasional server
 
@@ -45,10 +45,10 @@ Diagram alur fitur GoSite. Bagian **Legacy BangunSite** (jika ada) disimpan seba
 
 ## Wiki GitHub
 
-Struktur halaman wiki: [../wiki.md](../wiki_id.md).
+Struktur halaman wiki: [../guides/wiki.md](../guides/wiki_id.md).
 
 ## Cara pakai
 
 1. Baca sequence modul yang relevan
-2. Cocokkan dengan [api-inventory.md](../api-inventory_id.md) dan `api/openapi.yaml`
-3. Untuk nginx/SSL: [nginx-repair.md](../nginx-repair_id.md)
+2. Cocokkan dengan [api-inventory.md](../reference/api-inventory_id.md) dan `api/openapi.yaml`
+3. Untuk nginx/SSL: [nginx-repair.md](../operations/nginx-repair_id.md)

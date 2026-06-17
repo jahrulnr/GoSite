@@ -52,7 +52,7 @@ UI shows confirmation before delete.
 3. Hapus `site.d` config
 4. Hapus baris DB
 
-Reload uses [nginx auto-repair](../nginx-repair.md) when other config is broken.
+Reload uses [nginx auto-repair](../operations/nginx-repair.md) when other config is broken.
 
 ---
 

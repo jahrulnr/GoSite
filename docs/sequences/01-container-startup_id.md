@@ -65,7 +65,7 @@ Cron job renewal & manual run dikelola **job worker** di dalam proses `gosite se
 
 ### Boot nginx repair
 
-`gosite nginx-repair` dijalankan **setelah** default SSL dibuat agar fallback repair bisa mengarahkan vhost ke cert default. Lihat [nginx-repair.md](../nginx-repair_id.md).
+`gosite nginx-repair` dijalankan **setelah** default SSL dibuat agar fallback repair bisa mengarahkan vhost ke cert default. Lihat [nginx-repair.md](../operations/nginx-repair_id.md).
 
 ---
 

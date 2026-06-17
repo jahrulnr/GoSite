@@ -61,6 +61,16 @@ rewrite_links() {
   local file="$1"
   local suf="${2:-}"
   sed -i \
+    -e "s|](\\./architecture/overview\\.md)|](Architecture${suf})|g" \
+    -e "s|](\\./architecture/overview_id\\.md)|](Architecture-id)|g" \
+    -e "s|](\\./architecture/domain-model\\.md)|](Domain-model${suf})|g" \
+    -e "s|](\\./architecture/domain-model_id\\.md)|](Domain-model-id)|g" \
+    -e "s|](\\./reference/api-inventory\\.md)|](API-reference${suf})|g" \
+    -e "s|](\\./reference/api-inventory_id\\.md)|](API-reference-id)|g" \
+    -e "s|](\\./operations/nginx-repair\\.md)|](Nginx-auto-repair${suf})|g" \
+    -e "s|](\\./operations/nginx-repair_id\\.md)|](Nginx-auto-repair-id)|g" \
+    -e "s|](\\./guides/dev-mount-testing\\.md)|](Development${suf})|g" \
+    -e "s|](\\./guides/dev-mount-testing_id\\.md)|](Development-id)|g" \
     -e "s|](\\./architecture\\.md)|](Architecture${suf})|g" \
     -e "s|](\\./architecture_id\\.md)|](Architecture-id)|g" \
     -e "s|](\\./domain-model\\.md)|](Domain-model${suf})|g" \
@@ -123,6 +133,7 @@ rewrite_links() {
     -e "s|](\\./19-plugin-installer\\.md)|](Plugin-installer${suf})|g" \
     -e "s|](\\./19-plugin-installer_id\\.md)|](Plugin-installer-id)|g" \
     -e "s|](\\./architecture/plugin-platform\\.md)|](Plugin-platform${suf})|g" \
+    -e "s|](\\./plugin-platform\\.md)|](Plugin-platform${suf})|g" \
     -e "s|](\\../architecture/plugin-platform\\.md)|](Plugin-platform${suf})|g" \
     -e "s|](docs/architecture/plugin-platform\\.md)|](Plugin-platform${suf})|g" \
     -e "s|](\\../../plugins/_templates/[^)]*)|](${BLOB}/plugins/_templates/)|g" \
@@ -141,18 +152,35 @@ rewrite_links() {
     -e "s|](\\../README_id\\.md\\([^)]*\\))|](Development-id\\1)|g" \
     -e "s|](docs/README\\.md\\([^)]*\\))|](${BLOB}/docs/README.md\\1)|g" \
     -e "s|](docs/README_id\\.md\\([^)]*\\))|](${BLOB}/docs/README_id.md\\1)|g" \
+    -e "s|](docs/architecture/overview\\.md)|](Architecture${suf})|g" \
     -e "s|](docs/architecture\\.md)|](Architecture${suf})|g" \
+    -e "s|](docs/operations/nginx-repair\\.md)|](Nginx-auto-repair${suf})|g" \
     -e "s|](docs/nginx-repair\\.md)|](Nginx-auto-repair${suf})|g" \
+    -e "s|](docs/architecture/domain-model\\.md)|](Domain-model${suf})|g" \
     -e "s|](docs/domain-model\\.md)|](Domain-model${suf})|g" \
+    -e "s|](docs/reference/api-inventory\\.md)|](API-reference${suf})|g" \
     -e "s|](docs/api-inventory\\.md)|](API-reference${suf})|g" \
+    -e "s|](docs/guides/wiki\\.md)|](Home${suf})|g" \
     -e "s|](docs/wiki\\.md)|](Home${suf})|g" \
     -e "s|](docs/sequences/)|](Sequences-index${suf})|g" \
     -e "s|](internal/config/config\\.go)|](${BLOB}/internal/config/config.go)|g" \
     -e "s|](LICENSE)|](${BLOB}/LICENSE)|g" \
-    -e "s|](\\../nginx-repair\\.md)|](Nginx-auto-repair${suf})|g" \
-    -e "s|](\\../nginx-repair_id\\.md)|](Nginx-auto-repair-id)|g" \
+    -e "s|](\\../architecture/overview\\.md)|](Architecture${suf})|g" \
+    -e "s|](\\../architecture/overview_id\\.md)|](Architecture-id)|g" \
+    -e "s|](\\../architecture/domain-model\\.md)|](Domain-model${suf})|g" \
+    -e "s|](\\../architecture/domain-model_id\\.md)|](Domain-model-id)|g" \
+    -e "s|](\\../reference/api-inventory\\.md)|](API-reference${suf})|g" \
+    -e "s|](\\../reference/api-inventory_id\\.md)|](API-reference-id)|g" \
+    -e "s|](\\../operations/nginx-repair\\.md)|](Nginx-auto-repair${suf})|g" \
+    -e "s|](\\../operations/nginx-repair_id\\.md)|](Nginx-auto-repair-id)|g" \
+    -e "s|](\\../guides/dev-mount-testing\\.md)|](Development${suf})|g" \
+    -e "s|](\\../guides/dev-mount-testing_id\\.md)|](Development-id)|g" \
+    -e "s|](\\../guides/wiki\\.md)|](Home${suf})|g" \
+    -e "s|](\\../guides/wiki_id\\.md)|](Home-id)|g" \
     -e "s|](\\../architecture\\.md)|](Architecture${suf})|g" \
     -e "s|](\\../architecture_id\\.md)|](Architecture-id)|g" \
+    -e "s|](\\../nginx-repair\\.md)|](Nginx-auto-repair${suf})|g" \
+    -e "s|](\\../nginx-repair_id\\.md)|](Nginx-auto-repair-id)|g" \
     -e "s|](\\../api-inventory\\.md)|](API-reference${suf})|g" \
     -e "s|](\\../wiki\\.md)|](Home${suf})|g" \
     -e "s|](\\../sequences/README\\.md)|](Sequences-index${suf})|g" \
@@ -328,10 +356,10 @@ export_lang() {
 
   build_home "$lang" "$OUT/Home${suf}.md"
 
-  copy_page "$(doc_path architecture.md "$lang")" "$OUT/Architecture${suf}.md"
-  copy_page "$(doc_path domain-model.md "$lang")" "$OUT/Domain-model${suf}.md"
-  copy_page "$(doc_path api-inventory.md "$lang")" "$OUT/API-reference${suf}.md"
-  copy_page "$(doc_path nginx-repair.md "$lang")" "$OUT/Nginx-auto-repair${suf}.md"
+  copy_page "$(doc_path architecture/overview.md "$lang")" "$OUT/Architecture${suf}.md"
+  copy_page "$(doc_path architecture/domain-model.md "$lang")" "$OUT/Domain-model${suf}.md"
+  copy_page "$(doc_path reference/api-inventory.md "$lang")" "$OUT/API-reference${suf}.md"
+  copy_page "$(doc_path operations/nginx-repair.md "$lang")" "$OUT/Nginx-auto-repair${suf}.md"
   copy_page "$(seq_path 02-tls-proxy.md "$lang")" "$OUT/Panel-routing${suf}.md"
   copy_page "$(seq_path 03-authentication.md "$lang")" "$OUT/Authentication${suf}.md"
   copy_page "$(seq_path 04-dashboard.md "$lang")" "$OUT/Dashboard${suf}.md"
@@ -365,10 +393,10 @@ export_lang() {
 
   if [[ "$lang" == id ]]; then
     combine "$OUT/Migration${suf}.md" "$DOCS/migration/README_id.md" "$DOCS/migration/backend-modules_id.md"
-    combine "$OUT/Development${suf}.md" "$DOCS/dev-mount-testing_id.md"
+    combine "$OUT/Development${suf}.md" "$DOCS/guides/dev-mount-testing_id.md"
   else
     combine "$OUT/Migration${suf}.md" "$DOCS/migration/README.md" "$DOCS/migration/backend-modules.md"
-    combine "$OUT/Development${suf}.md" "$DOCS/dev-mount-testing.md"
+    combine "$OUT/Development${suf}.md" "$DOCS/guides/dev-mount-testing.md"
   fi
 
   {

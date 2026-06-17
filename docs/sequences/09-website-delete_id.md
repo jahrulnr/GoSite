@@ -52,7 +52,7 @@ UI menampilkan konfirmasi sebelum delete.
 3. Hapus `site.d` config
 4. Hapus baris DB
 
-Reload memakai [nginx auto-repair](../nginx-repair_id.md) jika config lain rusak.
+Reload memakai [nginx auto-repair](../operations/nginx-repair_id.md) jika config lain rusak.
 
 ---
 

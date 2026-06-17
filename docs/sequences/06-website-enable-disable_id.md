@@ -42,7 +42,7 @@ Hanya file di `active.d/` yang dilayani sebagai vhost tambahan.
 ## Catatan
 
 - Toggle **memanggil `nginx reload`** (dengan test + auto-repair) — perbaikan dari legacy
-- Lihat [nginx-repair.md](../nginx-repair_id.md) untuk fallback jika config rusak
+- Lihat [nginx-repair.md](../operations/nginx-repair_id.md) untuk fallback jika config rusak
 
 ## GoSite
 

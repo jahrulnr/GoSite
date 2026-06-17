@@ -1,6 +1,6 @@
 # GoSite Architecture
 
-**Status:** Aligned with **v1.3.1** (plugin platform + remote install wave G). ADR: [architecture/plugin-platform.md](./architecture/plugin-platform.md).
+**Status:** Aligned with **v1.3.1** (plugin platform + remote install wave G). ADR: [plugin-platform.md](./plugin-platform.md).
 
 ## Current runtime
 
@@ -15,7 +15,7 @@ One Docker container runs **two independent listeners**. They do **not** proxy t
 
 - Panel users → **`https://<host>:8080`** (or `:1100` on BangunSoft) → `gosite` directly.
 - Website visitors → **`:80` / `:443`** → nginx only (static or `proxy_pass` upstream).
-- `gosite` **manages** nginx (write `site.d` / `active.d`, `nginx -t`, `nginx -s reload`, [nginx-repair](./nginx-repair.md)) but **hosted site traffic does not pass through gosite**.
+- `gosite` **manages** nginx (write `site.d` / `active.d`, `nginx -t`, `nginx -s reload`, [nginx-repair](../operations/nginx-repair.md)) but **hosted site traffic does not pass through gosite**.
 
 No PHP. No legacy BangunSite `server-proxy` binary.
 
@@ -47,13 +47,13 @@ flowchart TB
 
 ## Startup sequence
 
-Details: [sequences/01-container-startup.md](./sequences/01-container-startup.md)
+Details: [sequences/01-container-startup.md](../sequences/01-container-startup.md)
 
 `config/start.sh`:
 
 1. `gosite init` — storage layout, symlinks, migrate, seed
 2. Generate default self-signed SSL if missing
-3. **`gosite nginx-repair`** — `nginx -t` + auto-fix ([nginx-repair.md](./nginx-repair.md))
+3. **`gosite nginx-repair`** — `nginx -t` + auto-fix ([nginx-repair.md](../operations/nginx-repair.md))
 4. Stage `/var/setup` → `/etc/nginx`, `/storage/webconfig`
 5. `fstab_mounter.sh`
 6. `nginx` → `exec gosite serve` (two parallel processes; gosite supervises nginx reload)
@@ -73,7 +73,7 @@ Preact frontend (`web/`) calls `/api/v1/*` only. Navigation labels and feature f
 
 ### Hook bus (plugins)
 
-Before irreversible side effects (nginx reload, SSL issue, job run, Docker action), services dispatch lifecycle hooks to **enabled** tier-0 webhooks and tier-1 go-plugin subprocesses. See [plugin-platform.md](./architecture/plugin-platform.md) and [sequences/19-plugin-installer.md](./sequences/19-plugin-installer.md).
+Before irreversible side effects (nginx reload, SSL issue, job run, Docker action), services dispatch lifecycle hooks to **enabled** tier-0 webhooks and tier-1 go-plugin subprocesses. See [plugin-platform.md](./plugin-platform.md) and [sequences/19-plugin-installer.md](../sequences/19-plugin-installer.md).
 
 ## Backend modules
 
@@ -104,8 +104,8 @@ Before irreversible side effects (nginx reload, SSL issue, job run, Docker actio
 | `gosite init` | Storage layout, symlinks, migrate, demo seed |
 | `gosite migrate` | Apply SQL migrations only |
 | `gosite serve` | HTTP API + optional embedded SPA + in-process job worker |
-| `gosite nginx-repair` | `nginx -t` + safe auto-fix ([nginx-repair.md](./nginx-repair.md)) |
-| `gosite plugin list\|resolve\|install\|catalog` | Operator CLI over the same install APIs ([sequence 20](./sequences/20-plugin-remote-distribution-impl.md)) |
+| `gosite nginx-repair` | `nginx -t` + safe auto-fix ([nginx-repair.md](../operations/nginx-repair.md)) |
+| `gosite plugin list\|resolve\|install\|catalog` | Operator CLI over the same install APIs ([sequence 20](../sequences/20-plugin-remote-distribution-impl.md)) |
 
 Boot order in production: `start.sh` → `init` → `nginx-repair` → `nginx` → `gosite serve`.
 
@@ -127,7 +127,7 @@ Website validate uses isolated `config/webconfig/nginx.conf` (single vhost file,
 |---------|--------|
 | `/etc/letsencrypt` | `/storage/webconfig/ssl` |
 
-Certbot and website placeholder SSL share the `live/{domain}/` namespace. See [sequences/08-website-ssl.md](./sequences/08-website-ssl.md).
+Certbot and website placeholder SSL share the `live/{domain}/` namespace. See [sequences/08-website-ssl.md](../sequences/08-website-ssl.md).
 
 ## Persistent paths
 
@@ -147,11 +147,11 @@ Certbot and website placeholder SSL share the `live/{domain}/` namespace. See [s
 
 | Topic | Document |
 |-------|----------|
-| Plugin ADR | [architecture/plugin-platform.md](./architecture/plugin-platform.md) |
-| Installer + lifecycle | [sequences/19-plugin-installer.md](./sequences/19-plugin-installer.md) |
-| Remote distribution | [sequences/20-plugin-remote-distribution.md](./sequences/20-plugin-remote-distribution.md) |
-| API surface | [api-inventory.md](./api-inventory.md), `api/openapi.yaml` |
-| Doc maintenance | [DOCS-MAINTENANCE.md](./DOCS-MAINTENANCE.md) |
+| Plugin ADR | [plugin-platform.md](./plugin-platform.md) |
+| Installer + lifecycle | [sequences/19-plugin-installer.md](../sequences/19-plugin-installer.md) |
+| Remote distribution | [sequences/20-plugin-remote-distribution.md](../sequences/20-plugin-remote-distribution.md) |
+| API surface | [api-inventory.md](../reference/api-inventory.md), `api/openapi.yaml` |
+| Doc maintenance | [DOCS-MAINTENANCE.md](../DOCS-MAINTENANCE.md) |
 
 ## Legacy (BangunSite)
 

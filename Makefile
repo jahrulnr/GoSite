@@ -6,7 +6,7 @@ LDFLAGS := -X github.com/jahrulnr/gosite/internal/buildinfo.Version=$(VERSION)
 .PHONY: build test test-cover clean up down dev dev-api dev-fe build-fe build-docker dev-api-setup contract-check wiki-export
 
 wiki-export:
-	@bash docs/export-wiki.sh
+	@bash scripts/export-wiki.sh
 
 build-fe:
 	cd web && npm ci && npm run build

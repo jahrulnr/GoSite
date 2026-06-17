@@ -1,6 +1,6 @@
 # Arsitektur GoSite
 
-**Status:** Selaras **v1.3.1**. ADR plugin: [architecture/plugin-platform.md](./architecture/plugin-platform.md).
+**Status:** Selaras **v1.3.1**. ADR plugin: [plugin-platform.md](./plugin-platform.md).
 
 ## Runtime saat ini
 
@@ -15,7 +15,7 @@ Satu container Docker menjalankan **dua listener independen**. Traffic panel **t
 
 - Pengguna panel → **`https://<host>:8080`** (atau `:1100` di BangunSoft) → langsung ke `gosite`.
 - Pengunjung website → **`:80` / `:443`** → hanya nginx (static atau `proxy_pass`).
-- `gosite` **mengontrol** nginx (tulis config, `nginx -t`, reload, [nginx-repair](./nginx-repair_id.md)) — bukan reverse proxy untuk traffic website.
+- `gosite` **mengontrol** nginx (tulis config, `nginx -t`, reload, [nginx-repair](../operations/nginx-repair_id.md)) — bukan reverse proxy untuk traffic website.
 
 Tidak ada PHP. Tidak ada binary `server-proxy` legacy.
 
@@ -47,7 +47,7 @@ flowchart TB
 
 ## Startup sequence
 
-Detail: [sequences/01-container-startup.md](./sequences/01-container-startup_id.md)
+Detail: [sequences/01-container-startup.md](../sequences/01-container-startup_id.md)
 
 `config/start.sh`: `gosite init` → SSL default → `gosite nginx-repair` → stage nginx → `fstab_mounter` → **start nginx** → **exec gosite serve** (dua proses paralel).
 
