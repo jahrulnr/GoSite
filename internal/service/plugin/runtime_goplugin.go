@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,11 +35,11 @@ type GoPluginClientFactory func(ctx context.Context, artifactPath, pluginName st
 // is expected to import gosite/pkg/pluginrpc and call pluginrpc.Serve at
 // init() time. The host dispenses the client by the canonical magic
 // string and casts to pluginrpc.Plugin.
-func DefaultGoPluginClientFactory(ctx context.Context, artifactPath, pluginName string) (GoPluginClient, func() error, error) {
-	if pluginName == "" {
-		pluginName = "gosite"
+func DefaultGoPluginClientFactory(ctx context.Context, artifactPath, command string) (GoPluginClient, func() error, error) {
+	if strings.TrimSpace(command) == "" {
+		command = "plugin/gosite"
 	}
-	commandPath, args, err := resolvePluginCommand(filepath.Dir(artifactPath), "plugin/"+pluginName)
+	commandPath, args, err := resolvePluginCommand(filepath.Dir(artifactPath), command)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -60,6 +61,7 @@ func DefaultGoPluginClientFactory(ctx context.Context, artifactPath, pluginName 
 				MagicCookieKey:   "gosite",
 				MagicCookieValue: pluginrpc.HandshakeMagic,
 			},
+			Plugins:          pluginrpc.HostPluginMap(),
 			AllowedProtocols: []hplugin.Protocol{hplugin.ProtocolNetRPC},
 			Cmd:              exec.Command(commandPath, args...),
 			SyncStdout:       os.Stderr,
@@ -141,13 +143,13 @@ func NewGoPluginRuntimeManagerWithFactory(factory GoPluginClientFactory) *GoPlug
 // Start launches the plugin subprocess and dispenses the gRPC client.
 func (m *GoPluginRuntimeManager) Start(ctx context.Context, plugin sqlite.PluginVersion) error {
 	manifest := manifestFromRecord(plugin)
-	pluginName := manifest.Entrypoints["runtime"].Command
-	if pluginName == "" {
-		pluginName = "gosite"
+	command := manifest.Entrypoints["runtime"].Command
+	if strings.TrimSpace(command) == "" {
+		command = "plugin/gosite"
 	}
 	factoryCtx, cancel := context.WithTimeout(ctx, m.startTO)
 	defer cancel()
-	client, kill, err := m.factory(factoryCtx, plugin.ArtifactPath, pluginName)
+	client, kill, err := m.factory(factoryCtx, plugin.ArtifactPath, command)
 	if err != nil {
 		return err
 	}

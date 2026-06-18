@@ -99,6 +99,20 @@ func TestGoPluginRuntimeManagerStartAndStop(t *testing.T) {
 	require.Error(t, mgr.Health(ctx, record), "health after stop should fail")
 }
 
+func TestGoPluginRuntimeManagerUsesManifestRuntimeCommand(t *testing.T) {
+	t.Parallel()
+	var gotCommand string
+	mgr := NewGoPluginRuntimeManagerWithFactory(func(ctx context.Context, artifactPath, command string) (GoPluginClient, func() error, error) {
+		gotCommand = command
+		return &fakePlugin{healthOK: true}, func() error { return nil }, nil
+	})
+	record := samplePlugin()
+	record.ManifestJSON = `{"entrypoints":{"runtime":{"command":"plugin/gosite"}}}`
+	record.ArtifactPath = "/tmp/gosite-hello.zip"
+	require.NoError(t, mgr.Start(context.Background(), record))
+	assert.Equal(t, "plugin/gosite", gotCommand)
+}
+
 func TestGoPluginRuntimeManagerHookCaller(t *testing.T) {
 	t.Parallel()
 	plugin := &fakePlugin{healthOK: true}
