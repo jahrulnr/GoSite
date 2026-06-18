@@ -455,6 +455,8 @@ export function LogsView() {
         format={format}
         onFormatChange={setFormat}
         syntaxHint={syntaxHint}
+        syntaxTopics={meta.syntax_topics ?? []}
+        helpUrl={meta.help_url}
       />
       <EventStream events={events} loading={running} error={error} format={format} totalHits={totalHits} />
     </Page>

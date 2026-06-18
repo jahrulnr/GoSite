@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -134,7 +133,7 @@ func (s *Service) Query(ctx context.Context, req QueryRequest) (QueryResult, err
 	if err := validateTimeRange(req.From, req.To); err != nil {
 		return QueryResult{}, err
 	}
-	clauses, err := ParseQuery(req.Query)
+	filter, pipes, err := ParseSearch(req.Query)
 	if err != nil {
 		return QueryResult{}, apperror.Wrap(apperror.CodeQueryInvalid, err.Error(), err)
 	}
@@ -157,20 +156,30 @@ func (s *Service) Query(ctx context.Context, req QueryRequest) (QueryResult, err
 
 	switch source {
 	case SourceAudit:
-		events, totalHits, err = s.queryAudit(ctx, req, clauses, limit)
+		events, totalHits, err = s.queryAudit(ctx, req, filter, limit)
 	case SourceJob:
-		events, totalHits, err = s.queryJobs(ctx, req, clauses, limit)
+		events, totalHits, err = s.queryJobs(ctx, req, filter, limit)
 	case SourceAccess:
-		events, totalHits, err = s.queryLogs(ctx, req, sqlite.LogSourceAccess, clauses, limit)
+		events, totalHits, err = s.queryLogs(ctx, req, sqlite.LogSourceAccess, filter, limit)
 	case SourceError:
-		events, totalHits, err = s.queryLogs(ctx, req, sqlite.LogSourceError, clauses, limit)
+		events, totalHits, err = s.queryLogs(ctx, req, sqlite.LogSourceError, filter, limit)
 	case SourceAll:
-		events, totalHits, err = s.queryAll(ctx, req, clauses, limit)
+		events, totalHits, err = s.queryAll(ctx, req, filter, pipes, limit)
 	default:
 		return QueryResult{}, apperror.New(apperror.CodeQueryInvalid, "unknown source")
 	}
 	if err != nil {
 		return QueryResult{}, err
+	}
+
+	if source != SourceAll {
+		events = ApplyPipes(events, pipes)
+		for _, pipe := range pipes {
+			if pipe.Name == "head" {
+				totalHits = len(events)
+				break
+			}
+		}
 	}
 
 	return QueryResult{Hits: totalHits, Events: events}, nil
@@ -183,83 +192,82 @@ func validateTimeRange(from, to *time.Time) error {
 	return nil
 }
 
-func (s *Service) queryAudit(ctx context.Context, req QueryRequest, clauses []sqlite.FieldClause, limit int) ([]QueryEvent, int, error) {
-	wheres, args, err := sqlite.BuildAuditWhere(clauses)
+func (s *Service) queryAudit(ctx context.Context, req QueryRequest, filter FilterExpr, limit int) ([]QueryEvent, int, error) {
+	sqlFilter, err := CompileFilter(filter, SourceKindAudit)
 	if err != nil {
 		return nil, 0, apperror.Wrap(apperror.CodeQueryInvalid, err.Error(), err)
 	}
-	filter := sqlite.AuditFilter{
+	if !sqlFilter.Applicable {
+		return nil, 0, nil
+	}
+	auditFilter := sqlite.AuditFilter{
 		From: req.From, To: req.To,
-		Wheres: wheres, Args: args,
+		Wheres: sqlFilter.Wheres, Args: sqlFilter.Args,
 		Limit: limit, Offset: req.Offset,
 	}
-	count, err := s.audit.Count(ctx, filter)
+	count, err := s.audit.Count(ctx, auditFilter)
 	if err != nil {
 		return nil, 0, apperror.Wrap(apperror.CodeDatabase, "count audit logs", err)
 	}
-	rows, err := s.audit.List(ctx, filter)
+	rows, err := s.audit.List(ctx, auditFilter)
 	if err != nil {
 		return nil, 0, apperror.Wrap(apperror.CodeDatabase, "list audit logs", err)
 	}
 	return mapAuditEvents(rows), count, nil
 }
 
-func (s *Service) queryJobs(ctx context.Context, req QueryRequest, clauses []sqlite.FieldClause, limit int) ([]QueryEvent, int, error) {
-	wheres, args, err := buildJobWhere(clauses)
+func (s *Service) queryJobs(ctx context.Context, req QueryRequest, filter FilterExpr, limit int) ([]QueryEvent, int, error) {
+	sqlFilter, err := CompileFilter(filter, SourceKindJob)
 	if err != nil {
 		return nil, 0, apperror.Wrap(apperror.CodeQueryInvalid, err.Error(), err)
 	}
-	filter := sqlite.JobFilter{
+	if !sqlFilter.Applicable {
+		return nil, 0, nil
+	}
+	jobFilter := sqlite.JobFilter{
 		From: req.From, To: req.To,
-		Wheres: wheres, Args: args,
+		Wheres: sqlFilter.Wheres, Args: sqlFilter.Args,
 		Limit: limit, Offset: req.Offset,
 	}
-	count, err := s.jobs.Count(ctx, filter)
+	count, err := s.jobs.Count(ctx, jobFilter)
 	if err != nil {
 		return nil, 0, apperror.Wrap(apperror.CodeDatabase, "count job runs", err)
 	}
-	rows, err := s.jobs.List(ctx, filter)
+	rows, err := s.jobs.List(ctx, jobFilter)
 	if err != nil {
 		return nil, 0, apperror.Wrap(apperror.CodeDatabase, "list job runs", err)
 	}
 	return mapJobEvents(rows), count, nil
 }
 
-func (s *Service) queryLogs(ctx context.Context, req QueryRequest, logSource string, clauses []sqlite.FieldClause, limit int) ([]QueryEvent, int, error) {
-	clauses = applySiteScope(clauses, req.Site)
-	wheres, args, err := sqlite.BuildLogEventWhere(clauses)
+func (s *Service) queryLogs(ctx context.Context, req QueryRequest, logSource string, filter FilterExpr, limit int) ([]QueryEvent, int, error) {
+	kind := sourceKindForLog(logSource)
+	filter = WithSiteScope(filter, req.Site)
+	sqlFilter, err := CompileFilter(filter, kind)
 	if err != nil {
 		return nil, 0, apperror.Wrap(apperror.CodeQueryInvalid, err.Error(), err)
 	}
-	filter := sqlite.LogEventFilter{
+	if !sqlFilter.Applicable {
+		return nil, 0, nil
+	}
+	logFilter := sqlite.LogEventFilter{
 		Source: logSource,
 		From:   req.From, To: req.To,
-		Wheres: wheres, Args: args,
+		Wheres: sqlFilter.Wheres, Args: sqlFilter.Args,
 		Limit: limit, Offset: req.Offset,
 	}
-	count, err := s.logs.Count(ctx, filter)
+	count, err := s.logs.Count(ctx, logFilter)
 	if err != nil {
 		return nil, 0, apperror.Wrap(apperror.CodeDatabase, "count log events", err)
 	}
-	rows, err := s.logs.List(ctx, filter)
+	rows, err := s.logs.List(ctx, logFilter)
 	if err != nil {
 		return nil, 0, apperror.Wrap(apperror.CodeDatabase, "list log events", err)
 	}
 	return mapLogEvents(rows, logSource), count, nil
 }
 
-func applySiteScope(clauses []sqlite.FieldClause, site string) []sqlite.FieldClause {
-	site = strings.TrimSpace(site)
-	if site == "" {
-		return clauses
-	}
-	out := make([]sqlite.FieldClause, 0, len(clauses)+1)
-	out = append(out, clauses...)
-	out = append(out, sqlite.LikeClause("site", site))
-	return out
-}
-
-func (s *Service) queryAll(ctx context.Context, req QueryRequest, clauses []sqlite.FieldClause, limit int) ([]QueryEvent, int, error) {
+func (s *Service) queryAll(ctx context.Context, req QueryRequest, filter FilterExpr, pipes []PipeCmd, limit int) ([]QueryEvent, int, error) {
 	fetch := limit + req.Offset
 	if fetch <= 0 {
 		fetch = 100
@@ -280,22 +288,32 @@ func (s *Service) queryAll(ctx context.Context, req QueryRequest, clauses []sqli
 		src := src
 		go func() {
 			sub := req
-			sub.Source = src
-			sub.Limit = fetch
 			sub.Offset = 0
-			res, err := s.Query(ctx, sub)
-			ch <- result{events: res.Events, hits: res.Hits, err: err}
+			var (
+				events []QueryEvent
+				hits   int
+				err    error
+			)
+			switch src {
+			case SourceAudit:
+				events, hits, err = s.queryAudit(ctx, sub, filter, fetch)
+			case SourceJob:
+				events, hits, err = s.queryJobs(ctx, sub, filter, fetch)
+			case SourceAccess:
+				events, hits, err = s.queryLogs(ctx, sub, sqlite.LogSourceAccess, filter, fetch)
+			case SourceError:
+				events, hits, err = s.queryLogs(ctx, sub, sqlite.LogSourceError, filter, fetch)
+			}
+			ch <- result{events: events, hits: hits, err: err}
 		}()
 	}
 
 	merged := make([]QueryEvent, 0, fetch)
-	total := 0
 	for range sources {
 		res := <-ch
 		if res.err != nil {
 			return nil, 0, res.err
 		}
-		total += res.hits
 		merged = append(merged, res.events...)
 	}
 
@@ -310,55 +328,9 @@ func (s *Service) queryAll(ctx context.Context, req QueryRequest, clauses []sqli
 	if end > len(merged) {
 		end = len(merged)
 	}
-	return merged[start:end], total, nil
-}
-func buildJobWhere(clauses []sqlite.FieldClause) (wheres []string, args []interface{}, err error) {
-	columns := map[string]string{
-		"job_type": "job_type",
-		"type":     "job_type",
-		"name":     "name",
-		"status":   "status",
-		"output":   "output",
-		"error":    "error",
-		"message":  "name",
-	}
-	for _, c := range clauses {
-		if c.Field == "_text" {
-			if c.Kind == sqlite.RegexpClauseKind {
-				w, a := sqlite.BuildFreeTextRegexpWhere([]string{"name", "output", "error", "job_type"}, c.Value)
-				wheres = append(wheres, w)
-				args = append(args, a...)
-				continue
-			}
-			w, a := sqlite.BuildFreeTextWhere([]string{"name", "output", "error", "job_type"}, c.Value)
-			wheres = append(wheres, w)
-			args = append(args, a...)
-			continue
-		}
-		col, ok := columns[c.Field]
-		if !ok {
-			return nil, nil, fmt.Errorf("unknown job field %q", c.Field)
-		}
-		if c.Kind == sqlite.RegexpClauseKind {
-			wheres = append(wheres, col+` REGEXP ?`)
-			args = append(args, c.Value)
-			continue
-		}
-		w, a := sqliteLike(col, c.Value)
-		wheres = append(wheres, w)
-		args = append(args, a)
-	}
-	return wheres, args, nil
-}
-
-func sqliteLike(column, pattern string) (string, interface{}) {
-	if strings.Contains(pattern, "*") {
-		escaped := strings.ReplaceAll(pattern, `%`, `\%`)
-		escaped = strings.ReplaceAll(escaped, `_`, `\_`)
-		escaped = strings.ReplaceAll(escaped, `*`, `%`)
-		return column + ` LIKE ? ESCAPE '\'`, escaped
-	}
-	return column + ` = ?`, pattern
+	sliced := merged[start:end]
+	sliced = ApplyPipes(sliced, pipes)
+	return sliced, len(sliced), nil
 }
 
 func mapAuditEvents(rows []sqlite.AuditLog) []QueryEvent {
@@ -460,7 +432,7 @@ func (s *Service) SaveQuery(ctx context.Context, name, source, query string) (sq
 	if strings.TrimSpace(name) == "" {
 		return sqlite.SavedQuery{}, apperror.New(apperror.CodeInvalidInput, "name required")
 	}
-	if _, err := ParseQuery(query); err != nil && strings.TrimSpace(query) != "" {
+	if _, _, err := ParseSearch(query); err != nil && strings.TrimSpace(query) != "" {
 		return sqlite.SavedQuery{}, apperror.Wrap(apperror.CodeQueryInvalid, err.Error(), err)
 	}
 	return s.saved.Create(ctx, name, source, query)
@@ -493,13 +465,13 @@ func (s *Service) PurgeRetention(ctx context.Context, now time.Time) error {
 }
 
 // UpdateSavedQuery partially updates a saved query by id. Empty fields are
-// ignored. The new query, if provided, is validated via ParseQuery.
+// ignored. The new query, if provided, is validated via ParseSearch.
 func (s *Service) UpdateSavedQuery(ctx context.Context, id int64, name, source, query string) (sqlite.SavedQuery, error) {
 	if s.saved == nil {
 		return sqlite.SavedQuery{}, apperror.New(apperror.CodeInternal, "saved query repository not configured")
 	}
 	if query != "" {
-		if _, err := ParseQuery(query); err != nil {
+		if _, _, err := ParseSearch(query); err != nil {
 			return sqlite.SavedQuery{}, apperror.Wrap(apperror.CodeQueryInvalid, err.Error(), err)
 		}
 	}
@@ -554,7 +526,7 @@ func (s *Service) TailQuery(ctx context.Context, source, site, query string, ch 
 			return err
 		}
 	}
-	clauses, err := ParseQuery(query)
+	filter, _, err := ParseSearch(query)
 	if err != nil {
 		return apperror.Wrap(apperror.CodeQueryInvalid, err.Error(), err)
 	}
@@ -611,7 +583,7 @@ func (s *Service) TailQuery(ctx context.Context, source, site, query string, ch 
 				s.tailMu.Lock()
 				since := s.tailCursor[tailKey(src, site)]
 				s.tailMu.Unlock()
-				maxTS, err := s.tailOne(ctx, src, site, since, clauses, ch)
+				maxTS, err := s.tailOne(ctx, src, site, since, filter, ch)
 				if err != nil {
 					if ctx.Err() != nil {
 						return nil
@@ -658,13 +630,18 @@ const tailReconnectGap = 30 * time.Second
 
 // tailOne queries the named source for rows newer than `since`, maps them to
 // QueryEvents, sends them on ch, and returns the max ts observed.
-func (s *Service) tailOne(ctx context.Context, source, site string, since time.Time, clauses []sqlite.FieldClause, ch chan<- QueryEvent) (time.Time, error) {
+func (s *Service) tailOne(ctx context.Context, source, site string, since time.Time, filter FilterExpr, ch chan<- QueryEvent) (time.Time, error) {
 	var maxTS time.Time
+	kind := sourceKindForName(source)
+	if source == SourceAccess || source == SourceError {
+		kind = sourceKindForLog(source)
+		filter = WithSiteScope(filter, site)
+	}
 	record := func(ev QueryEvent) bool {
 		if ev.TS.After(maxTS) {
 			maxTS = ev.TS
 		}
-		if !eventMatchesClauses(ev, clauses) {
+		if !EvalFilter(filter, ev, kind) {
 			return true
 		}
 		return sendCtx(ctx, ch, ev)
@@ -711,68 +688,6 @@ func (s *Service) tailOne(ctx context.Context, source, site string, since time.T
 		}
 	}
 	return maxTS, nil
-}
-
-func eventMatchesClauses(ev QueryEvent, clauses []sqlite.FieldClause) bool {
-	for _, clause := range clauses {
-		value, ok := eventFieldValue(ev, clause.Field)
-		if !ok {
-			return false
-		}
-		switch clause.Kind {
-		case sqlite.RegexpClauseKind:
-			matched, err := regexp.MatchString(clause.Value, value)
-			if err != nil || !matched {
-				return false
-			}
-		default:
-			if !matchTailPattern(value, clause.Value) {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-func eventFieldValue(ev QueryEvent, field string) (string, bool) {
-	field = strings.ToLower(strings.TrimSpace(field))
-	switch field {
-	case "_text":
-		parts := []string{ev.Source, ev.Action, ev.User, ev.Message}
-		for key, value := range ev.Meta {
-			parts = append(parts, key, fmt.Sprint(value))
-		}
-		return strings.Join(parts, " "), true
-	case "source":
-		return ev.Source, true
-	case "action", "job_type", "type":
-		return ev.Action, true
-	case "user", "email":
-		return ev.User, true
-	case "message", "output", "error", "name":
-		return ev.Message, true
-	default:
-		if ev.Meta == nil {
-			return "", false
-		}
-		value, ok := ev.Meta[field]
-		if !ok {
-			return "", false
-		}
-		return fmt.Sprint(value), true
-	}
-}
-
-func matchTailPattern(value, pattern string) bool {
-	value = strings.ToLower(value)
-	pattern = strings.ToLower(pattern)
-	if strings.Contains(pattern, "*") {
-		re := regexp.QuoteMeta(pattern)
-		re = strings.ReplaceAll(re, `\*`, ".*")
-		matched, err := regexp.MatchString("^"+re+"$", value)
-		return err == nil && matched
-	}
-	return value == pattern || strings.Contains(value, pattern)
 }
 
 // sendCtx pushes ev to ch or returns false if the context was cancelled.

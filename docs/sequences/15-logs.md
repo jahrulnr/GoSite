@@ -43,7 +43,7 @@ Format `main` from `config/nginx/custom.d/nginx-log.conf`.
 
 ### Integrasi observability
 
-- **Splunk Lite** — ingest + query log events ([17-splunk-lite.md](./17-splunk-lite.md))
+- **Splunk Lite** — ingest + query log events ([17-splunk-lite.md](./17-splunk-lite.md), [log search guide](../guides/log-search.md))
 - **Grafana Lite** — aggregate traffic from access log ([18-grafana-lite.md](./18-grafana-lite.md))
 - **Nginx metrics** — stub_status + VTS poll localhost ([22-nginx-metrics.md](./22-nginx-metrics.md))
 - **Dashboard fallback** — `GET /system/nginx-traffic` parse access log langsung

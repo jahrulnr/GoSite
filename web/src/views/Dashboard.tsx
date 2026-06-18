@@ -2,7 +2,7 @@ import { dashboard, system } from '../api/endpoints';
 import type { TrafficSite } from '../api/types';
 import { AsyncView, Badge, EmptyState } from '../components/Ui';
 import { Card, Page, Stat, siteTraffic } from '../components/Layout';
-import { formatBytes, formatDate, formatKiB, formatNumber, formatPercent, formatDiskSectors } from '../lib/format';
+import { formatBytes, formatDate, formatKiB, formatNumber, formatPercent, formatDiskSectors, formatRate } from '../lib/format';
 import { useAsync, useInterval } from '../lib/hooks';
 
 function MetricTile({
@@ -65,7 +65,7 @@ export function DashboardView() {
 
               {data.nginx_status?.available && (
                 <div class="grid cols-4">
-                  <MetricTile label="Nginx active" value={formatNumber(data.nginx_status.active)} sub={`${data.nginx_status.request_rate_per_sec != null ? data.nginx_status.request_rate_per_sec.toFixed(2) : '—'} req/s`} tone="info" />
+                  <MetricTile label="Nginx active" value={formatNumber(data.nginx_status.active)} sub={`${formatRate(data.nginx_status.request_rate_per_sec)} req/s`} tone="info" />
                   <MetricTile label="Reading" value={formatNumber(data.nginx_status.reading)} sub="stub_status" />
                   <MetricTile label="Writing" value={formatNumber(data.nginx_status.writing)} sub="stub_status" />
                   <MetricTile label="Waiting" value={formatNumber(data.nginx_status.waiting)} sub="keep-alive idle" />

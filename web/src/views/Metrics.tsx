@@ -3,7 +3,7 @@ import { metrics } from '../api/endpoints';
 import { AsyncView, EmptyState } from '../components/Ui';
 import { Card, Page, SimpleRows, Stat } from '../components/Layout';
 import { Sparkline } from '../components/Sparkline';
-import { formatBytes, formatNumber } from '../lib/format';
+import { formatBytes, formatNumber, formatRate } from '../lib/format';
 import { useAsync, useInterval } from '../lib/hooks';
 import { useStore } from '../lib/store';
 
@@ -96,7 +96,7 @@ function TrafficPanel({ range }: Readonly<{ range: string }>) {
             ) : (
               <div class="grid cols-2">
                 {requestSeries.map(([site, points]) => (
-                  <Sparkline key={site} label={site} points={points} />
+                  <Sparkline key={site} label={site} points={points} formatValue={(n) => formatNumber(n)} />
                 ))}
               </div>
             )
@@ -111,7 +111,7 @@ function TrafficPanel({ range }: Readonly<{ range: string }>) {
             ) : (
               <div class="grid cols-2">
                 {byteSeries.map(([site, points]) => (
-                  <Sparkline key={site} label={site} points={points} stroke="var(--info)" />
+                  <Sparkline key={site} label={site} points={points} stroke="var(--info)" formatValue={formatBytes} />
                 ))}
               </div>
             )
@@ -146,9 +146,9 @@ function NginxPanel({ range }: Readonly<{ range: string }>) {
                 <Stat label="Waiting" value={formatNumber(data.waiting)} sub="Keep-alive idle" />
               </div>
               <div class="grid cols-4">
-                <Stat label="Req/s" value={data.request_rate_per_sec != null ? data.request_rate_per_sec.toFixed(2) : '—'} tone="warn" sub="Δrequests / Δtime" />
-                <Stat label="Accept/s" value={data.accept_rate_per_sec != null ? data.accept_rate_per_sec.toFixed(2) : '—'} sub="Δaccepts / Δtime" />
-                <Stat label="Handled/s" value={data.handled_rate_per_sec != null ? data.handled_rate_per_sec.toFixed(2) : '—'} sub="Δhandled / Δtime" />
+                <Stat label="Req/s" value={formatRate(data.request_rate_per_sec)} tone="warn" sub="Δrequests / Δtime" />
+                <Stat label="Accept/s" value={formatRate(data.accept_rate_per_sec)} sub="Δaccepts / Δtime" />
+                <Stat label="Handled/s" value={formatRate(data.handled_rate_per_sec)} sub="Δhandled / Δtime" />
                 <Stat label="Dropped" value={formatNumber(data.dropped_connections)} tone={data.dropped_connections > 0 ? 'danger' : undefined} sub="accepts − handled" />
               </div>
             </div>
@@ -164,28 +164,18 @@ function NginxPanel({ range }: Readonly<{ range: string }>) {
               (data.active?.length ?? 0) === 0 ? (
                 <EmptyState title="No connection series" />
               ) : (
-                <Sparkline label="active" points={data.active} />
+                <Sparkline label="active" points={data.active} formatValue={(n) => formatNumber(n)} />
               )
             )}
           </AsyncView>
         </Card>
-        <Card title="Request rate (req/s)">
-          <AsyncView state={current}>
-            {(data) => data.available && (
-              <div class="col" style="gap:8px;margin-bottom:12px;">
-                <div class="mono" style="font-size:28px;color:var(--accent);">
-                  {data.request_rate_per_sec != null ? data.request_rate_per_sec.toFixed(2) : '—'}
-                </div>
-                <div class="dim mono" style="font-size:11px;">from stub_status cumulative counter</div>
-              </div>
-            )}
-          </AsyncView>
+        <Card title="Request rate (req/s)" actions={<span class="dim mono" style="font-size:11px;">stub_status counter</span>}>
           <AsyncView state={series}>
             {(data) => (
               (data.request_rate?.length ?? 0) === 0 ? (
                 <EmptyState title="No rate series" />
               ) : (
-                <Sparkline label="req/s" points={data.request_rate} stroke="var(--warn)" />
+                <Sparkline label="req/s" points={data.request_rate} stroke="var(--warn)" formatValue={formatRate} />
               )
             )}
           </AsyncView>
@@ -198,9 +188,9 @@ function NginxPanel({ range }: Readonly<{ range: string }>) {
               <EmptyState title="No state series" />
             ) : (
               <div class="grid cols-3">
-                <Sparkline label="reading" points={data.reading} stroke="var(--info)" />
-                <Sparkline label="writing" points={data.writing} stroke="var(--accent)" />
-                <Sparkline label="waiting" points={data.waiting} stroke="var(--text-dim)" />
+                <Sparkline label="reading" points={data.reading} stroke="var(--info)" formatValue={(n) => formatNumber(n)} />
+                <Sparkline label="writing" points={data.writing} stroke="var(--accent)" formatValue={(n) => formatNumber(n)} />
+                <Sparkline label="waiting" points={data.waiting} stroke="var(--text-dim)" formatValue={(n) => formatNumber(n)} />
               </div>
             )
           )}

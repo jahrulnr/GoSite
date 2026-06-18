@@ -135,49 +135,6 @@ func (r *AuditRepository) Count(ctx context.Context, f AuditFilter) (int, error)
 	return count, nil
 }
 
-// BuildAuditWhere converts parsed field clauses into SQL fragments.
-// Clauses with `Kind == RegexpClauseKind` emit `column REGEXP ?`; everything
-// else is treated as a LIKE/= match.
-func BuildAuditWhere(clauses []FieldClause) (wheres []string, args []interface{}, err error) {
-	columns := map[string]string{
-		"user":          "user_email",
-		"user_email":    "user_email",
-		"action":        "action",
-		"resource_type": "resource_type",
-		"resource_id":   "resource_id",
-		"domain":        "domain",
-		"status":        "status",
-		"message":       "message",
-	}
-	for _, c := range clauses {
-		if c.Field == "_text" {
-			if c.Kind == RegexpClauseKind {
-				w, a := BuildFreeTextRegexpWhere([]string{"user_email", "action", "message"}, c.Value)
-				wheres = append(wheres, w)
-				args = append(args, a...)
-				continue
-			}
-			w, a := BuildFreeTextWhere([]string{"user_email", "action", "message"}, c.Value)
-			wheres = append(wheres, w)
-			args = append(args, a...)
-			continue
-		}
-		col, ok := columns[c.Field]
-		if !ok {
-			return nil, nil, fmt.Errorf("unknown audit field %q", c.Field)
-		}
-		if c.Kind == RegexpClauseKind {
-			wheres = append(wheres, col+` REGEXP ?`)
-			args = append(args, c.Value)
-			continue
-		}
-		w, a := likeClause(col, c.Value)
-		wheres = append(wheres, w)
-		args = append(args, a)
-	}
-	return wheres, args, nil
-}
-
 // Recent returns the newest audit entries up to limit.
 func (r *AuditRepository) Recent(ctx context.Context, limit int) ([]AuditLog, error) {
 	if limit <= 0 {

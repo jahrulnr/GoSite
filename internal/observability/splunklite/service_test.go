@@ -51,65 +51,6 @@ func migrationsDir(t *testing.T) string {
 	return filepath.Clean(filepath.Join("..", "..", "..", "migrations"))
 }
 
-func TestQueryParser_Wildcard(t *testing.T) {
-	t.Parallel()
-
-	clauses, err := splunklite.ParseQuery(`user:admin@* action:website.* status:ok`)
-	require.NoError(t, err)
-	require.Len(t, clauses, 3)
-	assert.Equal(t, "user", clauses[0].Field)
-	assert.Equal(t, "admin@*", clauses[0].Value)
-	assert.Equal(t, "website.*", clauses[1].Value)
-}
-
-func TestQueryParser_Empty(t *testing.T) {
-	t.Parallel()
-
-	clauses, err := splunklite.ParseQuery("   ")
-	require.NoError(t, err)
-	assert.Nil(t, clauses)
-}
-
-func TestQueryParser_StarMatchesAll(t *testing.T) {
-	t.Parallel()
-
-	clauses, err := splunklite.ParseQuery("*")
-	require.NoError(t, err)
-	assert.Nil(t, clauses)
-}
-
-func TestQueryParser_FreeText(t *testing.T) {
-	t.Parallel()
-
-	clauses, err := splunklite.ParseQuery("login")
-	require.NoError(t, err)
-	require.Len(t, clauses, 1)
-	assert.Equal(t, "_text", clauses[0].Field)
-	assert.Equal(t, "login", clauses[0].Value)
-}
-
-func TestQueryParser_InvalidToken(t *testing.T) {
-	t.Parallel()
-
-	_, err := splunklite.ParseQuery("action:")
-	require.Error(t, err)
-}
-
-func TestQueryParser_InvalidFieldName(t *testing.T) {
-	t.Parallel()
-
-	_, err := splunklite.ParseQuery("9bad:value")
-	require.Error(t, err)
-}
-
-func TestQueryParser_MultipleClauses(t *testing.T) {
-	t.Parallel()
-
-	clauses, err := splunklite.ParseQuery("action:vhost.update user:admin@* domain:bangunsoft.com status:failed")
-	require.NoError(t, err)
-	assert.Len(t, clauses, 4)
-}
-
 func TestQuery_TimeRangeInverted(t *testing.T) {
 	t.Parallel()
 
@@ -127,18 +68,23 @@ func TestQuery_TimeRangeInverted(t *testing.T) {
 	assert.Equal(t, apperror.CodeTimeRangeInvalid, appErr.Code)
 }
 
-func TestQuery_UnknownField(t *testing.T) {
+func TestQuery_UnknownFieldSkipped(t *testing.T) {
 	t.Parallel()
 
 	env := setupSplunk(t)
-	_, err := env.svc.Query(context.Background(), splunklite.QueryRequest{
+	ctx := context.Background()
+	writer := splunklite.NewAuditWriter(env.audit)
+	require.NoError(t, writer.Write(ctx, contracts.AuditEntry{
+		Action: "website.create", Status: "ok", Message: "ok",
+	}))
+
+	res, err := env.svc.Query(ctx, splunklite.QueryRequest{
 		Source: "audit",
-		Query:  "bogus:value",
+		Query:  "bogus=field",
 	})
-	require.Error(t, err)
-	var appErr *apperror.Error
-	require.ErrorAs(t, err, &appErr)
-	assert.Equal(t, apperror.CodeQueryInvalid, appErr.Code)
+	require.NoError(t, err)
+	assert.Equal(t, 0, res.Hits)
+	assert.Empty(t, res.Events)
 }
 
 func TestAudit_WriteOnMutation(t *testing.T) {
@@ -232,7 +178,7 @@ func TestQuery_JobSource(t *testing.T) {
 
 	res, err := env.svc.Query(ctx, splunklite.QueryRequest{
 		Source: "job",
-		Query:  "type:ssl.* status:ok",
+		Query:  "job_type=ssl.* status=ok",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 1, res.Hits)
@@ -257,7 +203,7 @@ func TestQuery_LogSource(t *testing.T) {
 
 	res, err := env.svc.Query(ctx, splunklite.QueryRequest{
 		Source: "access",
-		Query:  "site:example.test status:404",
+		Query:  "site=example.test status=404",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 1, res.Hits)
@@ -279,19 +225,99 @@ func TestQuery_AllSourcesMerge(t *testing.T) {
 	assert.NotEmpty(t, res.Events)
 }
 
+func TestQuery_AllSources_StatusCodeSkipsAudit(t *testing.T) {
+	t.Parallel()
+
+	env := setupSplunk(t)
+	ctx := context.Background()
+	writer := splunklite.NewAuditWriter(env.audit)
+	require.NoError(t, writer.Write(ctx, contracts.AuditEntry{
+		Action: "website.create", Status: "ok", Message: "audit row",
+	}))
+
+	code := 302
+	_, err := env.logs.Insert(ctx, sqlite.LogEvent{
+		Timestamp:  time.Now().UTC(),
+		Source:     sqlite.LogSourceAccess,
+		Site:       "bangunsoft.com",
+		StatusCode: &code,
+		RawPreview: `GET /old 302`,
+	})
+	require.NoError(t, err)
+
+	res, err := env.svc.Query(ctx, splunklite.QueryRequest{
+		Source: "all",
+		Query:  `status=/^3\d{2}$/`,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, res.Hits)
+	require.Len(t, res.Events, 1)
+	assert.Equal(t, "access", res.Events[0].Source)
+}
+
+func TestQuery_Access_StatusCodeRegexp(t *testing.T) {
+	t.Parallel()
+
+	env := setupSplunk(t)
+	ctx := context.Background()
+	for _, code := range []int{200, 302, 404} {
+		status := code
+		_, err := env.logs.Insert(ctx, sqlite.LogEvent{
+			Timestamp:  time.Now().UTC(),
+			Source:     sqlite.LogSourceAccess,
+			Site:       "bangunsoft.com",
+			StatusCode: &status,
+			RawPreview: "sample",
+		})
+		require.NoError(t, err)
+	}
+
+	res, err := env.svc.Query(ctx, splunklite.QueryRequest{
+		Source: "access",
+		Site:   "bangunsoft.com",
+		Query:  `status=/^3\d{2}$/`,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, res.Hits)
+}
+
+func TestQuery_Access_StatusCodeWildcard(t *testing.T) {
+	t.Parallel()
+
+	env := setupSplunk(t)
+	ctx := context.Background()
+	code := 301
+	_, err := env.logs.Insert(ctx, sqlite.LogEvent{
+		Timestamp:  time.Now().UTC(),
+		Source:     sqlite.LogSourceAccess,
+		Site:       "bangunsoft.com",
+		StatusCode: &code,
+		RawPreview: `GET /moved 301`,
+	})
+	require.NoError(t, err)
+
+	res, err := env.svc.Query(ctx, splunklite.QueryRequest{
+		Source: "access",
+		Site:   "bangunsoft.com",
+		Query:  `status=3*`,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, res.Hits)
+}
+
 func TestSaveQuery_Persists(t *testing.T) {
 	t.Parallel()
 
 	env := setupSplunk(t)
 	ctx := context.Background()
-	q, err := env.svc.SaveQuery(ctx, "failed ssl", "job", "status:failed")
+	q, err := env.svc.SaveQuery(ctx, "failed ssl", "job", "status=failed")
 	require.NoError(t, err)
 	assert.Equal(t, "failed ssl", q.Name)
 
 	list, err := env.svc.ListSavedQueries(ctx)
 	require.NoError(t, err)
 	require.Len(t, list, 1)
-	assert.Equal(t, "status:failed", list[0].Query)
+	assert.Equal(t, "status=failed", list[0].Query)
 }
 
 func TestRecentAudit_ReturnsLatest(t *testing.T) {
@@ -352,35 +378,6 @@ func TestQuery_UnknownSource(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestQueryParser_RegexField(t *testing.T) {
-	t.Parallel()
-
-	clauses, err := splunklite.ParseQuery(`action:/^login.*/`)
-	require.NoError(t, err)
-	require.Len(t, clauses, 1)
-	assert.Equal(t, "action", clauses[0].Field)
-	assert.Equal(t, "^login.*", clauses[0].Value)
-	assert.Equal(t, sqlite.RegexpClauseKind, clauses[0].Kind)
-}
-
-func TestQueryParser_RegexBareword(t *testing.T) {
-	t.Parallel()
-
-	clauses, err := splunklite.ParseQuery(`/timeout|500/`)
-	require.NoError(t, err)
-	require.Len(t, clauses, 1)
-	assert.Equal(t, "_text", clauses[0].Field)
-	assert.Equal(t, "timeout|500", clauses[0].Value)
-	assert.Equal(t, sqlite.RegexpClauseKind, clauses[0].Kind)
-}
-
-func TestQueryParser_InvalidRegex(t *testing.T) {
-	t.Parallel()
-
-	_, err := splunklite.ParseQuery(`/[invalid/`)
-	require.Error(t, err)
-}
-
 func TestQuery_RegexAudit(t *testing.T) {
 	t.Parallel()
 
@@ -400,7 +397,7 @@ func TestQuery_RegexAudit(t *testing.T) {
 
 	res, err := env.svc.Query(ctx, splunklite.QueryRequest{
 		Source: "audit",
-		Query:  `action:/^website\..*/`,
+		Query:  `action=/^website\..*/`,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 1, res.Hits)
@@ -422,7 +419,7 @@ func TestQuery_RegexLogEvent(t *testing.T) {
 
 	res, err := env.svc.Query(ctx, splunklite.QueryRequest{
 		Source: "access",
-		Query:  `message:/missing/`,
+		Query:  `message=/missing/`,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 1, res.Hits)
@@ -433,13 +430,13 @@ func TestUpdateSavedQuery(t *testing.T) {
 
 	env := setupSplunk(t)
 	ctx := context.Background()
-	q, err := env.svc.SaveQuery(ctx, "renamed", "job", "status:failed")
+	q, err := env.svc.SaveQuery(ctx, "renamed", "job", "status=failed")
 	require.NoError(t, err)
 
 	updated, err := env.svc.UpdateSavedQuery(ctx, q.ID, "renamed v2", "", "")
 	require.NoError(t, err)
 	assert.Equal(t, "renamed v2", updated.Name)
-	assert.Equal(t, "status:failed", updated.Query)
+	assert.Equal(t, "status=failed", updated.Query)
 
 	list, err := env.svc.ListSavedQueries(ctx)
 	require.NoError(t, err)
@@ -463,7 +460,7 @@ func TestUpdateSavedQuery_InvalidQuery(t *testing.T) {
 
 	env := setupSplunk(t)
 	ctx := context.Background()
-	q, err := env.svc.SaveQuery(ctx, "ok", "job", "status:ok")
+	q, err := env.svc.SaveQuery(ctx, "ok", "job", "status=ok")
 	require.NoError(t, err)
 
 	_, err = env.svc.UpdateSavedQuery(ctx, q.ID, "", "", `/[invalid/`)
@@ -478,7 +475,7 @@ func TestDeleteSavedQuery(t *testing.T) {
 
 	env := setupSplunk(t)
 	ctx := context.Background()
-	q, err := env.svc.SaveQuery(ctx, "doomed", "job", "status:failed")
+	q, err := env.svc.SaveQuery(ctx, "doomed", "job", "status=failed")
 	require.NoError(t, err)
 
 	require.NoError(t, env.svc.DeleteSavedQuery(ctx, q.ID))

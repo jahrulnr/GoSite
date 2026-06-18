@@ -71,6 +71,10 @@ rewrite_links() {
     -e "s|](\\./reference/plugin-permissions_id\\.md)|](Plugin-permissions-id)|g" \
     -e "s|](\\./operations/nginx-repair\\.md)|](Nginx-auto-repair${suf})|g" \
     -e "s|](\\./operations/nginx-repair_id\\.md)|](Nginx-auto-repair-id)|g" \
+    -e "s|](\\./guides/log-search\\.md)|](Log-search${suf})|g" \
+    -e "s|](\\./guides/log-search_id\\.md)|](Log-search-id)|g" \
+    -e "s|](\\./log-search\\.md)|](Log-search${suf})|g" \
+    -e "s|](\\./log-search_id\\.md)|](Log-search-id)|g" \
     -e "s|](\\./guides/dev-mount-testing\\.md)|](Development${suf})|g" \
     -e "s|](\\./guides/dev-mount-testing_id\\.md)|](Development-id)|g" \
     -e "s|](\\./architecture\\.md)|](Architecture${suf})|g" \
@@ -368,6 +372,7 @@ export_lang() {
   copy_page "$(doc_path reference/api-inventory.md "$lang")" "$OUT/API-reference${suf}.md"
   copy_page "$(doc_path reference/plugin-permissions.md "$lang")" "$OUT/Plugin-permissions${suf}.md"
   copy_page "$(doc_path operations/nginx-repair.md "$lang")" "$OUT/Nginx-auto-repair${suf}.md"
+  copy_page "$(doc_path guides/log-search.md "$lang")" "$OUT/Log-search${suf}.md"
   copy_page "$(seq_path 02-tls-proxy.md "$lang")" "$OUT/Panel-routing${suf}.md"
   copy_page "$(seq_path 03-authentication.md "$lang")" "$OUT/Authentication${suf}.md"
   copy_page "$(seq_path 04-dashboard.md "$lang")" "$OUT/Dashboard${suf}.md"
@@ -447,6 +452,7 @@ write_sidebars() {
 - Dashboard · [EN](Dashboard) · [ID](Dashboard-id)
 - Operations · [EN](Operations) · [ID](Operations-id)
 - Observability · [EN](Observability) · [ID](Observability-id)
+- Log search · [EN](Log-search) · [ID](Log-search-id)
 
 ### Extensions
 - Plugin installer · [EN](Plugin-installer) · [ID](Plugin-installer-id)

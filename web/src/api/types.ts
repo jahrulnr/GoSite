@@ -443,19 +443,36 @@ export interface QueryOption {
   [k: string]: unknown;
 }
 
+export interface SyntaxTopic {
+  title: string;
+  syntax: string;
+  example?: string;
+  note?: string;
+}
+
+export interface QueryFieldMeta {
+  name: string;
+  label: string;
+  placeholder?: string;
+}
+
 export interface QuerySourceMeta {
   id: string;
   label: string;
   group: string;
   description: string;
+  search_profile?: 'structured' | 'text';
+  log_path?: string;
   query: { source: string; site?: string };
-  fields: QueryOption[];
+  fields: QueryFieldMeta[];
   quick_filters: Array<{ label: string; value: string }>;
   examples: string[];
 }
 
 export interface QueryMetaResponse {
   syntax_hint: string;
+  help_url?: string;
+  syntax_topics?: SyntaxTopic[];
   time_ranges: Array<{ value: string; label: string; offset_ms?: number }>;
   sources: QuerySourceMeta[];
 }

@@ -3667,10 +3667,19 @@ components:
 
     QueryMetaResponse:
       type: object
-      required: [syntax_hint, time_ranges, sources]
+      required: [syntax_hint, syntax_topics, help_url, time_ranges, sources]
       properties:
         syntax_hint:
           type: string
+          example: "Splunk-style: terms AND (space), OR, NOT, field=value, status>=300, /regex/, \"phrase\" | head 50"
+        help_url:
+          type: string
+          format: uri
+          example: https://github.com/jahrulnr/GoSite/wiki/Log-search
+        syntax_topics:
+          type: array
+          items:
+            $ref: "#/components/schemas/SyntaxTopic"
         time_ranges:
           type: array
           items:
@@ -3681,9 +3690,22 @@ components:
           items:
             $ref: "#/components/schemas/QuerySourceMeta"
 
+    SyntaxTopic:
+      type: object
+      required: [title, syntax]
+      properties:
+        title:
+          type: string
+        syntax:
+          type: string
+        example:
+          type: string
+        note:
+          type: string
+
     QuerySourceMeta:
       type: object
-      required: [id, label, group, description, query, fields, quick_filters, examples]
+      required: [id, label, group, description, search_profile, query, fields, quick_filters, examples]
       properties:
         id:
           type: string
@@ -3696,6 +3718,10 @@ components:
           enum: [nginx, system]
         description:
           type: string
+        search_profile:
+          type: string
+          enum: [structured, text]
+          description: structured sources expose field chips; text sources are primarily free-text search.
         log_path:
           type: string
         query:
@@ -3735,10 +3761,12 @@ components:
         q:
           type: string
           description: |
-            Mini Splunk query. Supports `field:value` tokens, plain bareword
-            search, `*` wildcards, and Go-regexp wrapped in `/.../`. Examples:
-            `login`, `action:website.*`, `status_code:5\d\d`, `action:/^login.*/`,
-            or bareword `/timeout|500/`. Space means AND.
+            Splunk-style search string. Implicit AND between terms; explicit AND, OR, NOT,
+            and parentheses. Field predicates use `=` (or `:` alias), comparisons (`>=`, `<`),
+            wildcards (`status=3*`), and regex (`/pattern/` or `field=/pattern/`).
+            Quoted phrases search exact text. Post-process with pipes: `| head 50`, `| sort -ts`
+            (history search only; ignored in live tail).
+          example: status>=300 status<400 | head 50
         from:
           type: string
           format: date-time
