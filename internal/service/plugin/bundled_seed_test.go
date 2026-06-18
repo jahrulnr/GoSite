@@ -142,3 +142,22 @@ func TestSeedBundled_IgnoresMinGoSiteVersionForBundled(t *testing.T) {
 	require.Len(t, rows, 1)
 	assert.Equal(t, sqlite.PluginStateInstalled, rows[0].State)
 }
+
+func TestEnableBundled_IgnoresMinGoSiteVersion(t *testing.T) {
+	manifest := strings.Replace(manifestJSON("gosite/demo", "1.0.0", 0), `"minGoSiteVersion":"0.1.0"`, `"minGoSiteVersion":"9.9.0"`, 1)
+	artifact := zipArtifact(t, manifest, nil)
+	dir := writeBundledDir(t, "", "demo.zip", artifact)
+	svc, repo := setupPluginServiceWithOptions(t, plugin.NoopRuntimeManager{}, plugin.NewMemoryHookDispatcher(4),
+		plugin.WithBundled(dir, true, false, "production"),
+		plugin.WithHostVersion("1.0.0-dev"),
+	)
+	ctx := context.Background()
+	require.NoError(t, svc.SeedBundled(ctx))
+	enabled, err := svc.Enable(ctx, "gosite/demo", "1.0.0")
+	require.NoError(t, err)
+	assert.Equal(t, sqlite.PluginStateEnabled, enabled.State)
+	rows, err := repo.List(ctx)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, sqlite.PluginStateEnabled, rows[0].State)
+}

@@ -165,3 +165,7 @@ func sha256Hex(content []byte) string {
 func isBundledInstall(in InstallInput) bool {
 	return in.Provenance != nil && strings.TrimSpace(in.Provenance.SourceType) == bundledSourceType
 }
+
+func isBundledRecord(record sqlite.PluginVersion) bool {
+	return strings.TrimSpace(record.SourceType) == bundledSourceType
+}

@@ -620,7 +620,7 @@ func (s *Service) enableUnlocked(ctx context.Context, pluginID, version string) 
 	if record.State != sqlite.PluginStateInstalled && record.State != sqlite.PluginStateEnableFailed {
 		return sqlite.PluginVersion{}, apperror.New(apperror.CodeConflict, "plugin is not installable")
 	}
-	if err := s.compatibilityCheck(manifestFromRecord(record), false); err != nil {
+	if err := s.compatibilityCheck(manifestFromRecord(record), isBundledRecord(record)); err != nil {
 		return sqlite.PluginVersion{}, err
 	}
 
@@ -719,7 +719,7 @@ func (s *Service) SwitchEnabledVersion(ctx context.Context, pluginID, version st
 			}
 			return sqlite.PluginVersion{}, apperror.Wrap(apperror.CodeDatabase, "find switch target failed", err)
 		}
-		if err := s.compatibilityCheck(manifestFromRecord(target), false); err != nil {
+		if err := s.compatibilityCheck(manifestFromRecord(target), isBundledRecord(target)); err != nil {
 			return sqlite.PluginVersion{}, err
 		}
 		if target.State == sqlite.PluginStateEnableFailed && target.FailureClass == FailureCompensationFailed {
