@@ -129,10 +129,10 @@ Package: `internal/service/plugin/bundled/` (pattern: `catalog/service.go` with 
 | Field | Purpose |
 |-------|---------|
 | `artifact` | Zip filename relative to bundled directory |
-| `permissions_pre_ack` | Set `permissions_ack_at` at seed for official plugins |
+| `permissions_pre_ack` | Set `permissions_ack_at` at seed; always true for `gosite/*` ids |
 | `restorable` | Show **Restore bundled** after uninstall; reconcile may re-seed |
 
-Env: `PLUGIN_BUNDLED_PATH` (default `/app/bundled-plugins` in image; embed fallback for single-binary dev).
+Env: `PLUGIN_BUNDLED_PATH` (default `/app/bundled-plugins` in image; override for local dev via `dist/bundled-plugins`).
 
 ## Provenance: `source_type=bundled`
 
@@ -187,7 +187,7 @@ FOR each entry in bundled index:
   IF NOT exists(plugin_id, version) OR artifact digest changed:
     Install(bytes) → installed
   ELIF state=uninstalled AND restorable:
-    optional re-seed (policy: restore on reconcile OR manual API)
+    re-seed on reconcile (auto-restore when no installable version remains)
   ELSE skip
 ```
 
@@ -210,7 +210,7 @@ COPY --from=gobuilder /out/bundled-plugins /app/bundled-plugins
 ENV PLUGIN_BUNDLED_PATH=/app/bundled-plugins
 ```
 
-**Local dev:** root `Makefile` target `bundled-plugins` — build official plugins → `dist/bundled-plugins/`.
+**Local dev:** root `Makefile` target `bundled-plugins` → `dist/bundled-plugins/`; set `PLUGIN_BUNDLED_PATH` (see `make dev-api`).
 
 ## Host configuration
 
@@ -323,10 +323,15 @@ B4  →  optional: second official plugin, catalog "bundled" flag
 
 ## Open questions
 
-1. **Reconcile auto-restore** vs manual-only `restore-bundled` API?
-2. **Pre-ack scope** — all `gosite/*` ids or per-index flag only?
-3. **Catalog entry** — add `"bundled": true` to skip redundant remote install CTA?
-4. **Single-binary** — `go:embed` all platform zips vs ship linux/amd64 only in image?
+Resolved:
+
+1. **Reconcile auto-restore** — `SeedBundled` during reconcile re-installs `restorable` bundled plugins when no installable version remains (uninstall or missing row).
+2. **Pre-ack scope** — all `gosite/*` plugin ids receive `permissions_ack` at seed; index `permissions_pre_ack` remains for non-`gosite/` official plugins.
+3. **Single-binary** — not used; bundled zips ship on disk only (`PLUGIN_BUNDLED_PATH` / Docker `/app/bundled-plugins`).
+
+Still open:
+
+1. **Catalog entry** — `bundled: true` on `gosite/mcp` skips remote resolve in panel; remote source kept for future upgrade path.
 
 ## References
 

@@ -25,7 +25,7 @@ func (s *Service) SeedBundled(ctx context.Context) error {
 		return apperror.Wrap(apperror.CodeConfig, "load bundled plugin index failed", err)
 	}
 	for _, entry := range index.Plugins {
-		if err := s.seedBundledEntry(ctx, entry); err != nil {
+		if _, err := s.seedBundledEntry(ctx, entry, false); err != nil {
 			if errors.Is(err, bundled.ErrArtifactsUnavailable) {
 				slog.Debug("bundled plugin artifact unavailable", "plugin_id", entry.PluginID)
 				continue
@@ -71,39 +71,76 @@ func (s *Service) RestoreBundled(ctx context.Context, pluginID string) (sqlite.P
 	if !entry.Restorable {
 		return sqlite.PluginVersion{}, apperror.New(apperror.CodeInvalidInput, "bundled plugin is not restorable")
 	}
-	content, err := s.bundled.LoadArtifact(entry)
-	if err != nil {
-		return sqlite.PluginVersion{}, apperror.Wrap(apperror.CodeConfig, "read bundled artifact failed", err)
-	}
-	return s.installBundled(ctx, entry, content)
+	return s.seedBundledEntry(ctx, entry, true)
 }
 
-func (s *Service) seedBundledEntry(ctx context.Context, entry bundled.Entry) error {
+func (s *Service) seedBundledEntry(ctx context.Context, entry bundled.Entry, force bool) (sqlite.PluginVersion, error) {
 	content, err := s.bundled.LoadArtifact(entry)
 	if err != nil {
-		return err
+		return sqlite.PluginVersion{}, err
 	}
 	manifest, _, err := parseManifest(content)
 	if err != nil {
-		return err
+		return sqlite.PluginVersion{}, err
 	}
 	digest := sha256Hex(content)
 	existing, findErr := s.repo.Find(ctx, manifest.ID, manifest.Version)
-	if findErr == nil {
-		if existing.ArtifactDigest == digest &&
-			existing.State != sqlite.PluginStateUninstalled &&
-			existing.State != sqlite.PluginStateInstallFailed {
-			return nil
+	if !s.shouldSeedBundled(ctx, entry, existing, findErr, digest, force) {
+		if findErr == nil {
+			return existing, nil
 		}
-		if existing.State == sqlite.PluginStateUninstalled && !entry.Restorable {
-			return nil
-		}
-		if existing.ArtifactDigest == digest && existing.State == sqlite.PluginStateInstalled {
-			return nil
-		}
+		return sqlite.PluginVersion{}, nil
 	}
-	_, err = s.installBundled(ctx, entry, content)
-	return err
+	record, err := s.installBundled(ctx, entry, content)
+	if err != nil {
+		return sqlite.PluginVersion{}, err
+	}
+	if force || (findErr == nil && existing.State == sqlite.PluginStateUninstalled) {
+		slog.Info("bundled plugin restored", "plugin_id", record.PluginID, "version", record.Version)
+	} else {
+		slog.Info("bundled plugin seeded", "plugin_id", record.PluginID, "version", record.Version, "state", record.State)
+	}
+	return record, nil
+}
+
+func (s *Service) shouldSeedBundled(ctx context.Context, entry bundled.Entry, existing sqlite.PluginVersion, findErr error, digest string, force bool) bool {
+	if force {
+		return true
+	}
+	if findErr != nil {
+		return true
+	}
+	if existing.ArtifactDigest != digest {
+		return true
+	}
+	if existing.State == sqlite.PluginStateInstallFailed {
+		return true
+	}
+	if existing.State == sqlite.PluginStateUninstalled && entry.Restorable {
+		return true
+	}
+	if entry.Restorable && s.bundledNeedsRestore(ctx, entry, existing.PluginID) {
+		return true
+	}
+	return false
+}
+
+func (s *Service) bundledNeedsRestore(ctx context.Context, entry bundled.Entry, pluginID string) bool {
+	if !entry.Restorable {
+		return false
+	}
+	installable, err := s.repo.ListInstallable(ctx, pluginID)
+	if err != nil {
+		return false
+	}
+	return len(installable) == 0
+}
+
+func bundledPermissionsPreAck(entry bundled.Entry) bool {
+	if strings.HasPrefix(entry.PluginID, "gosite/") {
+		return true
+	}
+	return entry.PermissionsPreAck
 }
 
 func (s *Service) installBundled(ctx context.Context, entry bundled.Entry, content []byte) (sqlite.PluginVersion, error) {
@@ -116,7 +153,7 @@ func (s *Service) installBundled(ctx context.Context, entry bundled.Entry, conte
 			SourceRepository: "https://github.com/jahrulnr/gosite",
 			InstallPath:      bundledSourceType,
 		},
-		PermissionsAck: entry.PermissionsPreAck,
+		PermissionsAck: bundledPermissionsPreAck(entry),
 	})
 }
 

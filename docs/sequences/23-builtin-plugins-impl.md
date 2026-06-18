@@ -18,9 +18,9 @@ Companion to [23-builtin-plugins.md](./23-builtin-plugins.md). **Status:** B1–
 
 ### B1-1 — Bundled package
 
-- [ ] `internal/service/plugin/bundled/index.json` (embedded default)
-- [ ] `bundled.Service` — `List()`, `LoadArtifact(pluginID)`, path override
-- [ ] Unit tests: missing artifact, bad JSON
+- [x] `internal/service/plugin/bundled/index.json` (embedded default)
+- [x] `bundled.Service` — `LoadIndex()`, `LoadArtifact()`, path override
+- [x] Unit tests: missing artifact, bad JSON
 
 ### B1-2 — Provenance
 
@@ -30,11 +30,12 @@ Companion to [23-builtin-plugins.md](./23-builtin-plugins.md). **Status:** B1–
 
 ### B1-3 — SeedBundled
 
-- [ ] `func (s *Service) SeedBundled(ctx context.Context) error`
-- [ ] Skip when `PLUGIN_BUNDLED_ENABLED=false`
-- [ ] Digest compare before re-install
-- [ ] `permissions_pre_ack` → `PermissionsAck: true` on install
-- [ ] Tests: empty DB seeds one row; second call no-op; digest change adds version
+- [x] `func (s *Service) SeedBundled(ctx context.Context) error`
+- [x] Skip when `PLUGIN_BUNDLED_ENABLED=false`
+- [x] Digest compare before re-install
+- [x] `permissions_pre_ack` + auto pre-ack for all `gosite/*` ids
+- [x] Auto-restore on reconcile when `restorable` and no installable version
+- [x] Tests: empty DB seeds one row; second call no-op; digest change adds version; reconcile restore
 
 ### B1-4 — Trust
 
@@ -54,9 +55,9 @@ Companion to [23-builtin-plugins.md](./23-builtin-plugins.md). **Status:** B1–
 
 ### B1-7 — Docker / Makefile
 
-- [ ] `make -C plugins/gosite/mcp build` in Dockerfile gobuilder
-- [ ] `COPY` to `/app/bundled-plugins`
-- [ ] Root `make bundled-plugins` for local dev
+- [x] `make -C plugins/gosite/mcp build` in Dockerfile gobuilder
+- [x] `COPY` to `/app/bundled-plugins`
+- [x] Root `make bundled-plugins` for local dev and Docker image
 
 ## Wave B2 — `gosite/mcp` first built-in
 
@@ -93,8 +94,7 @@ Companion to [23-builtin-plugins.md](./23-builtin-plugins.md). **Status:** B1–
 ## Wave B4 — Deferred
 
 - [ ] Second official plugin (e.g. tier-0 observability webhook)
-- [ ] Catalog `bundled: true` on `gosite/mcp` entry
-- [ ] `go:embed` multi-platform zips for non-Docker binaries
+- [x] Catalog `bundled: true` on `gosite/mcp` entry
 
 ## Gate (wave B complete)
 

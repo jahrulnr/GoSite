@@ -453,7 +453,7 @@ func (s *Service) Install(ctx context.Context, in InstallInput) (sqlite.PluginVe
 	if err := validateManifest(manifest); err != nil {
 		return sqlite.PluginVersion{}, err
 	}
-	if err := s.compatibilityCheck(manifest); err != nil {
+	if err := s.compatibilityCheck(manifest, isBundledInstall(in)); err != nil {
 		return sqlite.PluginVersion{}, err
 	}
 	ilog.ok("compatibility")
@@ -620,7 +620,7 @@ func (s *Service) enableUnlocked(ctx context.Context, pluginID, version string) 
 	if record.State != sqlite.PluginStateInstalled && record.State != sqlite.PluginStateEnableFailed {
 		return sqlite.PluginVersion{}, apperror.New(apperror.CodeConflict, "plugin is not installable")
 	}
-	if err := s.compatibilityCheck(manifestFromRecord(record)); err != nil {
+	if err := s.compatibilityCheck(manifestFromRecord(record), false); err != nil {
 		return sqlite.PluginVersion{}, err
 	}
 
@@ -719,7 +719,7 @@ func (s *Service) SwitchEnabledVersion(ctx context.Context, pluginID, version st
 			}
 			return sqlite.PluginVersion{}, apperror.Wrap(apperror.CodeDatabase, "find switch target failed", err)
 		}
-		if err := s.compatibilityCheck(manifestFromRecord(target)); err != nil {
+		if err := s.compatibilityCheck(manifestFromRecord(target), false); err != nil {
 			return sqlite.PluginVersion{}, err
 		}
 		if target.State == sqlite.PluginStateEnableFailed && target.FailureClass == FailureCompensationFailed {
@@ -1075,14 +1075,14 @@ func validateManifest(manifest Manifest) error {
 	return nil
 }
 
-func (s *Service) compatibilityCheck(manifest Manifest) error {
+func (s *Service) compatibilityCheck(manifest Manifest, bundledTrust bool) error {
 	if manifest.APIVersion != HostAPIVersion {
 		return apperror.New(apperror.CodePluginInvalid, "unsupported plugin apiVersion")
 	}
 	if manifest.Tier == 1 && manifest.RPCVersion != HostRPCVersion {
 		return apperror.New(apperror.CodePluginInvalid, "unsupported plugin rpcVersion")
 	}
-	if manifest.MinGoSiteVersion != "" && compareSemver(manifest.MinGoSiteVersion, s.hostVersion) > 0 {
+	if !bundledTrust && manifest.MinGoSiteVersion != "" && compareSemver(manifest.MinGoSiteVersion, s.hostVersion) > 0 {
 		return apperror.New(apperror.CodePluginInvalid, "plugin requires a newer GoSite version")
 	}
 	return nil

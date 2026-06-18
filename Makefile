@@ -1,6 +1,14 @@
 BINARY := bin/gosite
 PKG := ./...
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+# BASE_VERSION from latest v* tag; local builds default to X.Y.Z-dev, release builds to X.Y.Z.
+BASE_VERSION ?= $(shell git describe --tags --match 'v*' --abbrev=0 2>/dev/null | sed 's/^v//' || echo 1.0.0)
+ifndef VERSION
+ifeq ($(RELEASE),1)
+VERSION := $(BASE_VERSION)
+else
+VERSION := $(BASE_VERSION)-dev
+endif
+endif
 LDFLAGS := -X github.com/jahrulnr/gosite/internal/buildinfo.Version=$(VERSION)
 
 .PHONY: build test test-cover clean up down dev dev-api dev-fe build-fe build-docker dev-api-setup contract-check wiki-export bundled-plugins

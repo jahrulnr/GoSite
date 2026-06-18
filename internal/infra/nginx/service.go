@@ -60,8 +60,8 @@ func (s *Service) Paths() Paths {
 	return s.paths
 }
 
-// TestConfig validates config content using an isolated nginx.conf clone.
-// The site config is written to a temp file only — site.d is not modified.
+// TestConfig validates config content using a clone of the production nginx.conf.
+// The site config is written to a temp file only — active.d / site.d are not modified.
 func (s *Service) TestConfig(ctx context.Context, domain, content string) error {
 	tmpSitePath := filepath.Join(os.TempDir(), fmt.Sprintf("nginx-site-test-%s-%d.conf", domain, time.Now().UnixNano()))
 	if err := os.WriteFile(tmpSitePath, []byte(content), 0o644); err != nil {
@@ -69,11 +69,20 @@ func (s *Service) TestConfig(ctx context.Context, domain, content string) error 
 	}
 	defer os.Remove(tmpSitePath)
 
-	baseConf, err := os.ReadFile(s.paths.NginxConf)
+	baseConf, err := os.ReadFile(s.paths.GlobalConf)
 	if err != nil {
 		return apperror.Wrap(apperror.CodeNginxTestFailed, "read nginx.conf", err)
 	}
-	adjusted := replaceSiteIncludeForTest(string(baseConf), s.paths.SiteD, tmpSitePath)
+	adjusted := replaceSiteIncludeForTest(string(baseConf), s.paths.ActiveD, tmpSitePath)
+	if adjusted == string(baseConf) {
+		adjusted = replaceSiteIncludeForTest(string(baseConf), s.paths.SiteD, tmpSitePath)
+	}
+	emptyDefault := filepath.Join(os.TempDir(), fmt.Sprintf("nginx-default-empty-%d.conf", time.Now().UnixNano()))
+	if err := os.WriteFile(emptyDefault, []byte("# omitted during per-site nginx -t\n"), 0o644); err != nil {
+		return apperror.Wrap(apperror.CodeNginxTestFailed, "write temp default config", err)
+	}
+	defer os.Remove(emptyDefault)
+	adjusted = replaceHttpDIncludeForTest(adjusted, filepath.Dir(s.paths.DefaultConf), emptyDefault)
 	tmpPath := filepath.Join(os.TempDir(), fmt.Sprintf("nginx-test-%d.conf", time.Now().UnixNano()))
 	if err := os.WriteFile(tmpPath, []byte(adjusted), 0o644); err != nil {
 		return apperror.Wrap(apperror.CodeNginxTestFailed, "write temp nginx conf", err)
@@ -391,6 +400,10 @@ func replaceSiteIncludeForTest(baseConf, siteD, siteConfigPath string) string {
 	legacyGlob := "/storage/webconfig/site.d/*.conf"
 	if strings.Contains(baseConf, legacyGlob) {
 		return strings.Replace(baseConf, legacyGlob, tmpSite, 1)
+	}
+	activeGlob := "/storage/webconfig/active.d/*.conf"
+	if strings.Contains(baseConf, activeGlob) {
+		return strings.Replace(baseConf, activeGlob, tmpSite, 1)
 	}
 	return strings.Replace(baseConf, "site.d/*.conf", tmpSite, 1)
 }

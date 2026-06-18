@@ -29,8 +29,10 @@ web/tsconfig.tsbuildinfo
 docs/wiki-export/
 research/
 
-# Local deploy (never commit — may contain host/IP/credentials)
+# Local deploy / cloud lab (never commit — host/IP/VM ids)
 scripts/*.local.sh
+scripts/cloud-lab.local.sh
 deploy.local.env
 gosite.tar.gz
+gosite-cloud-lab.tar.gz
 compose.bangunsoft.yml

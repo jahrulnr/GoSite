@@ -297,6 +297,7 @@ export interface PluginCatalogEntry {
   name: string;
   description: string;
   vendor: string;
+  bundled?: boolean;
   source: PluginInstallSource;
 }
 

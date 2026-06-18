@@ -199,6 +199,7 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
   const [catalogQuery, setCatalogQuery] = useState('');
   const [catalogEntry, setCatalogEntry] = useState<PluginCatalogEntry>();
   const catalogState = useAsync(() => plugins.catalog(catalogQuery.trim() || undefined), [catalogQuery, mode]);
+  const registryState = useAsync(() => plugins.list(), []);
   const [preview, setPreview] = useState<PluginResolvePreview>();
   const [permissionsAck, setPermissionsAck] = useState(false);
   const installFile = useAction(plugins.installFile);
@@ -209,6 +210,10 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
   const resolveBusy = resolveInstall.loading;
   const error = installFile.error ?? installManifest.error ?? installRemote.error ?? resolveInstall.error;
   const isRemoteMode = mode === 'url' || mode === 'github' || mode === 'gitlab' || mode === 'catalog';
+  const catalogBundled = mode === 'catalog' && catalogEntry?.bundled;
+  const catalogInstalled = catalogEntry
+    ? (registryState.data ?? []).some((row) => row.plugin_id === catalogEntry.plugin_id && row.state !== 'uninstalled')
+    : false;
 
   useEffect(() => {
     if (!remoteEnabled && isRemoteMode) setMode('artifact');
@@ -230,6 +235,7 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
         source = { type: 'gitlab-release', repo: gitlabRepo.trim(), tag: gitlabTag.trim() };
       } else if (mode === 'catalog') {
         if (!catalogEntry) throw new Error('Select a catalog entry first');
+        if (catalogEntry.bundled) throw new Error('Built-in plugins are seeded on init — enable from the registry');
         source = catalogEntry.source;
       } else {
         source = { type: 'github-release', repo: repo.trim(), tag: tag.trim() };
@@ -269,6 +275,7 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
           preview.resolveToken,
         );
       } else if (mode === 'catalog') {
+        if (catalogEntry?.bundled) throw new Error('Built-in plugins are seeded on init — enable from the registry');
         if (!preview || !catalogEntry) throw new Error('Resolve the catalog entry before installing');
         if (!permissionsAck) throw new Error('Acknowledge plugin permissions first');
         await installRemote.run(catalogEntry.source, true, preview.resolveToken);
@@ -289,7 +296,7 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
     }
   };
 
-  const installDisabled = busy || (isRemoteMode && (!preview || !permissionsAck || (mode === 'catalog' && !catalogEntry)));
+  const installDisabled = busy || catalogBundled || (isRemoteMode && (!preview || !permissionsAck || (mode === 'catalog' && !catalogEntry)));
 
   return (
     <Modal
@@ -459,7 +466,10 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
                   class={`plugin-catalog-item ${catalogEntry?.plugin_id === entry.plugin_id ? 'active' : ''}`}
                   onClick={() => { setCatalogEntry(entry); setPreview(undefined); setPermissionsAck(false); }}
                 >
-                  <strong class="mono">{entry.plugin_id}</strong>
+                  <div class="row wrap" style="gap:8px; align-items:center;">
+                    <strong class="mono">{entry.plugin_id}</strong>
+                    {entry.bundled && <Badge kind="info">built-in</Badge>}
+                  </div>
                   <span class="dim">{entry.description || entry.name}</span>
                 </button>
               ))}
@@ -467,14 +477,21 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
                 <span class="dim">No catalog entries. Add plugins to the host catalog JSON.</span>
               )}
             </div>
-            {catalogEntry && (
+            {catalogEntry && catalogBundled && (
+              <InlineNotice kind="info">
+                {catalogInstalled
+                  ? 'Built-in with GoSite — already in the registry (installed, disabled by default). Close this dialog and Enable it from the plugin list.'
+                  : 'Built-in with GoSite — seeded on init when bundled artifacts are present. Run gosite init (or make dev-api-setup), then Enable from the plugin list. Remote catalog install is not required.'}
+              </InlineNotice>
+            )}
+            {catalogEntry && !catalogBundled && (
               <div class="row wrap" style="margin:12px 0;">
                 <button type="button" class="btn ghost" disabled={resolveBusy} onClick={() => void resolve()}>
                   {resolveBusy ? <Spinner /> : 'Resolve'}
                 </button>
               </div>
             )}
-            {preview && <InstallPreviewCard preview={preview} permissionsAck={permissionsAck} onPermissionsAck={setPermissionsAck} />}
+            {preview && !catalogBundled && <InstallPreviewCard preview={preview} permissionsAck={permissionsAck} onPermissionsAck={setPermissionsAck} />}
           </>
         )}
         {(mode === 'artifact' || mode === 'manifest') && (

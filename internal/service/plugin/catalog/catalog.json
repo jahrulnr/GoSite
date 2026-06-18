@@ -5,6 +5,7 @@
       "name": "GoSite MCP",
       "description": "Official stdio MCP bridge — dynamic tools from integration token scopes",
       "vendor": "gosite",
+      "bundled": true,
       "source": {
         "type": "github-release",
         "repo": "jahrulnr/gosite",

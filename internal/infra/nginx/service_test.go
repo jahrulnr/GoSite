@@ -17,6 +17,15 @@ func TestReplaceHttpDIncludeForTest_UsesAbsoluteTempPath(t *testing.T) {
 	assert.NotContains(t, got, "http.d//tmp")
 }
 
+func TestReplaceSiteIncludeForTest_ActiveD(t *testing.T) {
+	t.Parallel()
+
+	base := "http {\n\tinclude /storage/webconfig/active.d/*.conf;\n}\n"
+	got := replaceSiteIncludeForTest(base, "/storage/webconfig/active.d", "/tmp/nginx-site-test-example.com.conf")
+
+	assert.Contains(t, got, "include /tmp/nginx-site-test-example.com.conf;")
+}
+
 func TestReplaceSiteIncludeForTest_UsesAbsoluteTempPath(t *testing.T) {
 	t.Parallel()
 
