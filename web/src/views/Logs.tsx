@@ -18,6 +18,8 @@ import { queryRangeFrom } from '../lib/format';
 import { useStore } from '../lib/store';
 
 const STORAGE_KEY = 'gosite:logs:search-state';
+const LAYPERSON_DEFAULT_QUERY = 'action=login';
+const LAYPERSON_DEFAULT_RANGE = '24h';
 // Hard cap for the rendered event list. Larger buffers make the Preact diff
 // walk the whole array on every prepend during Live Tail, which freezes the
 // main thread. 200 keeps the list scannable without blowing the budget.
@@ -76,6 +78,7 @@ export function LogsView() {
 
   const abortRef = useRef<AbortController | undefined>(undefined);
   const stopTailRef = useRef<(() => void) | undefined>(undefined);
+  const autoRunPendingRef = useRef(!persisted.current.query && !persisted.current.sourceId);
 
   // Monotonic epoch bumped on every cleanup(). Any async callback that
   // captured the previous epoch must skip its state update, otherwise a
@@ -181,16 +184,28 @@ export function LogsView() {
     const sources = meta.sources ?? [];
     if (sources.length === 0) return;
     const persistedId = persisted.current.sourceId;
-    const restored = persistedId ? sources.find((s) => s.id === persistedId) : undefined;
-    const initial = restored ?? sources[0];
-    if (!initial) return;
-    setSource(initial);
-    if (!timeRange && meta.time_ranges?.[0]) {
-      setTimeRange(String(meta.time_ranges[0].value ?? ''));
+    const persistedQuery = persisted.current.query;
+    const hasPersisted = Boolean(persistedId || persistedQuery);
+
+    if (hasPersisted) {
+      const restored = persistedId ? sources.find((s) => s.id === persistedId) : undefined;
+      const initial = restored ?? sources.find((s) => s.id === 'audit') ?? sources[0];
+      if (!initial) return;
+      setSource(initial);
+      if (!timeRange) {
+        setTimeRange(String(persisted.current.timeRange ?? meta.time_ranges?.[0]?.value ?? ''));
+      }
+      if (!query) {
+        setQuery(persistedQuery ?? initial.examples?.[0] ?? '');
+      }
+      return;
     }
-    if (!query) {
-      setQuery(initial.examples?.[0] ?? '');
-    }
+
+    const audit = sources.find((s) => s.id === 'audit') ?? sources[0];
+    if (!audit) return;
+    setSource(audit);
+    setTimeRange(LAYPERSON_DEFAULT_RANGE);
+    setQuery(LAYPERSON_DEFAULT_QUERY);
   }, [meta, source, query, timeRange]);
 
   const cleanup = useCallback(() => {
@@ -267,6 +282,14 @@ export function LogsView() {
       setRunning(false);
     }
   }, [source, timeRange, meta?.time_ranges, runHistoryInternal, cleanup, toast]);
+
+  // First visit: run Sign-ins search automatically.
+  useEffect(() => {
+    if (!autoRunPendingRef.current || !source || !meta) return;
+    if (query !== LAYPERSON_DEFAULT_QUERY || timeRange !== LAYPERSON_DEFAULT_RANGE) return;
+    autoRunPendingRef.current = false;
+    void runHistory();
+  }, [source, query, timeRange, meta, runHistory]);
 
   const startLive = useCallback(async () => {
     if (!source) return;
@@ -426,7 +449,7 @@ export function LogsView() {
   return (
     <Page
       title="Logs"
-      subtitle="Splunk-style search across audit, jobs, and nginx access/error logs"
+      subtitle="Search sign-ins, jobs, and nginx logs — use quick filters or advanced syntax"
       eyebrow="observability"
     >
       <LogsSearch
@@ -458,7 +481,18 @@ export function LogsView() {
         syntaxTopics={meta.syntax_topics ?? []}
         helpUrl={meta.help_url}
       />
-      <EventStream events={events} loading={running} error={error} format={format} totalHits={totalHits} />
+      <EventStream
+        events={events}
+        loading={running}
+        error={error}
+        format={format}
+        totalHits={totalHits}
+        emptyHint={
+          query.trim() === LAYPERSON_DEFAULT_QUERY
+            ? 'No sign-ins in this time range. Try Last 7 days or All time, or click Sign-outs / Failed above.'
+            : undefined
+        }
+      />
     </Page>
   );
 }

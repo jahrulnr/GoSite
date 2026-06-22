@@ -66,11 +66,11 @@ export function DashboardView() {
               {data.nginx_status?.available && (
                 <div class="grid cols-4">
                   <MetricTile label="Nginx active" value={formatNumber(data.nginx_status.active)} sub={`${formatRate(data.nginx_status.request_rate_per_sec)} req/s`} tone="info" />
-                  <MetricTile label="Reading" value={formatNumber(data.nginx_status.reading)} sub="stub_status" />
-                  <MetricTile label="Writing" value={formatNumber(data.nginx_status.writing)} sub="stub_status" />
-                  <MetricTile label="Waiting" value={formatNumber(data.nginx_status.waiting)} sub="keep-alive idle" />
+                  <MetricTile label="Reading" value={formatNumber(data.nginx_status.reading)} sub="Receiving request data" />
+                  <MetricTile label="Writing" value={formatNumber(data.nginx_status.writing)} sub="Sending responses" />
+                  <MetricTile label="Waiting" value={formatNumber(data.nginx_status.waiting)} sub="Idle connections" />
                   {data.nginx_status.dropped_connections > 0 && (
-                    <MetricTile label="Dropped" value={formatNumber(data.nginx_status.dropped_connections)} sub="accepts − handled" tone="danger" />
+                    <MetricTile label="Dropped" value={formatNumber(data.nginx_status.dropped_connections)} sub="Failed to handle" tone="danger" />
                   )}
                 </div>
               )}
@@ -87,7 +87,7 @@ export function DashboardView() {
                   <div class="col">
                     <KeyRow label="Read" value={formatDiskSectors(diskIO.data?.read)} accent />
                     <KeyRow label="Write" value={formatDiskSectors(diskIO.data?.write)} />
-                    <KeyRow label="Sector size" value="512 B" muted />
+                    <KeyRow label="Block size" value="512 bytes" muted />
                   </div>
                 </Card>
                 <Card
@@ -119,7 +119,14 @@ export function DashboardView() {
               <div class="grid cols-2">
                 <Card title="Top sites" actions={<span class="dim mono" style="font-size:11px;">last 1h</span>}>
                   {ranked.length === 0 ? (
-                    <EmptyState title="No traffic yet" />
+                    (traffic.total?.requests ?? traffic.requests ?? 0) > 0 ? (
+                      <EmptyState
+                        title="No per-site breakdown yet"
+                        hint="Total requests are counted. Site rows appear once traffic is attributed to domains."
+                      />
+                    ) : (
+                      <EmptyState title="No traffic yet" hint="Website visits will show here after nginx logs are collected." />
+                    )
                   ) : (
                     <div class="card-body flush">
                       <div class="table-wrap">

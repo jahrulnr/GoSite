@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/jahrulnr/gosite/internal/contracts"
 	"github.com/jahrulnr/gosite/internal/observability/grafanalite"
 	"github.com/jahrulnr/gosite/internal/observability/nginxlite"
 	"github.com/jahrulnr/gosite/internal/observability/splunklite"
@@ -85,15 +86,35 @@ func (h *DashboardHandler) trafficSummary(ctx context.Context) interface{} {
 	if h.grafana != nil {
 		if summary, err := h.grafana.Summary(ctx, "1h"); err == nil {
 			if summary.Requests > 0 || summary.Bytes > 0 {
-				return summary
+				out := contracts.TrafficSummary{
+					Sites: make(map[string]contracts.TrafficSite),
+					Total: contracts.TrafficSite{
+						Requests: int64(summary.Requests),
+						Bytes:    int64(summary.Bytes),
+					},
+				}
+				if top, topErr := h.grafana.TopSites(ctx, "1h", 20); topErr == nil {
+					for _, row := range top {
+						out.Sites[row.Site] = contracts.TrafficSite{
+							Requests: int64(row.Requests),
+							Bytes:    int64(row.Bytes),
+						}
+					}
+				}
+				if len(out.Sites) == 0 {
+					if nginx, nginxErr := h.system.NginxTraffic(ctx); nginxErr == nil && len(nginx.Sites) > 0 {
+						out.Sites = nginx.Sites
+					}
+				}
+				return out
 			}
 		}
 	}
 	nginx, err := h.system.NginxTraffic(ctx)
 	if err != nil {
-		return map[string]interface{}{
-			"sites": map[string]interface{}{},
-			"total": map[string]interface{}{"requests": 0, "bytes": 0},
+		return contracts.TrafficSummary{
+			Sites: map[string]contracts.TrafficSite{},
+			Total: contracts.TrafficSite{},
 		}
 	}
 	return nginx

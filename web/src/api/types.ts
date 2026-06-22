@@ -596,7 +596,7 @@ export interface UiCapability {
 }
 
 export interface UiMetaResponse {
-  app: { name: string; env: string; logo_letter: string };
+  app: { name: string; env: string; logo_letter: string; version?: string };
   auth: {
     login_hint: string;
     login_email_placeholder?: string;

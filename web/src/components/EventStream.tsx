@@ -20,6 +20,7 @@ export interface Props {
   error?: Error;
   format: LogFormat;
   totalHits: number;
+  emptyHint?: string;
 }
 
 const FIELD_REGEX = /([\w.-]+)=(?:"([^"]*)"|(\S+))/g;
@@ -163,7 +164,7 @@ const EventRow = memo(function EventRow({ event, index, isSmart, isOpen, onToggl
   );
 });
 
-export function EventStream({ events, loading, error, format, totalHits }: Readonly<Props>) {
+export function EventStream({ events, loading, error, format, totalHits, emptyHint }: Readonly<Props>) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const isSmart = format === 'smart';
   const handleToggle = useCallback((key: string) => {
@@ -213,7 +214,7 @@ export function EventStream({ events, loading, error, format, totalHits }: Reado
         {meta}
         <div class="evt-state">
           <strong>No events matched.</strong>
-          <span>Try a different time range, a broader query, or switch to Live Tail.</span>
+          <span>{emptyHint ?? 'Try a different time range, a broader query, or switch to Live Tail.'}</span>
         </div>
       </div>
     );

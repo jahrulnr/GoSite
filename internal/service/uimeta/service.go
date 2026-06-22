@@ -26,6 +26,7 @@ type AppMeta struct {
 	Name       string `json:"name"`
 	Env        string `json:"env"`
 	LogoLetter string `json:"logo_letter"`
+	Version    string `json:"version"`
 }
 
 type AuthMeta struct {
@@ -137,7 +138,7 @@ func (s *Service) Get() Response {
 		loginEmailPlaceholder = "admin@demo.com"
 	}
 	return Response{
-		App: AppMeta{Name: "GoSite", Env: s.cfg.AppEnv, LogoLetter: "G"},
+		App: AppMeta{Name: "GoSite", Env: s.cfg.AppEnv, LogoLetter: "G", Version: s.cfg.AppVersion},
 		Auth: AuthMeta{
 			LoginHint:             loginHint,
 			LoginEmailPlaceholder: loginEmailPlaceholder,

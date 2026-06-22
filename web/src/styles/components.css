@@ -47,6 +47,22 @@
   border-bottom: 1px solid var(--border);
   position: relative;
 }
+.sidebar-brand.brand-link {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--d-fast) var(--ease-out);
+}
+.sidebar-brand.brand-link:hover {
+  background: oklch(100% 0 0 / 0.03);
+}
+.sidebar-brand.brand-link:hover .brand-name {
+  color: var(--accent);
+}
 .sidebar-brand::after {
   content: '';
   position: absolute;
@@ -488,6 +504,42 @@ a.nav-item {
 
 .btn.sm { padding: 5px 10px; font-size: 12px; border-radius: var(--radius-xs); }
 .btn.icon { padding: 7px; }
+
+/* Hover tooltips (data-tip) — faster & styled vs native title */
+.btn[data-tip] {
+  position: relative;
+}
+.btn[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) translateY(3px);
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  box-shadow: 0 6px 16px oklch(0% 0 0 / 0.4);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--d-fast) var(--ease-out),
+    transform var(--d-fast) var(--ease-out),
+    visibility var(--d-fast);
+  z-index: 30;
+}
+.btn[data-tip]:hover::after,
+.btn[data-tip]:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
 
 .link-button {
   border: 0;

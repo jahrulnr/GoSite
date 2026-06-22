@@ -315,13 +315,19 @@ export function WebsitesView() {
                       <td><Badge kind={site.active ? 'ok' : 'off'}>{site.active ? 'active' : 'disabled'}</Badge></td>
                       <td><Badge kind={site.ssl ? 'ok' : 'off'}>{site.ssl ? 'enabled' : 'off'}</Badge></td>
                       <td class="right nowrap">
-                        <button type="button" class="btn sm ghost" onClick={() => onToggle(site)} title={site.active ? 'Disable site' : 'Enable site'}>
+                        <button
+                          type="button"
+                          class="btn sm ghost"
+                          onClick={() => onToggle(site)}
+                          data-tip={site.active ? 'Disable site' : 'Enable site'}
+                          aria-label={site.active ? 'Disable site' : 'Enable site'}
+                        >
                           {site.active ? <IconPause /> : <IconPlay />}
                         </button>
-                        <button type="button" class="btn sm ghost" onClick={() => setSslSite(site)} title="SSL"><IconShield /></button>
-                        <button type="button" class="btn sm ghost" onClick={() => setConfigSite(site)} title="Config"><IconSettings /></button>
-                        <button type="button" class="btn sm ghost" onClick={() => setEditing(site)} title="Edit"><IconEdit /></button>
-                        <button type="button" class="btn sm danger" onClick={() => onRemove(site)} title="Delete"><IconTrash /></button>
+                        <button type="button" class="btn sm ghost" onClick={() => setSslSite(site)} data-tip="SSL certificates" aria-label="SSL certificates"><IconShield /></button>
+                        <button type="button" class="btn sm ghost" onClick={() => setConfigSite(site)} data-tip="Nginx config" aria-label="Nginx config"><IconSettings /></button>
+                        <button type="button" class="btn sm ghost" onClick={() => setEditing(site)} data-tip="Edit website" aria-label="Edit website"><IconEdit /></button>
+                        <button type="button" class="btn sm danger" onClick={() => onRemove(site)} data-tip="Delete website" aria-label="Delete website"><IconTrash /></button>
                       </td>
                     </tr>
                   ))}

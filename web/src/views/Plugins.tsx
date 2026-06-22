@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
+import type { ComponentChildren } from 'preact';
 import { plugins } from '../api/endpoints';
 import type { PluginCatalogEntry, PluginInstallSource, PluginResolvePreview, PluginState, PluginVersion } from '../api/types';
-import { IconArrowUp, IconPlay, IconPlug, IconRefresh, IconShield, IconTrash } from '../components/Icons';
+import { IconArrowUp, IconPause, IconPlay, IconPlug, IconRefresh, IconShield, IconTrash } from '../components/Icons';
 import { Page, Stat } from '../components/Layout';
 import { AsyncView, Badge, EmptyState, Field, InlineNotice, Modal, Spinner } from '../components/Ui';
 import { formatBytes, formatDate, formatRelative } from '../lib/format';
@@ -540,8 +541,8 @@ function PluginActions({ plugin, group, reload }: Readonly<{ plugin: PluginVersi
         </button>
       )}
       {plugin.state === 'enabled' && (
-        <button type="button" class="btn sm ghost" disabled={busy} onClick={() => run(() => disable.run(plugin.plugin_id), `${plugin.name} disabled`)}>
-          Disable
+        <button type="button" class="btn sm" disabled={busy} onClick={() => run(() => disable.run(plugin.plugin_id), `${plugin.name} disabled`)}>
+          <IconPause /> Disable
         </button>
       )}
       {stableForUninstall(plugin.state) && (
@@ -850,63 +851,67 @@ export function PluginContributionView({ path }: Readonly<{ path: string }>) {
     }
   };
 
-  return (
+  const routePage = (body: ComponentChildren) => (
     <Page title="Plugin route" subtitle={parsed.route} eyebrow="runtime">
-      <AsyncView state={state} loadingLabel="Loading plugin route">
-        {(rows) => {
-          const versions = rows.filter((item) => item.plugin_id === parsed.pluginID && item.state !== 'uninstalled');
-          const enabled = versions.find((item) => item.state === 'enabled');
-          const latest = versions[0];
-          if (!latest) {
-            return <EmptyState title="Plugin missing" hint="The registry has no installed version for this route." />;
-          }
-          if (!enabled) {
-            return (
-              <div class="plugin-route-fallback">
-                <IconShield width={28} height={28} />
-                <h2>{latest.name} is disabled</h2>
-                <p class="dim">Host UI keeps this route safe until a compatible plugin version is enabled.</p>
-                {(latest.state === 'installed' || latest.state === 'enable_failed') && (
-                  <button type="button" class="btn primary" disabled={enable.loading} onClick={() => doEnable(latest)}>
-                    {enable.loading ? <Spinner /> : <><IconPlay /> Enable {latest.version}</>}
-                  </button>
+      {body}
+    </Page>
+  );
+
+  return (
+    <AsyncView state={state} loadingLabel="Loading plugin route">
+      {(rows) => {
+        const versions = rows.filter((item) => item.plugin_id === parsed.pluginID && item.state !== 'uninstalled');
+        const enabled = versions.find((item) => item.state === 'enabled');
+        const latest = versions[0];
+        if (!latest) {
+          return routePage(<EmptyState title="Plugin missing" hint="The registry has no installed version for this route." />);
+        }
+        if (!enabled) {
+          return routePage(
+            <div class="plugin-route-fallback">
+              <IconShield width={28} height={28} />
+              <h2>{latest.name} is disabled</h2>
+              <p class="dim">Host UI keeps this route safe until a compatible plugin version is enabled.</p>
+              {(latest.state === 'installed' || latest.state === 'enable_failed') && (
+                <button type="button" class="btn primary" disabled={enable.loading} onClick={() => doEnable(latest)}>
+                  {enable.loading ? <Spinner /> : <><IconPlay /> Enable {latest.version}</>}
+                </button>
+              )}
+            </div>,
+          );
+        }
+        if (parsed.route.endsWith('/integration')) {
+          return <PluginMCPIntegrationView plugin={enabled} />;
+        }
+        const schema = enabled.ui.configSchema ?? enabled.manifest.ui?.configSchema;
+        return routePage(
+          <div class="plugin-contribution">
+            <section class="card">
+              <div class="card-head">
+                <h3>{enabled.name}</h3>
+                <Badge kind="ok">enabled {enabled.version}</Badge>
+              </div>
+              <div class="card-body">
+                <div class="grid cols-3">
+                  <Stat label="Plugin" value={enabled.name} sub={`${enabled.plugin_id} · tier ${enabled.tier}`} />
+                  <Stat label="Route" value={parsed.route.split('/').pop() || 'index'} sub="host rendered" tone="info" />
+                  <Stat label="Updated" value={formatRelative(enabled.updated_at)} sub={formatDate(enabled.updated_at)} />
+                </div>
+              </div>
+            </section>
+            <section class="card">
+              <div class="card-head"><h3>Configuration schema</h3></div>
+              <div class="card-body">
+                {schema ? (
+                  <pre class="logbox plugin-schema">{JSON.stringify(schema, null, 2)}</pre>
+                ) : (
+                  <EmptyState title="No configuration schema" hint="This plugin route is registered, but no host-rendered schema is stored." />
                 )}
               </div>
-            );
-          }
-          const schema = enabled.ui.configSchema ?? enabled.manifest.ui?.configSchema;
-          if (parsed.route.endsWith('/integration')) {
-            return <PluginMCPIntegrationView plugin={enabled} />;
-          }
-          return (
-            <div class="plugin-contribution">
-              <section class="card">
-                <div class="card-head">
-                  <h3>{enabled.name}</h3>
-                  <Badge kind="ok">enabled {enabled.version}</Badge>
-                </div>
-                <div class="card-body">
-                  <div class="grid cols-3">
-                    <Stat label="Plugin" value={enabled.name} sub={`${enabled.plugin_id} · tier ${enabled.tier}`} />
-                    <Stat label="Route" value={parsed.route.split('/').pop() || 'index'} sub="host rendered" tone="info" />
-                    <Stat label="Updated" value={formatRelative(enabled.updated_at)} sub={formatDate(enabled.updated_at)} />
-                  </div>
-                </div>
-              </section>
-              <section class="card">
-                <div class="card-head"><h3>Configuration schema</h3></div>
-                <div class="card-body">
-                  {schema ? (
-                    <pre class="logbox plugin-schema">{JSON.stringify(schema, null, 2)}</pre>
-                  ) : (
-                    <EmptyState title="No configuration schema" hint="This plugin route is registered, but no host-rendered schema is stored." />
-                  )}
-                </div>
-              </section>
-            </div>
-          );
-        }}
-      </AsyncView>
-    </Page>
+            </section>
+          </div>,
+        );
+      }}
+    </AsyncView>
   );
 }

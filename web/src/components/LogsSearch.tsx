@@ -68,6 +68,7 @@ export function LogsSearch({
   helpUrl,
 }: Readonly<Props>) {
   const [helpOpen, setHelpOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const helpRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -106,6 +107,10 @@ export function LogsSearch({
 
   const quickFilters = source?.quick_filters ?? [];
   const examples = source?.examples ?? [];
+  const structured = source?.search_profile === 'structured';
+  const queryPlaceholder = structured
+    ? 'Use quick filters below — e.g. Sign-ins — or field=value'
+    : 'status>=300 status<400 | head 50';
 
   return (
     <div class="splunk-bar" role="search" aria-label="Logs search">
@@ -140,7 +145,7 @@ export function LogsSearch({
           type="text"
           autoComplete="off"
           spellcheck={false}
-          placeholder="status>=300 status<400 | head 50"
+          placeholder={queryPlaceholder}
           value={query}
           onInput={(event) => onQueryChange((event.currentTarget as HTMLInputElement).value)}
           onKeyDown={onInputKeyDown}
@@ -175,6 +180,7 @@ export function LogsSearch({
           )}
         </button>
       </div>
+      {advancedOpen && (
       <div class="splunk-syntax-row">
         <div class="splunk-syntax">
           <code>{syntaxHint}</code>
@@ -210,7 +216,8 @@ export function LogsSearch({
           )}
         </div>
       </div>
-      {(quickFilters.length > 0 || examples.length > 0) && (
+      )}
+      {(quickFilters.length > 0 || (advancedOpen && examples.length > 0)) && (
         <div class="splunk-chips">
           {quickFilters.map((chip) => (
             <button
@@ -223,7 +230,7 @@ export function LogsSearch({
               {chip.label}
             </button>
           ))}
-          {examples.map((example) => (
+          {advancedOpen && examples.map((example) => (
             <button
               key={example}
               type="button"
@@ -234,6 +241,14 @@ export function LogsSearch({
               {example}
             </button>
           ))}
+          <button
+            type="button"
+            class="splunk-chip toggle-advanced"
+            aria-pressed={advancedOpen}
+            onClick={() => setAdvancedOpen((open) => !open)}
+          >
+            {advancedOpen ? 'Hide syntax' : 'Advanced syntax'}
+          </button>
         </div>
       )}
       <div class="splunk-subbar">
