@@ -18,7 +18,7 @@
 #
 set -euo pipefail
 
-: "${CLOUD_LAB_HOST:?set CLOUD_LAB_HOST e.g. loq@103.37.124.185}"
+: "${CLOUD_LAB_HOST:?set CLOUD_LAB_HOST e.g. user@127.0.0.1}"
 : "${IDC_VM_UUID:?set IDC_VM_UUID from idc-vm-list-all.sh}"
 : "${IDC_LOCATION_SLUG:?set IDC_LOCATION_SLUG e.g. sgp01}"
 

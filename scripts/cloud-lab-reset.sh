@@ -33,9 +33,9 @@ sudo docker logs --tail 40 gosite 2>/dev/null || true
 exit 1'
 
 echo "==> verify fresh state (no demo websites, bundled mcp only)"
-site_count=$(curl -sk -c /tmp/gosite-reset-check -X POST "https://103.37.124.185:1100/api/v1/auth/login" \
+site_count=$(curl -sk -c /tmp/gosite-reset-check -X POST "https://127.0.0.1:1100/api/v1/auth/login" \
   -H 'Content-Type: application/json' -d '{"email":"admin@demo.com","password":"123456"}' >/dev/null \
-  && curl -sk -b /tmp/gosite-reset-check 'https://103.37.124.185:1100/api/v1/websites' \
+  && curl -sk -b /tmp/gosite-reset-check 'https://127.0.0.1:1100/api/v1/websites' \
   | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('websites',[])))")
 if [[ "${site_count:-x}" != "0" ]]; then
   echo "ERROR: expected 0 websites after reset, got ${site_count}"
@@ -48,7 +48,7 @@ fi
 
 echo ""
 echo "==> fresh cloud lab ready"
-echo "    panel:    https://103.37.124.185:1100/"
+echo "    panel:    https://127.0.0.1:1100/"
 echo "    login:    admin@demo.com / 123456 (default admin, not demo seed)"
 echo "    websites: empty — create example.bangunsoft.com via UI"
 echo "    data:     wiped; DEMO_SEED=false"
