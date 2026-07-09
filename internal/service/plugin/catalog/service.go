@@ -19,6 +19,7 @@ type Entry struct {
 	Name        string       `json:"name"`
 	Description string       `json:"description"`
 	Vendor      string       `json:"vendor"`
+	Bundled     bool         `json:"bundled,omitempty"`
 	Source      types.Source `json:"source"`
 }
 

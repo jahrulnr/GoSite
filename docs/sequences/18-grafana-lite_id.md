@@ -4,6 +4,8 @@ Pre-aggregated nginx traffic metrics untuk chart dashboard — menggantikan full
 
 **Status:** ✅ Implemented — `internal/observability/grafanalite`
 
+Metrik koneksi real-time (stub_status) dan VTS per-vhost: [22-nginx-metrics_id.md](./22-nginx-metrics_id.md).
+
 ## Collector (background)
 
 ```mermaid

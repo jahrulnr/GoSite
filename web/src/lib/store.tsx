@@ -19,7 +19,7 @@ export interface AppStore {
   setMeta: (m: UiMetaResponse | undefined) => void;
   setLocked: (v: boolean) => void;
   toasts: Toast[];
-  toast: (message: string, kind?: Toast['kind']) => void;
+  toast: (message: string, kind?: Toast['kind']) => number;
   dismissToast: (id: number) => void;
 }
 
@@ -41,6 +41,7 @@ export function AppProvider({ children }: Readonly<{ children: ComponentChildren
       const id = nextId.current++;
       setToasts((list) => [...list, { id, message, kind }]);
       globalThis.setTimeout(() => dismissToast(id), kind === 'error' ? 6000 : 3500);
+      return id;
     },
     [dismissToast],
   );

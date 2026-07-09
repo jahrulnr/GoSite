@@ -32,10 +32,11 @@ export function WebsiteModal({ site, onClose, onSaved }: Readonly<{ site: Websit
       .replace(/^-+|-+$/g, '') || 'proxy';
     return `${webRoot.replace(/\/+$/, '')}/${slug}`.replace(/^\/\//, '/');
   };
+  const initialPath = site.path || (site.id ? '' : (site.type === 'proxy' ? '' : pathHint));
   const [form, setForm] = useState<WebsiteCreateRequest>({
     name: site.name,
     domain: site.domain,
-    path: site.path || (site.id ? '' : pathHint),
+    path: initialPath,
     type: site.type,
     upstream: site.upstream,
     active: site.active,
@@ -48,6 +49,16 @@ export function WebsiteModal({ site, onClose, onSaved }: Readonly<{ site: Websit
   const validate = useAction(websites.validate);
 
   const setField = (key: keyof WebsiteCreateRequest, value: string | boolean) => setForm((current) => ({ ...current, [key]: value }));
+  const onTypeChange = (type: string) => {
+    setForm((current) => {
+      if (type === 'proxy') {
+        // Proxy sites don't use a user-visible path; clear it so a unique slug is generated.
+        return { ...current, type, path: '' };
+      }
+      // Static sites need a path; default to the hint if the user hasn't entered one.
+      return { ...current, type, path: current.path || pathHint };
+    });
+  };
   const payload = (): WebsiteCreateRequest => ({ ...form, path: proxyPathFor(form) });
   const onValidate = async () => {
     try {
@@ -91,7 +102,7 @@ export function WebsiteModal({ site, onClose, onSaved }: Readonly<{ site: Websit
           <Field label="Domain"><input class="input" value={form.domain} onInput={(e) => setField('domain', (e.target as HTMLInputElement).value)} required /></Field>
         </div>
         <Field label="Type" hint={meta?.websites?.types?.find((t) => t.value === form.type)?.hint}>
-          <select class="select" value={form.type} onChange={(e) => setField('type', (e.target as HTMLSelectElement).value)}>
+          <select class="select" value={form.type} onChange={(e) => onTypeChange((e.target as HTMLSelectElement).value)}>
             {(meta?.websites?.types ?? [{ value: form.type, label: form.type }]).map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
           </select>
         </Field>
@@ -315,13 +326,19 @@ export function WebsitesView() {
                       <td><Badge kind={site.active ? 'ok' : 'off'}>{site.active ? 'active' : 'disabled'}</Badge></td>
                       <td><Badge kind={site.ssl ? 'ok' : 'off'}>{site.ssl ? 'enabled' : 'off'}</Badge></td>
                       <td class="right nowrap">
-                        <button type="button" class="btn sm ghost" onClick={() => onToggle(site)} title={site.active ? 'Disable site' : 'Enable site'}>
+                        <button
+                          type="button"
+                          class="btn sm ghost"
+                          onClick={() => onToggle(site)}
+                          data-tip={site.active ? 'Disable site' : 'Enable site'}
+                          aria-label={site.active ? 'Disable site' : 'Enable site'}
+                        >
                           {site.active ? <IconPause /> : <IconPlay />}
                         </button>
-                        <button type="button" class="btn sm ghost" onClick={() => setSslSite(site)} title="SSL"><IconShield /></button>
-                        <button type="button" class="btn sm ghost" onClick={() => setConfigSite(site)} title="Config"><IconSettings /></button>
-                        <button type="button" class="btn sm ghost" onClick={() => setEditing(site)} title="Edit"><IconEdit /></button>
-                        <button type="button" class="btn sm danger" onClick={() => onRemove(site)} title="Delete"><IconTrash /></button>
+                        <button type="button" class="btn sm ghost" onClick={() => setSslSite(site)} data-tip="SSL certificates" aria-label="SSL certificates"><IconShield /></button>
+                        <button type="button" class="btn sm ghost" onClick={() => setConfigSite(site)} data-tip="Nginx config" aria-label="Nginx config"><IconSettings /></button>
+                        <button type="button" class="btn sm ghost" onClick={() => setEditing(site)} data-tip="Edit website" aria-label="Edit website"><IconEdit /></button>
+                        <button type="button" class="btn sm danger" onClick={() => onRemove(site)} data-tip="Delete website" aria-label="Delete website"><IconTrash /></button>
                       </td>
                     </tr>
                   ))}

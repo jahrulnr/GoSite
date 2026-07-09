@@ -83,6 +83,7 @@ export interface DashboardResponse {
   traffic_summary: TrafficSummary;
   ssl_expiring: ExpiringCert[];
   recent_audit: AuditEvent[];
+  nginx_status?: NginxStatusCurrent;
 }
 
 export interface NetworkTraffic {
@@ -296,6 +297,7 @@ export interface PluginCatalogEntry {
   name: string;
   description: string;
   vendor: string;
+  bundled?: boolean;
   source: PluginInstallSource;
 }
 
@@ -375,6 +377,23 @@ export interface PluginVersion {
   updated_at: string;
 }
 
+export interface IntegrationToken {
+  id: string;
+  plugin_id: string;
+  label: string;
+  scopes: string[];
+  created_under_version?: string;
+  created_at: string;
+  expires_at?: string | null;
+  revoked_at?: string | null;
+  last_used_at?: string | null;
+}
+
+export interface IntegrationTokenCreateResponse {
+  token: IntegrationToken;
+  secret: { token: string };
+}
+
 // ---- Logs ----
 
 export interface LogSite {
@@ -425,19 +444,36 @@ export interface QueryOption {
   [k: string]: unknown;
 }
 
+export interface SyntaxTopic {
+  title: string;
+  syntax: string;
+  example?: string;
+  note?: string;
+}
+
+export interface QueryFieldMeta {
+  name: string;
+  label: string;
+  placeholder?: string;
+}
+
 export interface QuerySourceMeta {
   id: string;
   label: string;
   group: string;
   description: string;
+  search_profile?: 'structured' | 'text';
+  log_path?: string;
   query: { source: string; site?: string };
-  fields: QueryOption[];
+  fields: QueryFieldMeta[];
   quick_filters: Array<{ label: string; value: string }>;
   examples: string[];
 }
 
 export interface QueryMetaResponse {
   syntax_hint: string;
+  help_url?: string;
+  syntax_topics?: SyntaxTopic[];
   time_ranges: Array<{ value: string; label: string; offset_ms?: number }>;
   sources: QuerySourceMeta[];
 }
@@ -491,6 +527,59 @@ export interface TrafficMetricsSummary {
   bytes: number;
 }
 
+export interface NginxStatusCurrent {
+  sample_ts: string;
+  active: number;
+  reading: number;
+  writing: number;
+  waiting: number;
+  accepts: number;
+  handled: number;
+  requests: number;
+  dropped_connections: number;
+  request_rate_per_sec: number | null;
+  accept_rate_per_sec: number | null;
+  handled_rate_per_sec: number | null;
+  counter_reset: boolean;
+  available: boolean;
+}
+
+export type NginxSeriesPoint = [string, number | null];
+
+export interface NginxStatusSeriesResponse {
+  step: string;
+  active: Array<[string, number]>;
+  reading: Array<[string, number]>;
+  writing: Array<[string, number]>;
+  waiting: Array<[string, number]>;
+  request_rate: NginxSeriesPoint[];
+}
+
+export interface NginxVTSStatusResponse {
+  enabled: boolean;
+  hint?: string;
+}
+
+export interface NginxVTSServerRow {
+  server_name: string;
+  requests: number;
+  in_bytes: number;
+  out_bytes: number;
+  request_msec: number;
+  sample_ts?: string;
+}
+
+export interface NginxVTSUpstreamRow {
+  upstream_name: string;
+  server_addr: string;
+  requests: number;
+  in_bytes: number;
+  out_bytes: number;
+  response_msec: number;
+  down: boolean;
+  sample_ts?: string;
+}
+
 // ---- UI meta (backend-owned options) ----
 
 export interface UiOption {
@@ -507,7 +596,7 @@ export interface UiCapability {
 }
 
 export interface UiMetaResponse {
-  app: { name: string; env: string; logo_letter: string };
+  app: { name: string; env: string; logo_letter: string; version?: string };
   auth: {
     login_hint: string;
     login_email_placeholder?: string;
@@ -519,7 +608,7 @@ export interface UiMetaResponse {
   navigation?: Array<{ path: string; label: string; group: string; icon: string }>;
   files: { roots: Array<{ path: string; label?: string }>; actions: UiOption[] };
   logs?: { tail_kinds: UiOption[] };
-  nginx: { test: UiCapability; reload: UiCapability };
+  nginx: { test: UiCapability; reload: UiCapability; stub_status: UiCapability; vts: UiCapability };
   cron: { run_every_options: UiOption[]; manual_run: UiCapability };
   mounts: {
     default_options: string;

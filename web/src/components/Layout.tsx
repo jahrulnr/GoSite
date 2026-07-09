@@ -348,13 +348,13 @@ export function Shell() {
     <div class="shell">
       <div class="app-bg-glow" />
       <aside class="sidebar">
-        <div class="sidebar-brand">
+        <button type="button" class="sidebar-brand brand-link" onClick={() => navigate('/dashboard')} aria-label="Go to Dashboard">
           <div class="brand-logo">{meta?.app?.logo_letter ?? 'G'}</div>
           <div class="brand-meta">
             <div class="brand-name">{meta?.app?.name ?? 'GoSite'}</div>
             <div class="brand-env">{envLabel(meta?.app?.env)}</div>
           </div>
-        </div>
+        </button>
         <nav class="nav" aria-label="Primary">
           {grouped.map(([group, items]) => (
             <div key={group} class="nav-group">

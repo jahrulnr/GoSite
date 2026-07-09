@@ -76,7 +76,8 @@ Navigasi UI dari `GET /ui/meta`. Hook plugin sebelum side-effect nginx/SSL/job.
 | `mount` | `internal/service/mount` | fstab |
 | `logs` | `internal/service/logs` | Log viewer |
 | `splunklite` | `internal/observability/splunklite` | Audit + query |
-| `grafanalite` | `internal/observability/grafanalite` | Traffic metrics |
+| `grafanalite` | `internal/observability/grafanalite` | Traffic metrics (log buckets) |
+| `nginxlite` | `internal/observability/nginxlite` | stub_status + VTS (poll localhost) |
 | `database` | `internal/service/database` | SQLite viewer |
 | `system` | `internal/service/system` | CPU, RAM, disk, network |
 | `settings` | `internal/service/settings` | Profile (`PUT /settings/profile`) |
@@ -104,6 +105,15 @@ Navigasi UI dari `GET /ui/meta`. Hook plugin sebelum side-effect nginx/SSL/job.
 | `/storage/webconfig/` | nginx draft + SSL |
 | `/storage/plugins/` | Artifact plugin |
 | `/www/` | Document root website |
+
+## Observability nginx (tanpa Prometheus)
+
+Image production mengompilasi ulang nginx + VTS (`docker/nginx-vts/build.sh`). Endpoint internal:
+
+- `127.0.0.1:18081/nginx_status` → stub_status
+- `127.0.0.1:18082/status/format/json` → VTS
+
+Detail: [22-nginx-metrics_id.md](../sequences/22-nginx-metrics_id.md).
 
 ## Legacy (BangunSite)
 

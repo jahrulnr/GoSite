@@ -18,7 +18,7 @@ gosite/
 │   │   ├── job/             # worker, SSE stream
 │   │   ├── commander/
 │   │   └── docker/
-│   ├── observability/       # splunklite, grafanalite
+│   ├── observability/       # splunklite, grafanalite, nginxlite
 │   ├── repository/sqlite/
 │   ├── repository/sqlite/
 │   └── service/             # auth, website, ssl, cron, files, plugin, …
@@ -73,6 +73,7 @@ infra/       → nginx, job worker, exec, filesystem
 | Mount manager | `service/mount` |
 | Cron scheduler + worker SSE | `service/cron`, `infra/job` |
 | Splunk Lite, Grafana Lite | `observability/*` |
+| Nginx metrics (stub_status + VTS) | `observability/nginxlite` — [seq 22](../sequences/22-nginx-metrics.md) |
 | DB viewer | `service/database` |
 
 ### Phase 4 — Plugin platform ✅

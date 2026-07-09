@@ -34,21 +34,31 @@ type QuerySourcePayload struct {
 }
 
 type QuerySourceMeta struct {
-	ID           string             `json:"id"`
-	Label        string             `json:"label"`
-	Group        string             `json:"group"`
-	Description  string             `json:"description"`
-	LogPath      string             `json:"log_path,omitempty"`
-	Query        QuerySourcePayload `json:"query"`
-	Fields       []QueryFieldMeta   `json:"fields"`
-	QuickFilters []QueryOption      `json:"quick_filters"`
-	Examples     []string           `json:"examples"`
+	ID            string             `json:"id"`
+	Label         string             `json:"label"`
+	Group         string             `json:"group"`
+	Description   string             `json:"description"`
+	LogPath       string             `json:"log_path,omitempty"`
+	SearchProfile string             `json:"search_profile"`
+	Query         QuerySourcePayload `json:"query"`
+	Fields        []QueryFieldMeta   `json:"fields"`
+	QuickFilters  []QueryOption      `json:"quick_filters"`
+	Examples      []string           `json:"examples"`
+}
+
+type SyntaxTopic struct {
+	Title   string `json:"title"`
+	Syntax  string `json:"syntax"`
+	Example string `json:"example,omitempty"`
+	Note    string `json:"note,omitempty"`
 }
 
 type QueryMeta struct {
-	SyntaxHint string            `json:"syntax_hint"`
-	TimeRanges []QueryOption     `json:"time_ranges"`
-	Sources    []QuerySourceMeta `json:"sources"`
+	SyntaxHint    string            `json:"syntax_hint"`
+	HelpURL       string            `json:"help_url"`
+	SyntaxTopics  []SyntaxTopic     `json:"syntax_topics"`
+	TimeRanges    []QueryOption     `json:"time_ranges"`
+	Sources       []QuerySourceMeta `json:"sources"`
 }
 
 type MetaService struct {
@@ -62,7 +72,17 @@ func NewMetaService(sites SiteLister, logDir string) *MetaService {
 
 func (s *MetaService) Meta(ctx context.Context) (QueryMeta, error) {
 	out := QueryMeta{
-		SyntaxHint: "Type plain words or field:value, or /regex/ (Go regexp) with field: prefix. Use * as wildcard. Space means AND.",
+		SyntaxHint: "Splunk-style: terms AND (space), OR, NOT, field=value, status>=300, /regex/, \"phrase\" | head 50",
+		HelpURL:    "https://github.com/jahrulnr/GoSite/wiki/Log-search",
+		SyntaxTopics: []SyntaxTopic{
+			{Title: "Text", Syntax: "word OR \"exact phrase\"", Example: `error OR "connection refused"`},
+			{Title: "Field", Syntax: "field=value", Example: "status=404 action=login"},
+			{Title: "Range", Syntax: "status>=300 status<400", Example: "status>=300 status<400", Note: "HTTP status on access logs only"},
+			{Title: "Wildcard", Syntax: "field=prefix*", Example: "action=website.* status=3*"},
+			{Title: "Regex", Syntax: "/pattern/ or field=/pattern/", Example: `/timeout/ status=/^3\d{2}$/`},
+			{Title: "Boolean", Syntax: "AND OR NOT ( )", Example: "status>=399 AND (curl OR status=200)"},
+			{Title: "Pipes", Syntax: "| head N | sort -ts", Example: "status=5* | head 50 | sort -ts", Note: "History search only"},
+		},
 		TimeRanges: []QueryOption{
 			{Value: "1h", Label: "Last hour", OffsetMs: 3_600_000},
 			{Value: "6h", Label: "Last 6 hours", OffsetMs: 21_600_000},
@@ -154,7 +174,7 @@ func (s *MetaService) scanLogSites() []logs.SiteOption {
 func systemSources() []QuerySourceMeta {
 	return []QuerySourceMeta{
 		{
-			ID: "audit", Label: "audit_logs", Group: "system",
+			ID: "audit", Label: "audit_logs", Group: "system", SearchProfile: "structured",
 			Description: "Panel actions such as sign-ins, website changes, nginx reloads, and settings updates.",
 			Query:       QuerySourcePayload{Source: SourceAudit},
 			Fields: []QueryFieldMeta{
@@ -165,14 +185,15 @@ func systemSources() []QuerySourceMeta {
 				{Name: "message", Label: "Message", Placeholder: "created"},
 			},
 			QuickFilters: []QueryOption{
-				{Value: "action:login", Label: "Sign-ins"},
-				{Value: "action:logout", Label: "Sign-outs"},
-				{Value: "status:failed", Label: "Failed"},
+				{Value: "action=login", Label: "Sign-ins"},
+				{Value: "action=logout", Label: "Sign-outs"},
+				{Value: "status=failed", Label: "Failed"},
+				{Value: "user=admin@*", Label: "Admin"},
 			},
-			Examples: []string{"action:login", "user:admin@demo.com", "domain:example.com"},
+			Examples: []string{"action=login", "user=admin@demo.com", "status=failed"},
 		},
 		{
-			ID: "job", Label: "job_runs", Group: "system",
+			ID: "job", Label: "job_runs", Group: "system", SearchProfile: "structured",
 			Description: "Background job runs such as SSL, cron, and command execution.",
 			Query:       QuerySourcePayload{Source: SourceJob},
 			Fields: []QueryFieldMeta{
@@ -181,16 +202,20 @@ func systemSources() []QuerySourceMeta {
 				{Name: "status", Label: "Status", Placeholder: "ok"},
 				{Name: "message", Label: "Message", Placeholder: "renew"},
 			},
-			QuickFilters: []QueryOption{{Value: "job_type:ssl.*", Label: "SSL jobs"}, {Value: "job_type:cron.*", Label: "Cron runs"}, {Value: "status:failed", Label: "Failed"}},
-			Examples:     []string{"ssl.certbot", "job_type:cron.*", "status:failed"},
+			QuickFilters: []QueryOption{
+				{Value: "job_type=ssl.*", Label: "SSL jobs"},
+				{Value: "job_type=cron.*", Label: "Cron runs"},
+				{Value: "status=failed", Label: "Failed"},
+			},
+			Examples: []string{"job_type=ssl.*", "status=failed", "error OR timeout"},
 		},
 		{
-			ID: "all", Label: "all_sources", Group: "system",
+			ID: "all", Label: "all_sources", Group: "system", SearchProfile: "structured",
 			Description:  "Search audit logs, job runs, and nginx logs together.",
 			Query:        QuerySourcePayload{Source: SourceAll},
-			Fields:       []QueryFieldMeta{{Name: "_text", Label: "Any word", Placeholder: "login"}},
-			QuickFilters: []QueryOption{},
-			Examples:     []string{},
+			Fields:       []QueryFieldMeta{{Name: "message", Label: "Any text", Placeholder: "login"}},
+			QuickFilters: []QueryOption{{Value: "status=failed", Label: "Failed jobs/audit"}, {Value: "error OR timeout", Label: "Errors"}},
+			Examples:     []string{"status>=300 status<400", "action=login"},
 		},
 	}
 }
@@ -211,15 +236,16 @@ func (s *MetaService) nginxSources(sites []logs.SiteOption) []QuerySourceMeta {
 			label := logFileName(kind, domain)
 			desc := fmt.Sprintf("Nginx %s log for %s.", kind, name)
 			out = append(out, QuerySourceMeta{
-				ID:           id,
-				Label:        label,
-				Group:        "nginx",
-				Description:  desc,
-				LogPath:      filepath.Join(s.logDir, label),
-				Query:        QuerySourcePayload{Source: kind, Site: domain},
-				Fields:       nginxFields(kind, domain),
-				QuickFilters: nginxQuickFilters(kind),
-				Examples:     nginxExamples(kind, domain),
+				ID:            id,
+				Label:         label,
+				Group:         "nginx",
+				Description:   desc,
+				LogPath:       filepath.Join(s.logDir, label),
+				SearchProfile: nginxSearchProfile(kind),
+				Query:         QuerySourcePayload{Source: kind, Site: domain},
+				Fields:        nginxFields(kind, domain),
+				QuickFilters:  nginxQuickFilters(kind),
+				Examples:      nginxExamples(kind, domain),
 			})
 		}
 	}
@@ -233,27 +259,51 @@ func logFileName(kind, domain string) string {
 	return fmt.Sprintf("%s-%s.log", kind, domain)
 }
 
+func nginxSearchProfile(kind string) string {
+	if kind == SourceAccess {
+		return "structured"
+	}
+	return "text"
+}
+
 func nginxFields(kind, domain string) []QueryFieldMeta {
 	fields := []QueryFieldMeta{
 		{Name: "site", Label: "Site", Placeholder: domain},
 		{Name: "message", Label: "Message", Placeholder: "GET /"},
 	}
 	if kind == SourceAccess {
-		fields = append([]QueryFieldMeta{{Name: "status_code", Label: "Status code", Placeholder: "404"}}, fields...)
+		fields = append([]QueryFieldMeta{{Name: "status", Label: "HTTP status", Placeholder: "404"}}, fields...)
 	}
 	return fields
 }
 
 func nginxQuickFilters(kind string) []QueryOption {
 	if kind == SourceAccess {
-		return []QueryOption{{Value: "status_code:404", Label: "404s"}, {Value: "status_code:500", Label: "500s"}, {Value: "GET", Label: "GET requests"}}
+		return []QueryOption{
+			{Value: "status>=300 status<400", Label: "3xx"},
+			{Value: "status=5*", Label: "5xx"},
+			{Value: "status=404", Label: "404"},
+			{Value: "GET", Label: "GET"},
+		}
 	}
-	return []QueryOption{{Value: "error", Label: "Errors"}, {Value: "timeout", Label: "Timeouts"}, {Value: "failed", Label: "Failed"}}
+	return []QueryOption{
+		{Value: "error", Label: "Errors"},
+		{Value: "timeout", Label: "Timeouts"},
+		{Value: "/connect\\(\\) failed/", Label: "Connect failed"},
+	}
 }
 
 func nginxExamples(kind, domain string) []string {
 	if kind == SourceAccess {
-		return []string{fmt.Sprintf("site:%s", domain), "status_code:5\\d\\d", "/GET|POST/"}
+		return []string{
+			fmt.Sprintf("site=%s status>=300 status<400", domain),
+			"status>=399 AND (curl OR status=200)",
+			"status=5* | head 50",
+		}
 	}
-	return []string{fmt.Sprintf("site:%s", domain), "timeout", "/open\\(\\) .* failed/"}
+	return []string{
+		fmt.Sprintf("site=%s error", domain),
+		"timeout OR upstream",
+		`/open\(\) .* failed/`,
+	}
 }

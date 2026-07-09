@@ -31,11 +31,11 @@ type OffsetState struct {
 
 // Collector incrementally parses nginx access logs into 5-minute buckets.
 type Collector struct {
-	logDir      string
-	offsetPath  string
-	metrics     *sqlite.TrafficMetricsRepository
-	retention   int
-	nowFn       func() time.Time
+	logDir     string
+	offsetPath string
+	metrics    *sqlite.TrafficMetricsRepository
+	retention  int
+	nowFn      func() time.Time
 }
 
 // NewCollector returns a traffic metrics collector.

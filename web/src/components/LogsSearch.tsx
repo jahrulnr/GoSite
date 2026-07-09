@@ -10,11 +10,19 @@
 
 import type { JSX } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import type { QueryOption, QuerySourceMeta, SavedQuery } from '../api/types';
+import type { QueryOption, QuerySourceMeta, SavedQuery, SyntaxTopic } from '../api/types';
 import { IconBookmark, IconPause, IconPencil, IconPlay, IconTrash } from './Icons';
 
 export type LogMode = 'history' | 'live';
 export type LogFormat = 'raw' | 'smart';
+
+function isSafeUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url);
+}
+
+function safeSourceToken(source: string): string {
+  return source.replace(/[^a-z0-9_-]/gi, '');
+}
 
 export interface Props {
   source: QuerySourceMeta | undefined;
@@ -38,9 +46,9 @@ export interface Props {
   format: LogFormat;
   onFormatChange: (f: LogFormat) => void;
   syntaxHint: string;
+  syntaxTopics: SyntaxTopic[];
+  helpUrl?: string;
 }
-
-const DEFAULT_HINT = 'field:value | /regex/ | space = AND';
 
 export function LogsSearch({
   source,
@@ -64,7 +72,31 @@ export function LogsSearch({
   format,
   onFormatChange,
   syntaxHint,
+  syntaxTopics,
+  helpUrl,
 }: Readonly<Props>) {
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const helpRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!helpOpen) return;
+    const onDocClick = (event: MouseEvent) => {
+      if (helpRef.current && !helpRef.current.contains(event.target as Node)) {
+        setHelpOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setHelpOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [helpOpen]);
+
   const handleRun = () => {
     if (running) onStop();
     else onRun();
@@ -80,6 +112,13 @@ export function LogsSearch({
       handleRun();
     }
   };
+
+  const quickFilters = source?.quick_filters ?? [];
+  const examples = source?.examples ?? [];
+  const structured = source?.search_profile === 'structured';
+  const queryPlaceholder = structured
+    ? 'Use quick filters below — e.g. Sign-ins — or field=value'
+    : 'status>=300 status<400 | head 50';
 
   return (
     <div class="splunk-bar" role="search" aria-label="Logs search">
@@ -114,7 +153,7 @@ export function LogsSearch({
           type="text"
           autoComplete="off"
           spellcheck={false}
-          placeholder="search…  (e.g. action:login 404 status>=500 /^GET \/api/)"
+          placeholder={queryPlaceholder}
           value={query}
           onInput={(event) => onQueryChange((event.currentTarget as HTMLInputElement).value)}
           onKeyDown={onInputKeyDown}
@@ -149,9 +188,77 @@ export function LogsSearch({
           )}
         </button>
       </div>
-      <div class="splunk-syntax">
-        <code>{syntaxHint || DEFAULT_HINT}</code>
+      {advancedOpen && (
+      <div class="splunk-syntax-row">
+        <div class="splunk-syntax">
+          <code>{syntaxHint}</code>
+        </div>
+        <div ref={helpRef} class={`splunk-help${helpOpen ? ' open' : ''}`}>
+          <button
+            type="button"
+            class="splunk-help-trigger"
+            aria-label="Search syntax help"
+            aria-expanded={helpOpen}
+            title="Search syntax help"
+            onClick={() => setHelpOpen((open) => !open)}
+          >
+            ?
+          </button>
+          {helpOpen && (
+            <div class="splunk-help-panel" role="dialog" aria-label="Search syntax">
+              <div class="splunk-help-title">Search syntax</div>
+              {syntaxTopics.map((topic) => (
+                <div class="splunk-help-topic" key={topic.title}>
+                  <div class="topic-title">{topic.title}</div>
+                  <code class="topic-syntax">{topic.syntax}</code>
+                  {topic.example && <code class="topic-example">{topic.example}</code>}
+                  {topic.note && <div class="topic-note">{topic.note}</div>}
+                </div>
+              ))}
+              {helpUrl && isSafeUrl(helpUrl) && (
+                <a class="splunk-help-link" href={helpUrl} target="_blank" rel="noopener noreferrer">
+                  Full tutorial →
+                </a>
+              )}
+            </div>
+          )}
+        </div>
       </div>
+      )}
+      {(quickFilters.length > 0 || (advancedOpen && examples.length > 0)) && (
+        <div class="splunk-chips">
+          {quickFilters.map((chip) => (
+            <button
+              key={chip.value}
+              type="button"
+              class="splunk-chip quick"
+              title={chip.value}
+              onClick={() => onQueryChange(chip.value)}
+            >
+              {chip.label}
+            </button>
+          ))}
+          {advancedOpen && examples.map((example) => (
+            <button
+              key={example}
+              type="button"
+              class="splunk-chip example"
+              title={example}
+              onClick={() => onQueryChange(example)}
+            >
+              {example}
+            </button>
+          ))}
+          <button
+            type="button"
+            class="splunk-chip toggle-advanced"
+            aria-pressed={advancedOpen}
+            onClick={() => setAdvancedOpen((open) => !open)}
+          >
+            {advancedOpen ? 'Hide syntax' : 'Advanced syntax'}
+          </button>
+        </div>
+      )}
       <div class="splunk-subbar">
         <div class="splunk-mode" role="tablist" aria-label="Search mode">
           <button
@@ -229,7 +336,6 @@ function SavedDropdown({
   const inputRef = useRef<HTMLInputElement>(null);
   const confirmDeleteRef = useRef<HTMLButtonElement>(null);
 
-  // Click-outside handler.
   useEffect(() => {
     if (!open) return;
     const onDocClick = (event: MouseEvent) => {
@@ -256,7 +362,6 @@ function SavedDropdown({
     };
   }, [open]);
 
-  // Focus the inline delete-confirm button when it appears.
   useEffect(() => {
     if (confirmDeleteId !== null) {
       const id = globalThis.setTimeout(() => confirmDeleteRef.current?.focus(), 0);
@@ -265,7 +370,6 @@ function SavedDropdown({
     return undefined;
   }, [confirmDeleteId]);
 
-  // Autofocus the search/create input on open.
   useEffect(() => {
     if (open) {
       const id = globalThis.setTimeout(() => inputRef.current?.focus(), 0);
@@ -312,7 +416,6 @@ function SavedDropdown({
 
   const handleDelete = (item: SavedQuery) => {
     if (confirmDeleteId === item.id) {
-      // Second click — user already confirmed.
       void onDeleteSaved(item.id);
       if (activeSaved?.id === item.id) setActiveSaved(null);
       setConfirmDeleteId(null);
@@ -439,9 +542,14 @@ function SavedDropdown({
                   <div class="row-main">
                     <div class="row-name">{item.name}</div>
                     <div class="row-meta">
-                      <span class={`badge src-${item.source}`} style={`padding:0 6px;font-size:10px;background:var(--src-${item.source}, var(--surface-2));color:var(--text-on-accent);`}>
-                        {item.source}
-                      </span>
+                      {(() => {
+                        const src = safeSourceToken(item.source);
+                        return (
+                          <span class={`badge src-${src}`} style={`padding:0 6px;font-size:10px;background:var(--src-${src}, var(--surface-2));color:var(--text-on-accent);`}>
+                            {item.source}
+                          </span>
+                        );
+                      })()}
                       <span class="q-preview">{item.query || '—'}</span>
                     </div>
                   </div>

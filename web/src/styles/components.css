@@ -47,6 +47,22 @@
   border-bottom: 1px solid var(--border);
   position: relative;
 }
+.sidebar-brand.brand-link {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--d-fast) var(--ease-out);
+}
+.sidebar-brand.brand-link:hover {
+  background: oklch(100% 0 0 / 0.03);
+}
+.sidebar-brand.brand-link:hover .brand-name {
+  color: var(--accent);
+}
 .sidebar-brand::after {
   content: '';
   position: absolute;
@@ -488,6 +504,42 @@ a.nav-item {
 
 .btn.sm { padding: 5px 10px; font-size: 12px; border-radius: var(--radius-xs); }
 .btn.icon { padding: 7px; }
+
+/* Hover tooltips (data-tip) — faster & styled vs native title */
+.btn[data-tip] {
+  position: relative;
+}
+.btn[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) translateY(3px);
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  box-shadow: 0 6px 16px oklch(0% 0 0 / 0.4);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--d-fast) var(--ease-out),
+    transform var(--d-fast) var(--ease-out),
+    visibility var(--d-fast);
+  z-index: 30;
+}
+.btn[data-tip]:hover::after,
+.btn[data-tip]:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
 
 .link-button {
   border: 0;
@@ -1029,8 +1081,15 @@ table.table tbody tr:last-child td { border-bottom: none; }
   color: var(--text);
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   font-family: var(--mono);
+}
+.sparkline-latest {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
 }
 .sparkline-label::before {
   content: '';
@@ -1624,14 +1683,22 @@ code {
   box-shadow: 0 0 0 3px var(--splunk-green-soft);
 }
 
+.splunk-syntax-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-basis: 100%;
+  margin-top: -2px;
+  margin-left: 42px;
+}
+
 .splunk-syntax {
   font-family: var(--mono);
   font-size: 11.5px;
   color: var(--text-dim);
   padding: 0 4px;
-  flex-basis: 100%;
-  margin-top: -2px;
-  margin-left: 42px; /* align under the input, past the prompt button */
+  flex: 1;
+  min-width: 0;
 }
 .splunk-syntax code {
   background: transparent;
@@ -1639,6 +1706,130 @@ code {
   padding: 0;
   color: var(--text-faint);
   font-size: 11.5px;
+}
+
+.splunk-help {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.splunk-help-trigger {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+}
+.splunk-help-trigger:hover,
+.splunk-help.open .splunk-help-trigger {
+  border-color: var(--splunk-green);
+  color: var(--splunk-green);
+  background: var(--splunk-green-soft);
+}
+
+.splunk-help-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  width: min(360px, 92vw);
+  max-height: 70vh;
+  overflow: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-lg);
+}
+
+.splunk-help-title {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: var(--text);
+}
+
+.splunk-help-topic + .splunk-help-topic {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.splunk-help-topic .topic-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.splunk-help-topic .topic-syntax,
+.splunk-help-topic .topic-example {
+  display: block;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 4px 6px;
+  margin-top: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.splunk-help-topic .topic-note {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  margin-top: 4px;
+}
+
+.splunk-help-link {
+  display: inline-block;
+  margin-top: 12px;
+  font-size: 11.5px;
+  color: var(--splunk-green);
+  text-decoration: none;
+}
+.splunk-help-link:hover { text-decoration: underline; }
+
+.splunk-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex-basis: 100%;
+  margin: 6px 0 2px 42px;
+}
+
+.splunk-chip {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-dim);
+  cursor: pointer;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.splunk-chip:hover {
+  border-color: var(--splunk-green);
+  color: var(--splunk-green);
+  background: var(--splunk-green-soft);
+}
+.splunk-chip.quick {
+  font-weight: 600;
+}
+.splunk-chip.example {
+  font-weight: 400;
+  opacity: 0.92;
 }
 
 .splunk-time {
@@ -2402,6 +2593,89 @@ code {
 
 .plugin-schema {
   max-height: 520px;
+}
+
+.integration-token-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.integration-token-row {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 14px 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.integration-token-row.revoked {
+  opacity: 0.72;
+}
+
+.integration-token-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.integration-token-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.integration-token-scopes,
+.integration-token-edit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.integration-scope-group {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  background: var(--bg-elevated);
+}
+
+.integration-scope-title {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.integration-scope-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.integration-scope-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.integration-secret-card {
+  margin: 16px 0;
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--border));
+}
+
+.integration-mcp-json {
+  max-height: 280px;
+  margin-top: 10px;
 }
 
 @media (max-width: 1100px) {

@@ -40,8 +40,15 @@ GoSite feature flow diagrams. **Legacy BangunSite** sections (if any) are kept a
 | 16 | [16-database-viewer.md](./16-database-viewer.md) | SQLite read-only | ✅ |
 | 17 | [17-splunk-lite.md](./17-splunk-lite.md) | Audit + log query | ✅ |
 | 18 | [18-grafana-lite.md](./18-grafana-lite.md) | Traffic metrics | ✅ |
+| 22 | [22-nginx-metrics.md](./22-nginx-metrics.md) | stub_status + VTS nginx metrics | ✅ |
 | 19 | [19-plugin-installer.md](./19-plugin-installer.md) | Plugin installer + compatibility contract | ✅ |
 | 20 | [20-plugin-remote-distribution.md](./20-plugin-remote-distribution.md) | Remote install (GitHub/GitLab/URL) — wave G | ✅ |
+| 21 | [21-plugin-mcp.md](./21-plugin-mcp.md) | MCP plugin + integration access tokens — wave P6 | 🚧 P6-host-auth shipped |
+| 23 | [23-builtin-plugins.md](./23-builtin-plugins.md) | Built-in plugins (ship with GoSite, disabled by default) — wave B | 📋 design |
+
+Impl companion: [21-plugin-mcp-impl.md](./21-plugin-mcp-impl.md), [23-builtin-plugins-impl.md](./23-builtin-plugins-impl.md). Layer docs: [plugin-integration-auth.md](../architecture/plugin-integration-auth.md), [integration-tokens.md](../reference/integration-tokens.md), [mcp-tools.md](../reference/mcp-tools.md), [mcp-operator.md](../guides/mcp-operator.md).
+
+See also [plugin-permissions.md](../reference/plugin-permissions.md) for the canonical scope registry.
 
 ## Wiki GitHub
 

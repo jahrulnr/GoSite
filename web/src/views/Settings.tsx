@@ -8,7 +8,7 @@ import { useStore } from '../lib/store';
 import { PluginSettingsCard } from './PluginSettingsCard';
 
 export function SettingsView() {
-  const { user, setUser, toast } = useStore();
+  const { user, setUser, toast, meta } = useStore();
   const [name, setName] = useState(user?.name ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
   const [password, setPassword] = useState('');
@@ -58,6 +58,7 @@ export function SettingsView() {
                   </div>
                   <div class="divider" />
                   <KeyValue label="Endpoint" mono>/health</KeyValue>
+                  <KeyValue label="Panel version" mono>{meta?.app?.version ?? '—'}</KeyValue>
                   <KeyValue label="Auth" mono>{user?.email}</KeyValue>
                 </div>
               );

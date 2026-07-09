@@ -1,0 +1,65 @@
+# Cloud lab compose — copy to VM as /apps/gosite/docker-compose.yml
+# Panel: https://<vm-ip>:1100/  |  Websites: http(s)://<vm-ip>/
+services:
+  gosite:
+    image: gosite:1.0.0-dev
+    container_name: gosite
+    privileged: true
+    cpus: 1
+    mem_limit: 768m
+    restart: unless-stopped
+    devices:
+      - /dev/fuse
+    cap_add:
+      - SYS_PTRACE
+      - NET_ADMIN
+    ulimits:
+      nofile:
+        soft: "65536"
+        hard: "65536"
+    environment:
+      TZ: Asia/Jakarta
+      STORAGE_PATH: /storage
+      DB_DATABASE: /storage/db.sqlite
+      WEB_PATH: /storage/www
+      LISTEN_ADDR: ":8080"
+      TEMPLATES_DIR: /var/setup
+      MIGRATIONS_DIR: /app/migrations
+      FE_EMBED: "true"
+      TLS_ENABLE: "false"
+      DEMO_SEED: "false"
+      AUTH_ENABLE: "false"
+      ENABLE_LOCKSCREEN: "false"
+      PLUGIN_BUNDLED_PATH: /app/bundled-plugins
+      PLUGIN_BUNDLED_ENABLED: "true"
+    ports:
+      - "1100:8080"
+      - target: 80
+        published: 80
+        protocol: tcp
+        mode: host
+      - target: 443
+        published: 443
+        protocol: tcp
+        mode: host
+      - target: 443
+        published: 443
+        protocol: udp
+        mode: host
+    volumes:
+      - /etc/hosts:/etc/hosts
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/storage:rw
+    networks:
+      - services
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+networks:
+  services:
+    external: true
+    name: services

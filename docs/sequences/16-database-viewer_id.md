@@ -52,6 +52,9 @@ sequenceDiagram
 | `audit_logs` | Splunk Lite audit |
 | `log_events` | Ingested nginx lines |
 | `traffic_metrics` | Grafana Lite buckets |
+| `nginx_status_samples` | stub_status ([22-nginx-metrics_id.md](./22-nginx-metrics_id.md)) |
+| `nginx_vts_server_samples` | VTS per-server |
+| `nginx_vts_upstream_samples` | VTS per-upstream |
 | `saved_queries` | Splunk saved searches |
 
 Migrasi: `migrations/*.sql` via `gosite migrate`.

@@ -20,6 +20,24 @@ export function formatNumber(n: number | undefined | null): string {
   return n.toLocaleString();
 }
 
+/** Compact numeric display for rates and small decimals (req/s, etc.). */
+export function formatRate(n: number | undefined | null, digits = 2): string {
+  if (n === undefined || n === null || Number.isNaN(n)) return '—';
+  if (n === 0) return '0';
+  const abs = Math.abs(n);
+  if (abs >= 100) return n.toFixed(0);
+  if (abs >= 10) return n.toFixed(1);
+  return n.toFixed(digits);
+}
+
+/** Short time label for chart axes. */
+export function formatAxisTime(value: string | number | Date | undefined | null): string {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
 export function formatPercent(n: number | undefined | null, digits = 0): string {
   if (n === undefined || n === null || Number.isNaN(n)) return '—';
   return `${n.toFixed(digits)}%`;

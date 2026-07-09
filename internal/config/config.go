@@ -57,6 +57,9 @@ type Config struct {
 	PluginBuildCPU           float64
 	PluginBuildImage         string
 	PluginCatalogPath        string
+	PluginBundledEnabled     bool
+	PluginBundledPath        string
+	PluginBundledAutoEnable  bool
 
 	ListenAddr string
 	TLSCert    string
@@ -77,6 +80,10 @@ type Config struct {
 	TerminalDumpDir    string
 	TerminalDumpMax    int64
 	TerminalPerUserMax int
+
+	// Nginx metrics collectors (see docs/sequences/22-nginx-metrics.md).
+	NginxStubStatusURL string
+	NginxVTSStatusURL  string
 }
 
 // LogsDir returns the centralized nginx and app log directory.
@@ -102,6 +109,15 @@ func Load() Config {
 	storage := envOr("STORAGE_PATH", "/storage")
 	dbPath := envOr("DB_DATABASE", filepath.Join(storage, "db.sqlite"))
 	appEnv := envOr("APP_ENV", "production")
+	nginxStubURL := envOr("GOSITE_NGINX_STUB_STATUS_URL", "http://127.0.0.1:18081/nginx_status")
+	if appEnv == "local" && strings.TrimSpace(os.Getenv("GOSITE_NGINX_STUB_STATUS_URL")) == "" {
+		nginxStubURL = ""
+	}
+
+	nginxVTSURL := envOr("GOSITE_NGINX_VTS_URL", "http://127.0.0.1:18082/status/format/json")
+	if appEnv == "local" && strings.TrimSpace(os.Getenv("GOSITE_NGINX_VTS_URL")) == "" {
+		nginxVTSURL = ""
+	}
 
 	return Config{
 		AppEnv:     appEnv,
@@ -149,6 +165,9 @@ func Load() Config {
 		PluginBuildCPU:            envFloat("PLUGIN_BUILD_CPU_LIMIT", 2.0),
 		PluginBuildImage:          envOr("PLUGIN_BUILD_IMAGE", "golang:1.22-bookworm"),
 		PluginCatalogPath:         envOr("PLUGIN_CATALOG_PATH", ""),
+		PluginBundledEnabled:      envBool("PLUGIN_BUNDLED_ENABLED", true),
+		PluginBundledPath:         envOr("PLUGIN_BUNDLED_PATH", ""),
+		PluginBundledAutoEnable:   envBool("PLUGIN_BUNDLED_AUTO_ENABLE", false),
 
 		ListenAddr: envOr("LISTEN_ADDR", ":8080"),
 		TLSCert:    envOr("TLS_CERT", filepath.Join(storage, "webconfig/ssl/live/default/cert.pem")),
@@ -168,6 +187,9 @@ func Load() Config {
 		TerminalDumpDir:    envOr("TERMINAL_DUMP_DIR", "/tmp"),
 		TerminalDumpMax:    int64(envInt("TERMINAL_DUMP_MAX", 256*1024)),
 		TerminalPerUserMax: envInt("TERMINAL_PER_USER_MAX", 8),
+
+		NginxStubStatusURL: nginxStubURL,
+		NginxVTSStatusURL:  nginxVTSURL,
 	}
 }
 

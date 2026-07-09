@@ -158,7 +158,7 @@ Base URL: `https://<host>:8080/api/v1` — session cookie `gosite_session` after
 ```bash
 make build          # Build frontend + Go binary → bin/gosite
 make test           # go test -race
-make test-cover     # Service/observability packages ≥80% coverage gate
+make test-cover     # Service/observability total coverage gate (default ≥65%)
 make contract-check # API response shape tests
 ```
 

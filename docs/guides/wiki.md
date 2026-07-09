@@ -52,6 +52,7 @@ cd /tmp/gosite.wiki && git add -A && git commit -m "docs: sync wiki bilingual" &
 | API reference | reference/api-inventory.md | reference/api-inventory_id.md |
 | Nginx auto-repair | operations/nginx-repair.md | operations/nginx-repair_id.md |
 | Sequences | sequences/*.md | sequences/*_id.md |
+| Log search | guides/log-search.md | guides/log-search_id.md |
 | Plugin installer | sequences/19-plugin-installer.md | sequences/19-plugin-installer_id.md |
 | Plugin platform (ADR) | architecture/plugin-platform.md | _(EN; same page exported as Plugin-platform-id)_ |
 | Plugin dev templates | [plugins/_templates/](../plugins/_templates/) | same repo path |

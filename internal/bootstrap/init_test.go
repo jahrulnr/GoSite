@@ -128,7 +128,7 @@ func TestBootstrap_IdempotentSecondRun(t *testing.T) {
 
 	var migrationCount int
 	require.NoError(t, db.QueryRow(`SELECT COUNT(1) FROM schema_migrations`).Scan(&migrationCount))
-	assert.Equal(t, 7, migrationCount)
+	assert.Equal(t, 10, migrationCount)
 }
 
 func TestBootstrap_Symlinks(t *testing.T) {

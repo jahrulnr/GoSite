@@ -11,11 +11,12 @@ Runtime, API, and migration docs for **GoSite** (Go + Preact hosting panel).
 | Category | Status |
 |----------|--------|
 | Architecture & domain model | Aligned v1.3.1 — see [DOCS-MAINTENANCE.md](./DOCS-MAINTENANCE.md) |
-| Sequences 01–20 + nginx-repair | Updated for GoSite (seq 20 = wave G, v1.3.1) |
+| Sequences 01–22 + nginx-repair | Updated for GoSite (seq 22 = nginx metrics SA-8) |
+| Sequence 21 (MCP) | Split across architecture / reference / guides — see [21-plugin-mcp.md](./sequences/21-plugin-mcp.md#document-map) |
 | Plugin templates | `plugins/_templates/` (tier 0–3 scaffolds) |
 | `api/openapi.yaml` | Canonical API contract (plugin wave G included) |
 | `migration/` | Legacy BangunSite reference (not updated per feature) |
-| `implementation/` | WAVE-SA-1..7 + [WAVE-PLUGIN-G](./implementation/WAVE-PLUGIN-G.md) |
+| `implementation/` | WAVE-SA-1..8 + [WAVE-PLUGIN-G](./implementation/WAVE-PLUGIN-G.md) + [WAVE-PLUGIN-P6](./implementation/WAVE-PLUGIN-P6.md) |
 
 ## Source of truth
 
@@ -33,9 +34,9 @@ Runtime, API, and migration docs for **GoSite** (Go + Preact hosting panel).
 | Folder / file | Description |
 |---------------|-------------|
 | [architecture/](./architecture/) | Runtime overview, domain model, plugin ADR |
-| [reference/](./reference/) | API inventory (legacy map + greenfield) |
+| [reference/](./reference/) | API inventory, [integration tokens](./reference/integration-tokens.md), [MCP tools](./reference/mcp-tools.md) |
 | [operations/](./operations/) | Nginx auto-repair |
-| [guides/](./guides/) | Dev setup, wiki export, localization |
+| [guides/](./guides/) | Dev setup, wiki export, localization, [MCP operator](./guides/mcp-operator.md) |
 | [sequences/](./sequences/) | Mermaid flow diagrams per feature |
 | [implementation/](./implementation/) | Implementation wave trackers (SA + plugin) |
 | [migration/](./migration/) | BangunSite migration notes |

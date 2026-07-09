@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
+import type { ComponentChildren } from 'preact';
 import { plugins } from '../api/endpoints';
 import type { PluginCatalogEntry, PluginInstallSource, PluginResolvePreview, PluginState, PluginVersion } from '../api/types';
-import { IconArrowUp, IconPlay, IconPlug, IconRefresh, IconShield, IconTrash } from '../components/Icons';
+import { IconArrowUp, IconPause, IconPlay, IconPlug, IconRefresh, IconShield, IconTrash } from '../components/Icons';
 import { Page, Stat } from '../components/Layout';
 import { AsyncView, Badge, EmptyState, Field, InlineNotice, Modal, Spinner } from '../components/Ui';
 import { formatBytes, formatDate, formatRelative } from '../lib/format';
@@ -10,6 +11,7 @@ import { useAction, useAsync } from '../lib/hooks';
 import { navigate } from '../lib/router';
 import { useStore } from '../lib/store';
 import { PluginsKeyringPanel } from './PluginsKeyring';
+import { PluginMCPIntegrationView } from './PluginMCPIntegration';
 
 type InstallMode = 'artifact' | 'url' | 'github' | 'gitlab' | 'catalog' | 'manifest';
 
@@ -93,9 +95,14 @@ function permissions(plugin: PluginVersion) {
 
 function sourceDisplayLabel(sourceType?: string) {
   if (!sourceType || sourceType === 'upload') return 'upload';
+  if (sourceType === 'bundled') return 'built-in';
   if (sourceType === 'github-release') return 'github';
   if (sourceType === 'url') return 'url';
   return sourceType;
+}
+
+function isBundledPlugin(plugin: PluginVersion) {
+  return plugin.source_type === 'bundled';
 }
 
 function truncateText(value: string, max = 40) {
@@ -193,6 +200,7 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
   const [catalogQuery, setCatalogQuery] = useState('');
   const [catalogEntry, setCatalogEntry] = useState<PluginCatalogEntry>();
   const catalogState = useAsync(() => plugins.catalog(catalogQuery.trim() || undefined), [catalogQuery, mode]);
+  const registryState = useAsync(() => plugins.list(), []);
   const [preview, setPreview] = useState<PluginResolvePreview>();
   const [permissionsAck, setPermissionsAck] = useState(false);
   const installFile = useAction(plugins.installFile);
@@ -203,6 +211,10 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
   const resolveBusy = resolveInstall.loading;
   const error = installFile.error ?? installManifest.error ?? installRemote.error ?? resolveInstall.error;
   const isRemoteMode = mode === 'url' || mode === 'github' || mode === 'gitlab' || mode === 'catalog';
+  const catalogBundled = mode === 'catalog' && catalogEntry?.bundled;
+  const catalogInstalled = catalogEntry
+    ? (registryState.data ?? []).some((row) => row.plugin_id === catalogEntry.plugin_id && row.state !== 'uninstalled')
+    : false;
 
   useEffect(() => {
     if (!remoteEnabled && isRemoteMode) setMode('artifact');
@@ -224,6 +236,7 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
         source = { type: 'gitlab-release', repo: gitlabRepo.trim(), tag: gitlabTag.trim() };
       } else if (mode === 'catalog') {
         if (!catalogEntry) throw new Error('Select a catalog entry first');
+        if (catalogEntry.bundled) throw new Error('Built-in plugins are seeded on init — enable from the registry');
         source = catalogEntry.source;
       } else {
         source = { type: 'github-release', repo: repo.trim(), tag: tag.trim() };
@@ -263,6 +276,7 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
           preview.resolveToken,
         );
       } else if (mode === 'catalog') {
+        if (catalogEntry?.bundled) throw new Error('Built-in plugins are seeded on init — enable from the registry');
         if (!preview || !catalogEntry) throw new Error('Resolve the catalog entry before installing');
         if (!permissionsAck) throw new Error('Acknowledge plugin permissions first');
         await installRemote.run(catalogEntry.source, true, preview.resolveToken);
@@ -283,7 +297,7 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
     }
   };
 
-  const installDisabled = busy || (isRemoteMode && (!preview || !permissionsAck || (mode === 'catalog' && !catalogEntry)));
+  const installDisabled = busy || catalogBundled || (isRemoteMode && (!preview || !permissionsAck || (mode === 'catalog' && !catalogEntry)));
 
   return (
     <Modal
@@ -453,7 +467,10 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
                   class={`plugin-catalog-item ${catalogEntry?.plugin_id === entry.plugin_id ? 'active' : ''}`}
                   onClick={() => { setCatalogEntry(entry); setPreview(undefined); setPermissionsAck(false); }}
                 >
-                  <strong class="mono">{entry.plugin_id}</strong>
+                  <div class="row wrap" style="gap:8px; align-items:center;">
+                    <strong class="mono">{entry.plugin_id}</strong>
+                    {entry.bundled && <Badge kind="info">built-in</Badge>}
+                  </div>
                   <span class="dim">{entry.description || entry.name}</span>
                 </button>
               ))}
@@ -461,14 +478,21 @@ function InstallModal({ onClose, onInstalled }: Readonly<{ onClose: () => void; 
                 <span class="dim">No catalog entries. Add plugins to the host catalog JSON.</span>
               )}
             </div>
-            {catalogEntry && (
+            {catalogEntry && catalogBundled && (
+              <InlineNotice kind="info">
+                {catalogInstalled
+                  ? 'Built-in with GoSite — already in the registry (installed, disabled by default). Close this dialog and Enable it from the plugin list.'
+                  : 'Built-in with GoSite — seeded on init when bundled artifacts are present. Run gosite init (or make dev-api-setup), then Enable from the plugin list. Remote catalog install is not required.'}
+              </InlineNotice>
+            )}
+            {catalogEntry && !catalogBundled && (
               <div class="row wrap" style="margin:12px 0;">
                 <button type="button" class="btn ghost" disabled={resolveBusy} onClick={() => void resolve()}>
                   {resolveBusy ? <Spinner /> : 'Resolve'}
                 </button>
               </div>
             )}
-            {preview && <InstallPreviewCard preview={preview} permissionsAck={permissionsAck} onPermissionsAck={setPermissionsAck} />}
+            {preview && !catalogBundled && <InstallPreviewCard preview={preview} permissionsAck={permissionsAck} onPermissionsAck={setPermissionsAck} />}
           </>
         )}
         {(mode === 'artifact' || mode === 'manifest') && (
@@ -517,8 +541,8 @@ function PluginActions({ plugin, group, reload }: Readonly<{ plugin: PluginVersi
         </button>
       )}
       {plugin.state === 'enabled' && (
-        <button type="button" class="btn sm ghost" disabled={busy} onClick={() => run(() => disable.run(plugin.plugin_id), `${plugin.name} disabled`)}>
-          Disable
+        <button type="button" class="btn sm" disabled={busy} onClick={() => run(() => disable.run(plugin.plugin_id), `${plugin.name} disabled`)}>
+          <IconPause /> Disable
         </button>
       )}
       {stableForUninstall(plugin.state) && (
@@ -541,7 +565,12 @@ function PluginActions({ plugin, group, reload }: Readonly<{ plugin: PluginVersi
 function PluginRegistry({ rows, reload }: Readonly<{ rows: PluginVersion[]; reload: () => void }>) {
   const groups = useMemo(() => groupPlugins(rows), [rows]);
   if (!groups.length) {
-    return <EmptyState title="No plugins installed" hint="Install an artifact or manifest to create the first registry record." />;
+    return (
+      <EmptyState
+        title="No plugins installed"
+        hint="Official built-in plugins ship with GoSite — run init or enable GoSite MCP from the registry after seeding."
+      />
+    );
   }
   return (
     <div class="plugin-registry">
@@ -554,6 +583,7 @@ function PluginRegistry({ rows, reload }: Readonly<{ rows: PluginVersion[]; relo
             </div>
             <div class="row wrap">
               {group.enabled ? <Badge kind="ok">enabled {group.enabled.version}</Badge> : <Badge kind="off">disabled</Badge>}
+              {group.latest && isBundledPlugin(group.latest) && <Badge kind="info">built-in</Badge>}
               <Badge kind="info">tier {group.latest?.tier ?? '—'}</Badge>
             </div>
           </div>
@@ -653,9 +683,9 @@ function PluginDetailPanel({ rows }: Readonly<{ rows: PluginVersion[] }>) {
       </div>
       {hasDistribution(selected) && (
         <div class="plugin-detail-card">
-          <h3>Distribution</h3>
+          <h3>{selected.source_type === 'bundled' ? 'Built-in' : 'Distribution'}</h3>
           <dl class="plugin-facts">
-            <div><dt>Source type</dt><dd>{selected.source_type}</dd></div>
+            <div><dt>Source type</dt><dd>{sourceDisplayLabel(selected.source_type)}</dd></div>
             <div><dt>Source ref</dt><dd class="mono">{selected.source_ref || '—'}</dd></div>
             <div><dt>Install path</dt><dd>{selected.install_path || '—'}</dd></div>
             {selected.source_commit && (
@@ -821,60 +851,67 @@ export function PluginContributionView({ path }: Readonly<{ path: string }>) {
     }
   };
 
-  return (
+  const routePage = (body: ComponentChildren) => (
     <Page title="Plugin route" subtitle={parsed.route} eyebrow="runtime">
-      <AsyncView state={state} loadingLabel="Loading plugin route">
-        {(rows) => {
-          const versions = rows.filter((item) => item.plugin_id === parsed.pluginID && item.state !== 'uninstalled');
-          const enabled = versions.find((item) => item.state === 'enabled');
-          const latest = versions[0];
-          if (!latest) {
-            return <EmptyState title="Plugin missing" hint="The registry has no installed version for this route." />;
-          }
-          if (!enabled) {
-            return (
-              <div class="plugin-route-fallback">
-                <IconShield width={28} height={28} />
-                <h2>{latest.name} is disabled</h2>
-                <p class="dim">Host UI keeps this route safe until a compatible plugin version is enabled.</p>
-                {(latest.state === 'installed' || latest.state === 'enable_failed') && (
-                  <button type="button" class="btn primary" disabled={enable.loading} onClick={() => doEnable(latest)}>
-                    {enable.loading ? <Spinner /> : <><IconPlay /> Enable {latest.version}</>}
-                  </button>
+      {body}
+    </Page>
+  );
+
+  return (
+    <AsyncView state={state} loadingLabel="Loading plugin route">
+      {(rows) => {
+        const versions = rows.filter((item) => item.plugin_id === parsed.pluginID && item.state !== 'uninstalled');
+        const enabled = versions.find((item) => item.state === 'enabled');
+        const latest = versions[0];
+        if (!latest) {
+          return routePage(<EmptyState title="Plugin missing" hint="The registry has no installed version for this route." />);
+        }
+        if (!enabled) {
+          return routePage(
+            <div class="plugin-route-fallback">
+              <IconShield width={28} height={28} />
+              <h2>{latest.name} is disabled</h2>
+              <p class="dim">Host UI keeps this route safe until a compatible plugin version is enabled.</p>
+              {(latest.state === 'installed' || latest.state === 'enable_failed') && (
+                <button type="button" class="btn primary" disabled={enable.loading} onClick={() => doEnable(latest)}>
+                  {enable.loading ? <Spinner /> : <><IconPlay /> Enable {latest.version}</>}
+                </button>
+              )}
+            </div>,
+          );
+        }
+        if (parsed.route.endsWith('/integration')) {
+          return <PluginMCPIntegrationView plugin={enabled} />;
+        }
+        const schema = enabled.ui.configSchema ?? enabled.manifest.ui?.configSchema;
+        return routePage(
+          <div class="plugin-contribution">
+            <section class="card">
+              <div class="card-head">
+                <h3>{enabled.name}</h3>
+                <Badge kind="ok">enabled {enabled.version}</Badge>
+              </div>
+              <div class="card-body">
+                <div class="grid cols-3">
+                  <Stat label="Plugin" value={enabled.name} sub={`${enabled.plugin_id} · tier ${enabled.tier}`} />
+                  <Stat label="Route" value={parsed.route.split('/').pop() || 'index'} sub="host rendered" tone="info" />
+                  <Stat label="Updated" value={formatRelative(enabled.updated_at)} sub={formatDate(enabled.updated_at)} />
+                </div>
+              </div>
+            </section>
+            <section class="card">
+              <div class="card-head"><h3>Configuration schema</h3></div>
+              <div class="card-body">
+                {schema ? (
+                  <pre class="logbox plugin-schema">{JSON.stringify(schema, null, 2)}</pre>
+                ) : (
+                  <EmptyState title="No configuration schema" hint="This plugin route is registered, but no host-rendered schema is stored." />
                 )}
               </div>
-            );
-          }
-          const schema = enabled.ui.configSchema ?? enabled.manifest.ui?.configSchema;
-          return (
-            <div class="plugin-contribution">
-              <section class="card">
-                <div class="card-head">
-                  <h3>{enabled.name}</h3>
-                  <Badge kind="ok">enabled {enabled.version}</Badge>
-                </div>
-                <div class="card-body">
-                  <div class="grid cols-3">
-                    <Stat label="Plugin" value={enabled.name} sub={`${enabled.plugin_id} · tier ${enabled.tier}`} />
-                    <Stat label="Route" value={parsed.route.split('/').pop() || 'index'} sub="host rendered" tone="info" />
-                    <Stat label="Updated" value={formatRelative(enabled.updated_at)} sub={formatDate(enabled.updated_at)} />
-                  </div>
-                </div>
-              </section>
-              <section class="card">
-                <div class="card-head"><h3>Configuration schema</h3></div>
-                <div class="card-body">
-                  {schema ? (
-                    <pre class="logbox plugin-schema">{JSON.stringify(schema, null, 2)}</pre>
-                  ) : (
-                    <EmptyState title="No configuration schema" hint="This plugin route is registered, but no host-rendered schema is stored." />
-                  )}
-                </div>
-              </section>
-            </div>
-          );
-        }}
-      </AsyncView>
-    </Page>
+            </section>
+          </div>,
+        );
+      }}
+    </AsyncView>
   );
 }

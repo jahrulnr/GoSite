@@ -62,6 +62,9 @@ func Init(cfg config.Config) error {
 	if err := seedDemoIfNeeded(context.Background(), cfg, db); err != nil {
 		return err
 	}
+	if err := seedBundledPlugins(context.Background(), cfg, db); err != nil {
+		return err
+	}
 
 	return nil
 }

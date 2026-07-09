@@ -15,6 +15,7 @@ import (
 	"github.com/jahrulnr/gosite/internal/infra/commander"
 	"github.com/jahrulnr/gosite/internal/infra/job"
 	"github.com/jahrulnr/gosite/internal/observability/grafanalite"
+	"github.com/jahrulnr/gosite/internal/observability/nginxlite"
 	"github.com/jahrulnr/gosite/internal/observability/splunklite"
 	"github.com/jahrulnr/gosite/internal/repository/sqlite"
 	"github.com/jahrulnr/gosite/internal/server"
@@ -41,6 +42,10 @@ func RunServe(cfg config.Config) error {
 	metricsRepo := sqlite.NewTrafficMetricsRepository(db)
 	offsetPath := filepath.Join(cfg.Storage, "gosite", "metrics_offsets.json")
 	collector := grafanalite.NewCollector(logDir, offsetPath, metricsRepo, cfg.LogEventsRetentionDays)
+	nginxStatusRepo := sqlite.NewNginxStatusRepository(db)
+	nginxVTSRepo := sqlite.NewNginxVTSRepository(db)
+	nginxCollector := nginxlite.NewCollector(cfg.NginxStubStatusURL, nginxStatusRepo, cfg.LogEventsRetentionDays)
+	vtsCollector := nginxlite.NewVTSCollector(cfg.NginxVTSStatusURL, nginxVTSRepo, cfg.LogEventsRetentionDays)
 
 	auditRepo := sqlite.NewAuditRepository(db)
 	logRepo := sqlite.NewLogEventRepository(db)
@@ -55,7 +60,9 @@ func RunServe(cfg config.Config) error {
 	go runCronScheduler(ctx, cronRepo, jobRepo, worker.Enqueue)
 
 	go runMetricsCollector(ctx, collector)
-	go runRetentionPurge(ctx, splunkSvc, collector)
+	go runNginxStatusCollector(ctx, nginxCollector)
+	go runNginxVTSCollector(ctx, vtsCollector)
+	go runRetentionPurge(ctx, splunkSvc, collector, nginxCollector, vtsCollector)
 	go runNginxWatchdog(ctx, cfg)
 
 	go func() {
@@ -92,7 +99,51 @@ func runMetricsCollector(ctx context.Context, collector *grafanalite.Collector) 
 	}
 }
 
-func runRetentionPurge(ctx context.Context, splunk *splunklite.Service, collector *grafanalite.Collector) {
+func runNginxStatusCollector(ctx context.Context, collector *nginxlite.Collector) {
+	if collector == nil {
+		return
+	}
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	if err := collector.Collect(ctx); err != nil {
+		log.Printf("nginx status collector: %v", err)
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := collector.Collect(ctx); err != nil {
+				log.Printf("nginx status collector: %v", err)
+			}
+		}
+	}
+}
+
+func runNginxVTSCollector(ctx context.Context, collector *nginxlite.VTSCollector) {
+	if collector == nil {
+		return
+	}
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	if err := collector.Collect(ctx); err != nil {
+		log.Printf("nginx vts collector: %v", err)
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := collector.Collect(ctx); err != nil {
+				log.Printf("nginx vts collector: %v", err)
+			}
+		}
+	}
+}
+
+func runRetentionPurge(ctx context.Context, splunk *splunklite.Service, collector *grafanalite.Collector, nginxCollector *nginxlite.Collector, vtsCollector *nginxlite.VTSCollector) {
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
 	for {
@@ -106,6 +157,16 @@ func runRetentionPurge(ctx context.Context, splunk *splunklite.Service, collecto
 			}
 			if err := collector.PurgeRetention(ctx); err != nil {
 				log.Printf("grafana retention: %v", err)
+			}
+			if nginxCollector != nil {
+				if err := nginxCollector.PurgeRetention(ctx); err != nil {
+					log.Printf("nginx status retention: %v", err)
+				}
+			}
+			if vtsCollector != nil {
+				if err := vtsCollector.PurgeRetention(ctx); err != nil {
+					log.Printf("nginx vts retention: %v", err)
+				}
 			}
 		}
 	}

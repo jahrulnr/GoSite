@@ -22,6 +22,8 @@ Sesi panel persisten (`004_sessions.sql`): `id`, `user_id`, `expires_at`.
 
 `audit_logs`, `log_events`, `traffic_metrics`, `saved_queries` — dipakai Splunk Lite / Grafana Lite.
 
+`nginx_status_samples`, `nginx_vts_server_samples`, `nginx_vts_upstream_samples` — metrik nginx real-time ([seq 22](../sequences/22-nginx-metrics_id.md)).
+
 ### `plugin_versions` (GoSite)
 
 Satu baris per `(plugin_id, version)` — state machine install/enable (lihat [19-plugin-installer_id.md](./sequences/19-plugin-installer_id.md)).

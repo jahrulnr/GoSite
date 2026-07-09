@@ -2,7 +2,7 @@
 
 How to keep `docs/` aligned with the codebase during active development.
 
-**Last audit:** 2026-06-17 (post **v1.3.1** — wave G remote plugin distribution)
+**Last audit:** 2026-06-17 (seq 22 nginx metrics SA-8 shipped)
 
 ## Layer model
 
@@ -10,9 +10,9 @@ How to keep `docs/` aligned with the codebase during active development.
 |-------|------|----------|-------------|
 | **Contract** | `api/openapi.yaml` | API consumers, codegen | New/changed HTTP routes |
 | **Architecture** | `docs/architecture/` | Contributors | New backend modules, runtime changes, ADRs |
-| **Reference** | `docs/reference/` | API mapping | Legacy Laravel map, endpoint summaries |
+| **Reference** | `docs/reference/` | API mapping | Legacy Laravel map, endpoint summaries, integration tokens, MCP tools |
 | **Operations** | `docs/operations/` | Operators, contributors | Runtime behaviour (nginx repair, etc.) |
-| **Guides** | `docs/guides/` | Contributors, wiki maintainers | Dev setup, localization, wiki export |
+| **Guides** | `docs/guides/` | Contributors, wiki maintainers, operators | Dev setup, localization, wiki export, MCP operator setup |
 | **Sequences** | `docs/sequences/*.md` | Feature design + review | New feature or behaviour change |
 | **Implementation tracker** | `docs/implementation/`, `*-impl.md` | Agents / implementers | Wave start/complete |
 | **Migration map** | `docs/migration/` | BangunSite → GoSite | Legacy mapping only; not for new features |
@@ -36,11 +36,14 @@ How to keep `docs/` aligned with the codebase during active development.
 | Wiki `Plugin-platform` / `Plugin-installer` pages | May lag until `make wiki-export` on `master` | Run export after doc PR merges |
 | `README_id.md` module diagram | Still 14 areas, no Plugins/Terminal | ✅ Fixed in README_id |
 | Core architecture docs | Traffic model: panel `:8080` ∥ nginx `:80/:443` (gosite controls nginx, does not proxy websites) | ✅ Fixed |
+| Seq 21 MCP design | Monolithic `21-plugin-mcp.md` | ✅ Split — index + layer docs + `WAVE-PLUGIN-P6` |
+| Seq 22 nginx metrics | stub_status + VTS not documented | ✅ seq 22 docs + `WAVE-SA-8` + `api/openapi.yaml` nginx metrics paths |
 
 ## Checklist — ship a feature
 
 1. **Sequence** — add or update `docs/sequences/NN-*.md` (+ `_id` stub if bilingual wiki)
-2. **Impl tracker** — `*-impl.md` or `docs/implementation/WAVE-*.md` with checkboxes
+2. **Layer docs** — update the doc in the right layer (architecture / reference / guides / operations), not only the sequence index
+3. **Impl tracker** — `*-impl.md` or `docs/implementation/WAVE-*.md` with checkboxes
 3. **OpenAPI** — paths, schemas, examples under `api/`
 4. **Architecture** — module table in `architecture/overview.md`; ADR in `architecture/` if architectural
 5. **API inventory** — one summary section (legacy map is optional for greenfield endpoints)

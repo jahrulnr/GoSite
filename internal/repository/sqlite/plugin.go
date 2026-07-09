@@ -146,7 +146,7 @@ func (r *PluginRepository) CreateOrRetryInstall(ctx context.Context, p PluginVer
 		}
 	case err != nil:
 		return PluginVersion{}, fmt.Errorf("find existing plugin version: %w", err)
-	case state != PluginStateInstallFailed:
+	case state != PluginStateInstallFailed && state != PluginStateUninstalled:
 		return PluginVersion{}, ErrPluginVersionExists
 	default:
 		_, err := tx.ExecContext(ctx, `

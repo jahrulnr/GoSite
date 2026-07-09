@@ -89,27 +89,18 @@ func setupSupervisor(t *testing.T) (*HealthSupervisor, *runtimeTracker, *healthS
 }
 
 func TestSupervisorRestartsOnTransientFailure(t *testing.T) {
-	t.Parallel()
 	sup, tracker, health, _ := setupSupervisor(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
 
-	go sup.Run(ctx)
-	// Simulate transient health failures followed by recovery.
-	go func() {
-		health.mu.Lock()
-		health.err = errTransient
-		health.mu.Unlock()
-		time.Sleep(20 * time.Millisecond)
-		health.mu.Lock()
-		health.err = nil
-		health.mu.Unlock()
-	}()
-	<-ctx.Done()
+	health.mu.Lock()
+	health.err = errTransient
+	health.mu.Unlock()
+
+	sup.tick(context.Background())
 
 	tracker.mu.Lock()
 	defer tracker.mu.Unlock()
 	assert.Greater(t, len(tracker.starts), 0, "supervisor should restart at least once")
+	assert.Contains(t, tracker.stops, "acme/logger@1.0.0")
 }
 
 func TestSupervisorAutoDisablesAfterRepeatedFailure(t *testing.T) {

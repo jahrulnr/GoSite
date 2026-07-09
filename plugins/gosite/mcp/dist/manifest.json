@@ -1,0 +1,35 @@
+{
+  "id": "gosite/mcp",
+  "name": "GoSite MCP",
+  "version": "0.1.0",
+  "tier": 1,
+  "apiVersion": "gosite-plugin/1",
+  "minGoSiteVersion": "1.4.0",
+  "rpcVersion": "1",
+  "capabilities": {
+    "mcpServer": true,
+    "uiSidebar": true,
+    "configSchema": false
+  },
+  "permissions": [
+    "system:read",
+    "websites:read",
+    "websites:write",
+    "nginx:read",
+    "nginx:manage",
+    "docker:read",
+    "docker:manage",
+    "jobs:read",
+    "plugins:read"
+  ],
+  "entrypoints": {
+    "validate": { "type": "go-plugin", "command": "plugin/validate" },
+    "runtime": { "type": "go-plugin", "command": "plugin/gosite" },
+    "mcp": { "type": "stdio", "command": "plugin/mcp" }
+  },
+  "ui": {
+    "sidebar": [
+      { "label": "MCP Integration", "route": "/plugins/gosite/mcp/integration" }
+    ]
+  }
+}

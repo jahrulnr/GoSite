@@ -2,7 +2,7 @@ import { dashboard, system } from '../api/endpoints';
 import type { TrafficSite } from '../api/types';
 import { AsyncView, Badge, EmptyState } from '../components/Ui';
 import { Card, Page, Stat, siteTraffic } from '../components/Layout';
-import { formatBytes, formatDate, formatKiB, formatNumber, formatPercent, formatDiskSectors } from '../lib/format';
+import { formatBytes, formatDate, formatKiB, formatNumber, formatPercent, formatDiskSectors, formatRate } from '../lib/format';
 import { useAsync, useInterval } from '../lib/hooks';
 
 function MetricTile({
@@ -36,10 +36,10 @@ export function DashboardView() {
   const state = useAsync(() => dashboard.get());
   const network = useAsync(() => system.network());
   const diskIO = useAsync(() => system.diskIO());
-  useInterval(state.reload, 15000);
+  useInterval(state.reload, 5000);
 
   return (
-    <Page title="Dashboard" subtitle="Fresh backend snapshot, refreshed every 15 seconds" eyebrow="mission">
+    <Page title="Dashboard" subtitle="Fresh backend snapshot, refreshed every 5 seconds" eyebrow="mission">
       <AsyncView state={state}>
         {(data) => {
           const memory = data.system.memory?.[0];
@@ -63,6 +63,18 @@ export function DashboardView() {
                 <MetricTile label="Requests · 1h" value={formatNumber(traffic.total?.requests ?? traffic.requests)} sub={formatBytes(traffic.total?.bytes ?? traffic.bytes)} />
               </div>
 
+              {data.nginx_status?.available && (
+                <div class="grid cols-4">
+                  <MetricTile label="Nginx active" value={formatNumber(data.nginx_status.active)} sub={`${formatRate(data.nginx_status.request_rate_per_sec)} req/s`} tone="info" />
+                  <MetricTile label="Reading" value={formatNumber(data.nginx_status.reading)} sub="Receiving request data" />
+                  <MetricTile label="Writing" value={formatNumber(data.nginx_status.writing)} sub="Sending responses" />
+                  <MetricTile label="Waiting" value={formatNumber(data.nginx_status.waiting)} sub="Idle connections" />
+                  {data.nginx_status.dropped_connections > 0 && (
+                    <MetricTile label="Dropped" value={formatNumber(data.nginx_status.dropped_connections)} sub="Failed to handle" tone="danger" />
+                  )}
+                </div>
+              )}
+
               <div class="grid cols-3">
                 <Card title="Network I/O">
                   <div class="col">
@@ -75,7 +87,7 @@ export function DashboardView() {
                   <div class="col">
                     <KeyRow label="Read" value={formatDiskSectors(diskIO.data?.read)} accent />
                     <KeyRow label="Write" value={formatDiskSectors(diskIO.data?.write)} />
-                    <KeyRow label="Sector size" value="512 B" muted />
+                    <KeyRow label="Block size" value="512 bytes" muted />
                   </div>
                 </Card>
                 <Card
@@ -107,7 +119,14 @@ export function DashboardView() {
               <div class="grid cols-2">
                 <Card title="Top sites" actions={<span class="dim mono" style="font-size:11px;">last 1h</span>}>
                   {ranked.length === 0 ? (
-                    <EmptyState title="No traffic yet" />
+                    (traffic.total?.requests ?? traffic.requests ?? 0) > 0 ? (
+                      <EmptyState
+                        title="No per-site breakdown yet"
+                        hint="Total requests are counted. Site rows appear once traffic is attributed to domains."
+                      />
+                    ) : (
+                      <EmptyState title="No traffic yet" hint="Website visits will show here after nginx logs are collected." />
+                    )
                   ) : (
                     <div class="card-body flush">
                       <div class="table-wrap">

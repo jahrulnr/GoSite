@@ -263,60 +263,6 @@ func (r *LogEventRepository) ListSince(ctx context.Context, source, site string,
 	return out, rows.Err()
 }
 
-// BuildLogEventWhere converts parsed field clauses into SQL fragments.
-// Clauses with `Kind == RegexpClauseKind` emit `column REGEXP ?`; everything
-// else is treated as a LIKE/= match.
-func BuildLogEventWhere(clauses []FieldClause) (wheres []string, args []interface{}, err error) {
-	columns := map[string]string{
-		"site":        "site",
-		"status":      "status_code",
-		"status_code": "status_code",
-		"message":     "raw_preview",
-		"preview":     "raw_preview",
-	}
-	for _, c := range clauses {
-		if c.Field == "_text" {
-			if c.Kind == RegexpClauseKind {
-				w, a := BuildFreeTextRegexpWhere([]string{"site", "raw_preview"}, c.Value)
-				wheres = append(wheres, w)
-				args = append(args, a...)
-				continue
-			}
-			w, a := BuildFreeTextWhere([]string{"site", "raw_preview"}, c.Value)
-			wheres = append(wheres, w)
-			args = append(args, a...)
-			continue
-		}
-		col, ok := columns[c.Field]
-		if !ok {
-			return nil, nil, fmt.Errorf("unknown log field %q", c.Field)
-		}
-		if c.Kind == RegexpClauseKind {
-			wheres = append(wheres, col+` REGEXP ?`)
-			args = append(args, c.Value)
-			continue
-		}
-		if col == "status_code" && !containsWildcard(c.Value) {
-			wheres = append(wheres, col+` = ?`)
-			args = append(args, c.Value)
-			continue
-		}
-		w, a := likeClause(col, c.Value)
-		wheres = append(wheres, w)
-		args = append(args, a)
-	}
-	return wheres, args, nil
-}
-
-func containsWildcard(s string) bool {
-	for _, c := range s {
-		if c == '*' {
-			return true
-		}
-	}
-	return false
-}
-
 func nullInt(v *int) interface{} {
 	if v == nil {
 		return nil
