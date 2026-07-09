@@ -16,16 +16,16 @@ import (
 
 // SessionConfig holds everything needed to spawn a PTY-backed shell.
 type SessionConfig struct {
-	ID        string
-	UserID    int64
-	Shell     string
-	Cwd       string
-	Env       []string
-	Cols      int
-	Rows      int
-	DumpPath  string
-	DumpMax   int64
-	FirstSeq  uint64 // when restoring from an existing dump, this is the size of that dump
+	ID       string
+	UserID   int64
+	Shell    string
+	Cwd      string
+	Env      []string
+	Cols     int
+	Rows     int
+	DumpPath string
+	DumpMax  int64
+	FirstSeq uint64 // when restoring from an existing dump, this is the size of that dump
 }
 
 // SessionMeta is the projection of a PtySession exposed via the REST API.
@@ -48,25 +48,28 @@ type SessionMeta struct {
 // clients. Output is dumped to disk in a bounded rolling file so the session
 // can be restored after a server restart or browser refresh.
 type PtySession struct {
-	id        string
-	userID    int64
-	cfg       SessionConfig
-	startedAt time.Time
+	id         string
+	userID     int64
+	cfg        SessionConfig
+	startedAt  time.Time
 	lastAttach time.Time
 	lastInput  time.Time
 
-	mu         sync.RWMutex
-	cmd        *exec.Cmd
-	master     *os.File
-	closed     bool
-	closeCh    chan struct{}
-	closeOnce  sync.Once
-	onExit     func(int)
+	mu        sync.RWMutex
+	cmd       *exec.Cmd
+	master    *os.File
+	closed    bool
+	closeCh   chan struct{}
+	closeOnce sync.Once
+	onExit    func(int)
 
-	bufMu     sync.Mutex
-	rolling   *RollingFile
-	firstSeq  uint64
-	endSeq    uint64
+	exitErr error
+	doneCh  chan struct{}
+
+	bufMu    sync.Mutex
+	rolling  *RollingFile
+	firstSeq uint64
+	endSeq   uint64
 
 	attachMu sync.RWMutex
 	writer   *websocket.Conn
@@ -101,20 +104,21 @@ func NewPtySession(cfg SessionConfig, onExit func(int)) *PtySession {
 		cfg.DumpMax = 256 * 1024
 	}
 	return &PtySession{
-		id:        cfg.ID,
-		userID:    cfg.UserID,
-		cfg:       cfg,
-		startedAt: time.Now(),
+		id:         cfg.ID,
+		userID:     cfg.UserID,
+		cfg:        cfg,
+		startedAt:  time.Now(),
 		lastAttach: time.Now(),
-		lastInput: time.Now(),
-		rolling:   NewRollingFile(cfg.DumpPath, cfg.DumpMax),
-		firstSeq:  cfg.FirstSeq,
-		endSeq:    cfg.FirstSeq,
-		closeCh:   make(chan struct{}),
-		readers:   make(map[*websocket.Conn]struct{}),
-		fanout:    make(chan ptyChunk, 256),
-		pendingCh: make(chan struct{}, 1),
-		onExit:    onExit,
+		lastInput:  time.Now(),
+		rolling:    NewRollingFile(cfg.DumpPath, cfg.DumpMax),
+		firstSeq:   cfg.FirstSeq,
+		endSeq:     cfg.FirstSeq,
+		closeCh:    make(chan struct{}),
+		doneCh:     make(chan struct{}),
+		readers:    make(map[*websocket.Conn]struct{}),
+		fanout:     make(chan ptyChunk, 256),
+		pendingCh:  make(chan struct{}, 1),
+		onExit:     onExit,
 	}
 }
 
@@ -417,10 +421,15 @@ func (s *PtySession) waitLoop() {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
 			exitCode = exitErr.ExitCode()
+			s.exitErr = fmt.Errorf("exit %d", exitCode)
 		} else {
 			exitCode = -1
+			s.exitErr = err
 		}
+	} else {
+		s.exitErr = nil
 	}
+	close(s.doneCh)
 	if s.onExit != nil {
 		s.onExit(exitCode)
 	}
@@ -507,21 +516,10 @@ func (s *PtySession) WaitForExit(ctx context.Context) error {
 	if s.cmd == nil {
 		return errors.New("session not started")
 	}
-	done := make(chan error, 1)
-	go func() { done <- s.cmd.Wait() }()
 	select {
-	case err := <-done:
-		if err != nil {
-			var exitErr *exec.ExitError
-			if errors.As(err, &exitErr) {
-				return fmt.Errorf("exit %d", exitErr.ExitCode())
-			}
-			return err
-		}
-		return nil
+	case <-s.doneCh:
+		return s.exitErr
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-s.closeCh:
-		return nil
 	}
 }
