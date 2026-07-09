@@ -82,7 +82,7 @@ func (s *Service) EnqueueCertbot(ctx context.Context, websiteID int64) (sqlite.J
 	}
 
 	cmd := fmt.Sprintf(
-		"certbot --non-interactive --agree-tos --register-unsafely-without-email --nginx -d %s",
+		"certbot --non-interactive --agree-tos --register-unsafely-without-email --nginx --no-redirect -d %s",
 		site.Domain,
 	)
 	job, err := s.jobs.Create(ctx, sqlite.JobRun{

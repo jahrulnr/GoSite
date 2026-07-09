@@ -48,6 +48,8 @@ RUN apt-get update \
         python3-certbot-nginx \
         fuse3 \
         s3fs \
+        zip \
+        unzip \
     && groupadd -g 1000 apps \
     && useradd -u 1000 -g 1000 apps \
     && apt-get clean \

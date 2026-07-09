@@ -122,7 +122,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	dockerService := dockersvc.NewService(dockerSvc, dockersvc.WithHookBus(pluginDispatcher))
 	dockerHandler := handler.NewDockerHandler(dockerService)
 
-	fileRoots := []string{cfg.WebPath, cfg.Storage, "/tmp"}
+	fileRoots := []string{cfg.WebPath, cfg.Storage, "/tmp", "/"}
 	filesSvc := filessvc.NewService(fileRoots, cfg.FilesAllowExecute, cmd)
 	filesHandler := handler.NewFilesHandler(filesSvc)
 
