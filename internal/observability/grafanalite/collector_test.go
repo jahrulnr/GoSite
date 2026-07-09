@@ -60,6 +60,7 @@ func TestGrafana_OffsetResumeAfterRestart(t *testing.T) {
 	db := openTestDB(t)
 	metrics := sqlite.NewTrafficMetricsRepository(db)
 	collector := grafanalite.NewCollector(logDir, offsetPath, metrics, 14)
+	collector.SetNowFunc(func() time.Time { return time.Date(2026, 6, 14, 12, 0, 0, 0, time.UTC) })
 	ctx := context.Background()
 
 	require.NoError(t, collector.Collect(ctx))
@@ -256,6 +257,7 @@ func TestGrafana_ParseAccessLineViaCollect(t *testing.T) {
 	db := openTestDB(t)
 	metrics := sqlite.NewTrafficMetricsRepository(db)
 	collector := grafanalite.NewCollector(logDir, offsetPath, metrics, 14)
+	collector.SetNowFunc(func() time.Time { return time.Date(2026, 6, 14, 12, 0, 0, 0, time.UTC) })
 	require.NoError(t, collector.Collect(context.Background()))
 
 	buckets, err := metrics.ListBuckets(context.Background(),

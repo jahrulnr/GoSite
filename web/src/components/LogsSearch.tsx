@@ -16,6 +16,14 @@ import { IconBookmark, IconPause, IconPencil, IconPlay, IconTrash } from './Icon
 export type LogMode = 'history' | 'live';
 export type LogFormat = 'raw' | 'smart';
 
+function isSafeUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url);
+}
+
+function safeSourceToken(source: string): string {
+  return source.replace(/[^a-z0-9_-]/gi, '');
+}
+
 export interface Props {
   source: QuerySourceMeta | undefined;
   sources: QuerySourceMeta[];
@@ -207,7 +215,7 @@ export function LogsSearch({
                   {topic.note && <div class="topic-note">{topic.note}</div>}
                 </div>
               ))}
-              {helpUrl && (
+              {helpUrl && isSafeUrl(helpUrl) && (
                 <a class="splunk-help-link" href={helpUrl} target="_blank" rel="noopener noreferrer">
                   Full tutorial →
                 </a>
@@ -534,9 +542,14 @@ function SavedDropdown({
                   <div class="row-main">
                     <div class="row-name">{item.name}</div>
                     <div class="row-meta">
-                      <span class={`badge src-${item.source}`} style={`padding:0 6px;font-size:10px;background:var(--src-${item.source}, var(--surface-2));color:var(--text-on-accent);`}>
-                        {item.source}
-                      </span>
+                      {(() => {
+                        const src = safeSourceToken(item.source);
+                        return (
+                          <span class={`badge src-${src}`} style={`padding:0 6px;font-size:10px;background:var(--src-${src}, var(--surface-2));color:var(--text-on-accent);`}>
+                            {item.source}
+                          </span>
+                        );
+                      })()}
                       <span class="q-preview">{item.query || '—'}</span>
                     </div>
                   </div>

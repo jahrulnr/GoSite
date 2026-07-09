@@ -32,16 +32,15 @@ function defaultScopes(manifestScopes: string[]) {
   return groups.read.length ? groups.read : manifestScopes.slice(0, 1);
 }
 
-function mcpJsonSnippet(token: string, authEnable: boolean) {
+function mcpJsonSnippet(token: string) {
   const base = {
     mcpServers: {
       gosite: {
         command: 'npx',
         args: ['-y', '@gosite/mcp'],
         env: {
-          GOSITE_URL: 'http://127.0.0.1:8080',
+          GOSITE_URL: globalThis.location.origin,
           GOSITE_ACCESS_TOKEN: token,
-          ...(authEnable ? { GOSITE_BASIC_USER: 'admin', GOSITE_BASIC_PASS: 'admin' } : {}),
         },
       },
     },
@@ -181,8 +180,6 @@ export function PluginMCPIntegrationView({ plugin }: Readonly<{ plugin: PluginVe
   const [scopes, setScopes] = useState(() => defaultScopes(manifestScopes));
   const [createdSecret, setCreatedSecret] = useState<string | null>(null);
 
-  const basicAuthEnabled = meta?.auth.basic_auth_enabled ?? false;
-
   const submitCreate = async () => {
     try {
       const res = await create.run(plugin.plugin_id, { label: label.trim(), scopes });
@@ -198,7 +195,7 @@ export function PluginMCPIntegrationView({ plugin }: Readonly<{ plugin: PluginVe
 
   const copySnippet = async () => {
     if (!createdSecret) return;
-    const snippet = mcpJsonSnippet(createdSecret, basicAuthEnabled);
+    const snippet = mcpJsonSnippet(createdSecret);
     try {
       await navigator.clipboard.writeText(snippet);
       toast('mcp.json copied');
@@ -232,7 +229,7 @@ export function PluginMCPIntegrationView({ plugin }: Readonly<{ plugin: PluginVe
             <Field label="Access token">
               <input class="input mono" readOnly value={createdSecret} onFocus={(e) => (e.currentTarget as HTMLInputElement).select()} />
             </Field>
-            <pre class="logbox integration-mcp-json">{mcpJsonSnippet(createdSecret, basicAuthEnabled)}</pre>
+            <pre class="logbox integration-mcp-json">{mcpJsonSnippet(createdSecret)}</pre>
           </div>
         </section>
       )}

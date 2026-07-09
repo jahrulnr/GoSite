@@ -39,7 +39,7 @@ export function DashboardView() {
   useInterval(state.reload, 5000);
 
   return (
-    <Page title="Dashboard" subtitle="Fresh backend snapshot, refreshed every 15 seconds" eyebrow="mission">
+    <Page title="Dashboard" subtitle="Fresh backend snapshot, refreshed every 5 seconds" eyebrow="mission">
       <AsyncView state={state}>
         {(data) => {
           const memory = data.system.memory?.[0];

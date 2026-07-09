@@ -66,8 +66,7 @@ export function useIdleLock() {
         if (inWarning) {
           if (lastWarnSecond !== remainingSec) {
             if (warnToastRef.current !== undefined) dismissToast(warnToastRef.current);
-            warnToastRef.current = Date.now();
-            toast(`Locking in ${remainingSec}s — move/click to stay`, 'info');
+            warnToastRef.current = toast(`Locking in ${remainingSec}s — move/click to stay`, 'info');
             lastWarnSecond = remainingSec;
           }
         } else {

@@ -29,16 +29,16 @@ import (
 	"github.com/jahrulnr/gosite/internal/service/logs"
 	mountsvc "github.com/jahrulnr/gosite/internal/service/mount"
 	pluginsvc "github.com/jahrulnr/gosite/internal/service/plugin"
-	pluginremote "github.com/jahrulnr/gosite/internal/service/plugin/remote"
 	plugincatalog "github.com/jahrulnr/gosite/internal/service/plugin/catalog"
 	"github.com/jahrulnr/gosite/internal/service/plugin/hookbus"
+	pluginremote "github.com/jahrulnr/gosite/internal/service/plugin/remote"
 	"github.com/jahrulnr/gosite/internal/service/settings"
 	"github.com/jahrulnr/gosite/internal/service/ssl"
 	"github.com/jahrulnr/gosite/internal/service/system"
 	"github.com/jahrulnr/gosite/internal/service/uimeta"
 	"github.com/jahrulnr/gosite/internal/service/website"
-	"github.com/jahrulnr/gosite/pkg/secrets"
 	"github.com/jahrulnr/gosite/internal/terminal"
+	"github.com/jahrulnr/gosite/pkg/secrets"
 )
 
 // NewRouter wires the Gin engine with API routes.
@@ -122,7 +122,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	dockerService := dockersvc.NewService(dockerSvc, dockersvc.WithHookBus(pluginDispatcher))
 	dockerHandler := handler.NewDockerHandler(dockerService)
 
-	fileRoots := []string{"/"}
+	fileRoots := []string{cfg.WebPath, cfg.Storage, "/tmp"}
 	filesSvc := filessvc.NewService(fileRoots, cfg.FilesAllowExecute, cmd)
 	filesHandler := handler.NewFilesHandler(filesSvc)
 
@@ -254,7 +254,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 
 func registerDashboardRoutes(api *gin.RouterGroup, h *handler.DashboardHandler, tokens *pluginsvc.IntegrationTokenService) {
 	_ = tokens
-	api.GET("/dashboard", gin.WrapF(h.Get))
+	api.GET("/dashboard", middleware.RequireScope("dashboard:read"), gin.WrapF(h.Get))
 }
 
 func registerSystemRoutes(api *gin.RouterGroup, h *handler.SystemHandler, tokens *pluginsvc.IntegrationTokenService) {
@@ -270,17 +270,17 @@ func registerSettingsRoutes(api *gin.RouterGroup, h *handler.SettingsHandler) {
 }
 
 func registerLogsRoutes(api *gin.RouterGroup, h *handler.LogsHandler) {
-	api.GET("/logs/sites", gin.WrapF(h.ListSites))
-	api.GET("/logs", gin.WrapF(h.Tail))
+	api.GET("/logs/sites", middleware.RequireScope("query:read"), gin.WrapF(h.ListSites))
+	api.GET("/logs", middleware.RequireScope("query:read"), gin.WrapF(h.Tail))
 }
 
 func registerDatabaseRoutes(api *gin.RouterGroup, h *handler.DatabaseHandler) {
-	api.GET("/database/tables", gin.WrapF(h.ListTables))
-	api.GET("/database/tables/:name", gin.WrapF(h.GetTable))
+	api.GET("/database/tables", middleware.RequireScope("query:read"), gin.WrapF(h.ListTables))
+	api.GET("/database/tables/:name", middleware.RequireScope("query:read"), gin.WrapF(h.GetTable))
 }
 
 func registerUIMetaRoutes(api *gin.RouterGroup, h *handler.UIMetaHandler) {
-	api.GET("/ui/meta", gin.WrapF(h.Get))
+	api.GET("/ui/meta", middleware.RequireScope("ui:read"), gin.WrapF(h.Get))
 }
 
 // purgeExpiredSessions removes stale session rows on a 15-minute cadence so
@@ -324,10 +324,10 @@ func registerNginxRoutes(api *gin.RouterGroup, h *handler.NginxHandler, tokens *
 }
 
 func registerSSLRoutes(api *gin.RouterGroup, h *handler.SSLHandler) {
-	api.GET("/websites/:id/ssl", gin.WrapF(h.GetStatus))
-	api.PUT("/websites/:id/ssl/manual", gin.WrapF(h.UpdateManual))
-	api.POST("/websites/:id/ssl/certbot", gin.WrapF(h.StartCertbot))
-	api.GET("/websites/:id/ssl/certbot/stream", gin.WrapF(h.CertbotStream))
+	api.GET("/websites/:id/ssl", middleware.RequireScope("ssl:read"), gin.WrapF(h.GetStatus))
+	api.PUT("/websites/:id/ssl/manual", middleware.RequireScope("ssl:write"), gin.WrapF(h.UpdateManual))
+	api.POST("/websites/:id/ssl/certbot", middleware.RequireScope("ssl:write"), gin.WrapF(h.StartCertbot))
+	api.GET("/websites/:id/ssl/certbot/stream", middleware.RequireScope("ssl:read"), gin.WrapF(h.CertbotStream))
 }
 
 func registerDockerRoutes(api *gin.RouterGroup, h *handler.DockerHandler, tokens *pluginsvc.IntegrationTokenService) {
@@ -339,32 +339,32 @@ func registerDockerRoutes(api *gin.RouterGroup, h *handler.DockerHandler, tokens
 }
 
 func registerFilesRoutes(api *gin.RouterGroup, h *handler.FilesHandler) {
-	api.GET("/files", gin.WrapF(h.Browse))
-	api.GET("/files/content", gin.WrapF(h.Read))
-	api.GET("/files/raw", gin.WrapF(h.Raw))
-	api.PUT("/files/content", gin.WrapF(h.Save))
-	api.POST("/files", gin.WrapF(h.Create))
-	api.POST("/files/actions", gin.WrapF(h.Action))
-	api.POST("/files/batch-save", gin.WrapF(h.BatchSave))
-	api.POST("/files/batch-delete", gin.WrapF(h.BatchDelete))
-	api.DELETE("/files", gin.WrapF(h.Delete))
+	api.GET("/files", middleware.RequireScope("files:read"), gin.WrapF(h.Browse))
+	api.GET("/files/content", middleware.RequireScope("files:read"), gin.WrapF(h.Read))
+	api.GET("/files/raw", middleware.RequireScope("files:read"), gin.WrapF(h.Raw))
+	api.PUT("/files/content", middleware.RequireScope("files:manage"), gin.WrapF(h.Save))
+	api.POST("/files", middleware.RequireScope("files:manage"), gin.WrapF(h.Create))
+	api.POST("/files/actions", middleware.RequireScope("files:manage"), gin.WrapF(h.Action))
+	api.POST("/files/batch-save", middleware.RequireScope("files:manage"), gin.WrapF(h.BatchSave))
+	api.POST("/files/batch-delete", middleware.RequireScope("files:manage"), gin.WrapF(h.BatchDelete))
+	api.DELETE("/files", middleware.RequireScope("files:manage"), gin.WrapF(h.Delete))
 }
 
 func registerMountRoutes(api *gin.RouterGroup, h *handler.MountHandler) {
-	api.GET("/mounts", gin.WrapF(h.List))
-	api.POST("/mounts", gin.WrapF(h.Create))
-	api.PUT("/mounts", gin.WrapF(h.Update))
-	api.DELETE("/mounts", gin.WrapF(h.Delete))
-	api.POST("/mounts/enable", gin.WrapF(h.Enable))
+	api.GET("/mounts", middleware.RequireScope("mount:read"), gin.WrapF(h.List))
+	api.POST("/mounts", middleware.RequireScope("mount:manage"), gin.WrapF(h.Create))
+	api.PUT("/mounts", middleware.RequireScope("mount:manage"), gin.WrapF(h.Update))
+	api.DELETE("/mounts", middleware.RequireScope("mount:manage"), gin.WrapF(h.Delete))
+	api.POST("/mounts/enable", middleware.RequireScope("mount:manage"), gin.WrapF(h.Enable))
 }
 
 func registerCronRoutes(api *gin.RouterGroup, h *handler.CronHandler) {
-	api.GET("/cronjobs", gin.WrapF(h.List))
-	api.POST("/cronjobs", gin.WrapF(h.Create))
-	api.PUT("/cronjobs/:id", gin.WrapF(h.Update))
-	api.DELETE("/cronjobs/:id", gin.WrapF(h.Delete))
-	api.POST("/cronjobs/:id/run", gin.WrapF(h.Run))
-	api.GET("/cronjobs/:id/run/stream", gin.WrapF(h.RunStream))
+	api.GET("/cronjobs", middleware.RequireScope("cron:read"), gin.WrapF(h.List))
+	api.POST("/cronjobs", middleware.RequireScope("cron:write"), gin.WrapF(h.Create))
+	api.PUT("/cronjobs/:id", middleware.RequireScope("cron:write"), gin.WrapF(h.Update))
+	api.DELETE("/cronjobs/:id", middleware.RequireScope("cron:write"), gin.WrapF(h.Delete))
+	api.POST("/cronjobs/:id/run", middleware.RequireScope("cron:write"), gin.WrapF(h.Run))
+	api.GET("/cronjobs/:id/run/stream", middleware.RequireScope("cron:read"), gin.WrapF(h.RunStream))
 }
 
 func registerPluginRoutes(api *gin.RouterGroup, h *handler.PluginHandler, configH *handler.ConfigHandler, keyH *handler.KeyringHandler, tokenH *handler.IntegrationTokenHandler) {
@@ -395,23 +395,23 @@ func registerPluginRoutes(api *gin.RouterGroup, h *handler.PluginHandler, config
 }
 
 func registerObservabilityRoutes(api *gin.RouterGroup, h *handler.ObservabilityHandler) {
-	api.GET("/query/meta", gin.WrapF(h.QueryMeta))
-	api.GET("/query", gin.WrapF(h.QueryGet))
-	api.POST("/query", gin.WrapF(h.Query))
-	api.GET("/query/tail", gin.WrapF(h.Tail))
-	api.GET("/query/saved", gin.WrapF(h.ListSavedQueries))
-	api.POST("/query/saved", gin.WrapF(h.SaveQuery))
-	api.PATCH("/query/saved/:id", gin.WrapF(h.UpdateSavedQuery))
-	api.DELETE("/query/saved/:id", gin.WrapF(h.DeleteSavedQuery))
-	api.GET("/metrics/traffic/series", gin.WrapF(h.TrafficSeries))
-	api.GET("/metrics/traffic/top-sites", gin.WrapF(h.TrafficTopSites))
-	api.GET("/metrics/traffic/status-codes", gin.WrapF(h.TrafficStatusCodes))
-	api.GET("/metrics/traffic/summary", gin.WrapF(h.TrafficSummary))
-	api.GET("/metrics/nginx/current", gin.WrapF(h.NginxCurrent))
-	api.GET("/metrics/nginx/series", gin.WrapF(h.NginxSeries))
-	api.GET("/metrics/nginx/vts/status", gin.WrapF(h.NginxVTSStatus))
-	api.GET("/metrics/nginx/vts/servers", gin.WrapF(h.NginxVTSServers))
-	api.GET("/metrics/nginx/vts/upstreams", gin.WrapF(h.NginxVTSUpstreams))
+	api.GET("/query/meta", middleware.RequireScope("query:read"), gin.WrapF(h.QueryMeta))
+	api.GET("/query", middleware.RequireScope("query:read"), gin.WrapF(h.QueryGet))
+	api.POST("/query", middleware.RequireScope("query:read"), gin.WrapF(h.Query))
+	api.GET("/query/tail", middleware.RequireScope("query:read"), gin.WrapF(h.Tail))
+	api.GET("/query/saved", middleware.RequireScope("query:read"), gin.WrapF(h.ListSavedQueries))
+	api.POST("/query/saved", middleware.RequireScope("query:manage"), gin.WrapF(h.SaveQuery))
+	api.PATCH("/query/saved/:id", middleware.RequireScope("query:manage"), gin.WrapF(h.UpdateSavedQuery))
+	api.DELETE("/query/saved/:id", middleware.RequireScope("query:manage"), gin.WrapF(h.DeleteSavedQuery))
+	api.GET("/metrics/traffic/series", middleware.RequireScope("metrics:read"), gin.WrapF(h.TrafficSeries))
+	api.GET("/metrics/traffic/top-sites", middleware.RequireScope("metrics:read"), gin.WrapF(h.TrafficTopSites))
+	api.GET("/metrics/traffic/status-codes", middleware.RequireScope("metrics:read"), gin.WrapF(h.TrafficStatusCodes))
+	api.GET("/metrics/traffic/summary", middleware.RequireScope("metrics:read"), gin.WrapF(h.TrafficSummary))
+	api.GET("/metrics/nginx/current", middleware.RequireScope("metrics:read"), gin.WrapF(h.NginxCurrent))
+	api.GET("/metrics/nginx/series", middleware.RequireScope("metrics:read"), gin.WrapF(h.NginxSeries))
+	api.GET("/metrics/nginx/vts/status", middleware.RequireScope("metrics:read"), gin.WrapF(h.NginxVTSStatus))
+	api.GET("/metrics/nginx/vts/servers", middleware.RequireScope("metrics:read"), gin.WrapF(h.NginxVTSServers))
+	api.GET("/metrics/nginx/vts/upstreams", middleware.RequireScope("metrics:read"), gin.WrapF(h.NginxVTSUpstreams))
 }
 
 func registerTerminalRoutes(api *gin.RouterGroup, h *handler.TerminalHandler) {
