@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+# Ensure PATH is set — nginx:trixie base image may not expose it.
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
 LOG_DIR="/storage/logs"
 STARTUP_LOG="$LOG_DIR/bootstrap.log"
 
@@ -85,6 +88,15 @@ echo "--- Start nginx ---"
 if ! /usr/sbin/nginx -c /etc/nginx/nginx.conf >> "$STARTUP_LOG" 2>&1; then
     echo "WARN: nginx start failed, see bootstrap.log" >> "$STARTUP_LOG"
 fi
+
+echo "--- Start logrotate daemon ---"
+(
+  sleep 60
+  while true; do
+    logrotate /etc/logrotate.d/gosite 2>/dev/null || true
+    sleep 86400
+  done
+) &
 
 echo "--- Start gosite ---"
 exec /usr/local/bin/gosite serve

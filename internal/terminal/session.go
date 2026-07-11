@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -75,6 +76,11 @@ type PtySession struct {
 	writer   *websocket.Conn
 	readers  map[*websocket.Conn]struct{}
 
+	// writeMu serializes all websocket WriteMessage calls across
+	// broadcast, waitLoop, and the hub read-pump. gorilla/websocket
+	// permits only one concurrent writer per Conn.
+	writeMu sync.Mutex
+
 	fanout chan ptyChunk
 
 	// pauseMu guards pauseCount. When pauseCount > 0 the fan-out loop
@@ -126,7 +132,7 @@ func NewPtySession(cfg SessionConfig, onExit func(int)) *PtySession {
 // ReadLoop and fan-out goroutines. The session becomes a no-op after Kill.
 func (s *PtySession) Start() error {
 	cmd := exec.Command(s.cfg.Shell)
-	cmd.Env = s.cfg.Env
+	cmd.Env = mergeEnv(os.Environ(), s.cfg.Env)
 	cmd.Dir = s.cfg.Cwd
 
 	handle, err := ptyStart(cmd, s.cfg.Cols, s.cfg.Rows)
@@ -398,13 +404,18 @@ func (s *PtySession) broadcast(chunk ptyChunk) {
 	}
 	s.attachMu.RUnlock()
 
+	s.writeMu.Lock()
+	var failed []*websocket.Conn
 	for _, c := range targets {
 		if err := c.WriteMessage(websocket.BinaryMessage, frame); err != nil {
-			// Drop the offending client; the read pump on that
-			// connection will close and call Detach.
-			_ = c.Close()
-			s.Detach(c)
+			failed = append(failed, c)
 		}
+	}
+	s.writeMu.Unlock()
+
+	for _, c := range failed {
+		_ = c.Close()
+		s.Detach(c)
 	}
 }
 
@@ -445,9 +456,13 @@ func (s *PtySession) waitLoop() {
 	s.attachMu.RUnlock()
 
 	frame, _ := EncodeText(ExitFrame{Type: FrameExit, Code: exitCode})
+	s.writeMu.Lock()
 	for _, c := range targets {
 		_ = c.WriteMessage(websocket.TextMessage, frame)
 		_ = c.Close()
+	}
+	s.writeMu.Unlock()
+	for _, c := range targets {
 		s.Detach(c)
 	}
 	s.Kill()
@@ -522,4 +537,31 @@ func (s *PtySession) WaitForExit(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+// mergeEnv combines a base environment (typically os.Environ()) with
+// overrides. Overrides take precedence — if the same key appears in both,
+// the override value wins. Keys are compared by the portion before "=".
+func mergeEnv(base, overrides []string) []string {
+	seen := make(map[string]bool, len(overrides))
+	result := make([]string, 0, len(base)+len(overrides))
+
+	for _, kv := range overrides {
+		key := kv
+		if i := strings.IndexByte(kv, '='); i >= 0 {
+			key = kv[:i]
+		}
+		seen[key] = true
+		result = append(result, kv)
+	}
+	for _, kv := range base {
+		key := kv
+		if i := strings.IndexByte(kv, '='); i >= 0 {
+			key = kv[:i]
+		}
+		if !seen[key] {
+			result = append(result, kv)
+		}
+	}
+	return result
 }

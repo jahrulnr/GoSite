@@ -35,7 +35,7 @@ Runtime, API, and migration docs for **GoSite** (Go + Preact hosting panel).
 |---------------|-------------|
 | [architecture/](./architecture/) | Runtime overview, domain model, plugin ADR |
 | [reference/](./reference/) | API inventory, [integration tokens](./reference/integration-tokens.md), [MCP tools](./reference/mcp-tools.md) |
-| [operations/](./operations/) | Nginx auto-repair |
+| [operations/](./operations/) | Nginx auto-repair, [log rotation & SQLite maintenance](./operations/log-rotation.md) |
 | [guides/](./guides/) | Dev setup, wiki export, localization, [MCP operator](./guides/mcp-operator.md) |
 | [sequences/](./sequences/) | Mermaid flow diagrams per feature |
 | [implementation/](./implementation/) | Implementation wave trackers (SA + plugin) |

@@ -17,15 +17,15 @@ import (
 // sticky timeout (default 12h), and a sweeper that terminates sessions whose
 // activity window has elapsed.
 type Hub struct {
-	mu        sync.RWMutex
-	sessions  map[string]*PtySession
-	byUser    map[int64]map[string]*PtySession
-	perUser   int
-	stickyTTL time.Duration
-	dumpDir   string
-	dumpMax   int64
-	stopCh    chan struct{}
-	idGen     func() string
+	mu           sync.RWMutex
+	sessions     map[string]*PtySession
+	byUser       map[int64]map[string]*PtySession
+	perUser      int
+	stickyTTL    time.Duration
+	dumpDir      string
+	dumpMax      int64
+	stopCh       chan struct{}
+	idGen        func() string
 	defaultShell string
 	defaultCwd   string
 	defaultEnv   []string
@@ -138,16 +138,16 @@ func (h *Hub) Create(ctx context.Context, userID int64, opts CreateOptions) (*Pt
 	}
 
 	cfg := SessionConfig{
-		ID:        id,
-		UserID:    userID,
-		Shell:     shell,
-		Cwd:       cwd,
-		Env:       env,
-		Cols:      cols,
-		Rows:      rows,
-		DumpPath:  dumpPath,
-		DumpMax:   h.dumpMax,
-		FirstSeq:  firstSeq,
+		ID:       id,
+		UserID:   userID,
+		Shell:    shell,
+		Cwd:      cwd,
+		Env:      env,
+		Cols:     cols,
+		Rows:     rows,
+		DumpPath: dumpPath,
+		DumpMax:  h.dumpMax,
+		FirstSeq: firstSeq,
 	}
 
 	s := NewPtySession(cfg, func(_ int) {
@@ -382,7 +382,9 @@ func (h *Hub) AttachAndPump(s *PtySession, conn *websocket.Conn, onEvent func(st
 	if err != nil {
 		return err
 	}
+	s.writeMu.Lock()
 	if err := conn.WriteMessage(websocket.TextMessage, readyBytes); err != nil {
+		s.writeMu.Unlock()
 		return err
 	}
 
@@ -391,9 +393,11 @@ func (h *Hub) AttachAndPump(s *PtySession, conn *websocket.Conn, onEvent func(st
 	// firstSeq so the client's dedup is consistent.
 	if len(data) > 0 {
 		if err := conn.WriteMessage(websocket.BinaryMessage, EncodeBinaryFrame(firstSeq, data)); err != nil {
+			s.writeMu.Unlock()
 			return err
 		}
 	}
+	s.writeMu.Unlock()
 
 	// Resume the broadcast loop now that the snapshot has been delivered;
 	// further output from the PTY should be forwarded to the client in
@@ -436,13 +440,17 @@ func (h *Hub) AttachAndPump(s *PtySession, conn *websocket.Conn, onEvent func(st
 				_ = s.Resize(p.Cols, p.Rows)
 			case *PingFrame:
 				pong, _ := EncodeText(PongFrame{Type: FramePong})
+				s.writeMu.Lock()
 				_ = conn.WriteMessage(websocket.TextMessage, pong)
+				s.writeMu.Unlock()
 			case *ReplayFrame:
 				data, first, end := s.Snapshot()
 				_ = first
 				_ = end
 				if len(data) > 0 {
+					s.writeMu.Lock()
 					_ = conn.WriteMessage(websocket.BinaryMessage, EncodeBinaryFrame(first, data))
+					s.writeMu.Unlock()
 				}
 			}
 		}
