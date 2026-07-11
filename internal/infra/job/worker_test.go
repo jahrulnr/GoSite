@@ -3,10 +3,8 @@ package job_test
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -256,7 +254,6 @@ func TestJob_RealCommandStreamsEachLine(t *testing.T) {
 	// Verify the DB output contains the streamed lines.
 	stored, err := jobs.FindByID(ctx, run.ID)
 	require.NoError(t, err)
-	fmt.Fprintf(os.Stderr, "[TEST] Before StreamSSE: status=%s outputLen=%d output=%q\n", stored.Status, len(stored.Output), stored.Output)
 	assert.Contains(t, stored.Output, "one")
 	assert.Contains(t, stored.Output, "two")
 	assert.Equal(t, sqlite.JobStatusOK, stored.Status)
@@ -265,7 +262,6 @@ func TestJob_RealCommandStreamsEachLine(t *testing.T) {
 	rec := httptest.NewRecorder()
 	require.NoError(t, w.StreamSSE(ctx, rec, run.ID))
 	body := rec.Body.String()
-	fmt.Fprintf(os.Stderr, "[TEST] StreamSSE body: %q\n", body)
 	assert.Contains(t, body, "data: one")
 	assert.Contains(t, body, "data: two")
 	assert.Contains(t, body, "event: done")
