@@ -53,7 +53,7 @@ type ContentResult struct {
 	Encoding string `json:"encoding"`
 }
 
-// Service manages file manager operations within allowed roots.
+// Service manages file manager operations.
 type Service struct {
 	paths        *filesystem.Validator
 	allowExecute bool
@@ -61,9 +61,9 @@ type Service struct {
 }
 
 // NewService returns a file manager service.
-func NewService(roots []string, allowExecute bool, cmd contracts.CommandRunner) *Service {
+func NewService(allowExecute bool, cmd contracts.CommandRunner) *Service {
 	return &Service{
-		paths:        filesystem.NewValidator(roots...),
+		paths:        filesystem.NewValidator(),
 		allowExecute: allowExecute,
 		cmd:          cmd,
 	}

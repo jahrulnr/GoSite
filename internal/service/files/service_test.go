@@ -18,12 +18,8 @@ func newFilesSvc(t *testing.T, allowExecute bool) (*files.Service, string) {
 	t.Helper()
 	root := t.TempDir()
 	www := filepath.Join(root, "www")
-	storage := filepath.Join(root, "storage")
-	tmp := filepath.Join(root, "tmp")
 	require.NoError(t, os.MkdirAll(www, 0o755))
-	require.NoError(t, os.MkdirAll(storage, 0o755))
-	require.NoError(t, os.MkdirAll(tmp, 0o755))
-	svc := files.NewService([]string{www, storage, tmp}, allowExecute, testutil.NewMockCommander())
+	svc := files.NewService(allowExecute, testutil.NewMockCommander())
 	return svc, www
 }
 
@@ -184,7 +180,7 @@ func TestFiles_BatchDelete(t *testing.T) {
 func TestFiles_ExecuteEnabled(t *testing.T) {
 	root := t.TempDir()
 	cmd := testutil.NewMockCommander()
-	svc := files.NewService([]string{root}, true, cmd)
+	svc := files.NewService(true, cmd)
 	script := filepath.Join(root, "run.sh")
 	require.NoError(t, os.WriteFile(script, []byte("#!/bin/sh"), 0o755))
 	require.NoError(t, svc.Action(context.Background(), files.ActionInput{Action: "execute", Path: script}))
@@ -263,7 +259,7 @@ func TestFiles_CopySourceIsDirectory(t *testing.T) {
 func TestFiles_ExecuteDirectoryRejected(t *testing.T) {
 	root := t.TempDir()
 	cmd := testutil.NewMockCommander()
-	svc := files.NewService([]string{root}, true, cmd)
+	svc := files.NewService(true, cmd)
 	err := svc.Action(context.Background(), files.ActionInput{Action: "execute", Path: root})
 	require.Error(t, err)
 }
@@ -316,7 +312,7 @@ func TestFiles_ExecuteCommandFailure(t *testing.T) {
 	root := t.TempDir()
 	cmd := testutil.NewMockCommander()
 	cmd.Err = assert.AnError
-	svc := files.NewService([]string{root}, true, cmd)
+	svc := files.NewService(true, cmd)
 	script := filepath.Join(root, "fail.sh")
 	require.NoError(t, os.WriteFile(script, []byte("#!/bin/sh"), 0o755))
 	err := svc.Action(context.Background(), files.ActionInput{Action: "execute", Path: script})
