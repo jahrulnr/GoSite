@@ -66,7 +66,7 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("create database directory: %w", err)
 	}
 
-	dsn := fmt.Sprintf("file:%s?cache=shared&_pragma=foreign_keys(1)", path)
+	dsn := fmt.Sprintf("file:%s?cache=shared&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)", path)
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite database: %w", err)
