@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # ── Parallel: test + build ──────────────────────────────────────────
+  # -- Parallel: test + build --
   go-test:
     runs-on: ubuntu-latest
     steps:
@@ -137,7 +137,7 @@ jobs:
           docker image inspect gosite:ci --format '{{.Id}}' >/dev/null
           docker run --rm --entrypoint gosite gosite:ci help
 
-  # ── Serial: tag only if all above pass ───────────────────────────────
+  # -- Serial: tag only if all above pass --
   tag:
     needs: [go-test, web-test, e2e-test, docker-build]
     if: success()
@@ -238,9 +238,7 @@ jobs:
 
           tag_msg="Release $NEW_TAG"
           if [ -n "$pr_num" ]; then
-            tag_msg="$tag_msg
-
-Merged PR #$pr_num: $pr_title"
+            tag_msg="$(printf '%s\n\nMerged PR #%s: %s' "$tag_msg" "$pr_num" "$pr_title")"
           fi
 
           git tag -a "$NEW_TAG" -m "$tag_msg"
@@ -273,15 +271,13 @@ Merged PR #$pr_num: $pr_title"
             link=""
           fi
 
+          notes="$(printf '## Release %s\n\n### Changes\n%s\n\n%s\n\n### Commits\n%s' \
+            "$NEW_TAG" \
+            "$changes" \
+            "$link" \
+            "$(git log --oneline --pretty=format:'- %h %s' HEAD~10..HEAD 2>/dev/null || echo '- (see git log)')")"
+
           gh release create "$NEW_TAG" \
             --title "$NEW_TAG" \
-            --notes "## Release $NEW_TAG
-
-### Changes
-$changes
-
-$link
-
-### Commits
-$(git log --oneline --pretty=format:'- %h %s' HEAD~10..HEAD 2>/dev/null || echo '- (see git log)')" \
+            --notes "$notes" \
             --generate-notes
