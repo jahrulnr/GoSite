@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+# Ensure PATH is set — nginx:trixie base image may not expose it.
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
 LOG_DIR="/storage/logs"
 STARTUP_LOG="$LOG_DIR/bootstrap.log"
 

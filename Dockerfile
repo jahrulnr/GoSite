@@ -87,6 +87,11 @@ RUN cp -a /etc/nginx/mime.types /var/setup/nginx/mime.types \
 
 RUN chmod +x /usr/local/bin/gosite /run/start.sh /run/fstab_mounter.sh
 
+# Ensure PATH is available to all shells and processes, even if the
+# base image or entrypoint clears it.
+RUN echo 'PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"' > /etc/environment \
+    && echo 'export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"' > /etc/profile.d/gosite-path.sh
+
 EXPOSE 80
 EXPOSE 443
 EXPOSE 443/udp
