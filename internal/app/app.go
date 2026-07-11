@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
@@ -62,7 +63,7 @@ func RunServe(cfg config.Config) error {
 	go runMetricsCollector(ctx, collector)
 	go runNginxStatusCollector(ctx, nginxCollector)
 	go runNginxVTSCollector(ctx, vtsCollector)
-	go runRetentionPurge(ctx, splunkSvc, collector, nginxCollector, vtsCollector)
+	go runRetentionPurge(ctx, db, splunkSvc, collector, nginxCollector, vtsCollector)
 	go runNginxWatchdog(ctx, cfg)
 
 	go func() {
@@ -143,7 +144,7 @@ func runNginxVTSCollector(ctx context.Context, collector *nginxlite.VTSCollector
 	}
 }
 
-func runRetentionPurge(ctx context.Context, splunk *splunklite.Service, collector *grafanalite.Collector, nginxCollector *nginxlite.Collector, vtsCollector *nginxlite.VTSCollector) {
+func runRetentionPurge(ctx context.Context, db *sql.DB, splunk *splunklite.Service, collector *grafanalite.Collector, nginxCollector *nginxlite.Collector, vtsCollector *nginxlite.VTSCollector) {
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
 	for {
@@ -167,6 +168,9 @@ func runRetentionPurge(ctx context.Context, splunk *splunklite.Service, collecto
 				if err := vtsCollector.PurgeRetention(ctx); err != nil {
 					log.Printf("nginx vts retention: %v", err)
 				}
+			}
+			if err := sqlite.Vacuum(db); err != nil {
+				log.Printf("sqlite vacuum: %v", err)
 			}
 		}
 	}

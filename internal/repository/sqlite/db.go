@@ -148,6 +148,18 @@ func Migrate(db *sql.DB, dir string) error {
 	return nil
 }
 
+// Vacuum reclaims free pages from the SQLite database file, shrinking it on
+// disk. It should be called after bulk deletes (e.g. retention purge) to
+// prevent the database file from growing indefinitely. VACUUM requires an
+// exclusive lock, so callers should ensure no concurrent writes are in
+// flight.
+func Vacuum(db *sql.DB) error {
+	if _, err := db.Exec(`VACUUM`); err != nil {
+		return fmt.Errorf("vacuum sqlite: %w", err)
+	}
+	return nil
+}
+
 // ListTables returns user-visible table names from sqlite_master.
 func ListTables(db *sql.DB) ([]string, error) {
 	rows, err := db.Query(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name`)

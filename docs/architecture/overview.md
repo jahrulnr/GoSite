@@ -149,7 +149,7 @@ Certbot and website placeholder SSL share the `live/{domain}/` namespace. See [s
 | `/storage/webconfig/site.d/` | Draft nginx per domain |
 | `/storage/webconfig/active.d/` | Active vhost symlinks |
 | `/storage/webconfig/ssl/` | Certificates (LE layout) |
-| `/storage/logs/` | Nginx access/error + gosite |
+| `/storage/logs/` | Nginx access/error + gosite (logrotate: 14-day rotation) |
 | `/storage/nginx/` | Symlink source for `/etc/nginx` |
 | `/storage/plugins/` | Installed plugin artifacts `{plugin_id}/{version}/` |
 | `/storage/plugins/keyring.json` | Trusted vendor signing keys (default; override `PLUGIN_KEYRING_PATH`) |
@@ -164,6 +164,7 @@ Certbot and website placeholder SSL share the `live/{domain}/` namespace. See [s
 | Remote distribution | [sequences/20-plugin-remote-distribution.md](../sequences/20-plugin-remote-distribution.md) |
 | MCP integration (design) | [sequences/21-plugin-mcp.md](../sequences/21-plugin-mcp.md) · [plugin-integration-auth.md](./plugin-integration-auth.md) · [integration-tokens.md](../reference/integration-tokens.md) · [mcp-tools.md](../reference/mcp-tools.md) · [guides/mcp-operator.md](../guides/mcp-operator.md) |
 | Nginx metrics (stub_status + VTS) | [sequences/22-nginx-metrics.md](../sequences/22-nginx-metrics.md) |
+| Log rotation & SQLite maintenance | [operations/log-rotation.md](../operations/log-rotation.md) |
 | API surface | [api-inventory.md](../reference/api-inventory.md), [plugin-permissions.md](../reference/plugin-permissions.md), `api/openapi.yaml` |
 | Doc maintenance | [DOCS-MAINTENANCE.md](../DOCS-MAINTENANCE.md) |
 

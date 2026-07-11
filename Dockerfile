@@ -50,6 +50,7 @@ RUN apt-get update \
         s3fs \
         zip \
         unzip \
+        logrotate \
     && groupadd -g 1000 apps \
     && useradd -u 1000 -g 1000 apps \
     && apt-get clean \
@@ -70,6 +71,7 @@ COPY ./config/nginx /var/setup/nginx
 COPY ./config/webconfig /var/setup/webconfig
 COPY ./config/fstab_mounter.sh /run/fstab_mounter.sh
 COPY ./config/start.sh /run/start.sh
+COPY ./config/logrotate/gosite /etc/logrotate.d/gosite
 
 # Carry upstream nginx defaults (mime.types, fastcgi_params) into the staged tree
 # so they survive when start.sh moves /var/setup/nginx into /etc/nginx.

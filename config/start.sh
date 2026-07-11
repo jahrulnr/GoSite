@@ -86,5 +86,14 @@ if ! /usr/sbin/nginx -c /etc/nginx/nginx.conf >> "$STARTUP_LOG" 2>&1; then
     echo "WARN: nginx start failed, see bootstrap.log" >> "$STARTUP_LOG"
 fi
 
+echo "--- Start logrotate daemon ---"
+(
+  sleep 60
+  while true; do
+    logrotate /etc/logrotate.d/gosite 2>/dev/null || true
+    sleep 86400
+  done
+) &
+
 echo "--- Start gosite ---"
 exec /usr/local/bin/gosite serve

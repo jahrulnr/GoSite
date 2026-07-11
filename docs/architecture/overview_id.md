@@ -101,7 +101,7 @@ Navigasi UI dari `GET /ui/meta`. Hook plugin sebelum side-effect nginx/SSL/job.
 
 | Path | Isi |
 |------|-----|
-| `/storage/db.sqlite` | SQLite panel |
+| `/storage/db.sqlite` | SQLite panel (VACUUM harian setelah retention purge) |
 | `/storage/webconfig/` | nginx draft + SSL |
 | `/storage/plugins/` | Artifact plugin |
 | `/www/` | Document root website |
