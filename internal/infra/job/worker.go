@@ -210,10 +210,20 @@ func (w *Worker) StreamSSE(ctx context.Context, rw http.ResponseWriter, jobID in
 
 		switch job.Status {
 		case sqlite.JobStatusOK:
+			if fresh, err := w.jobs.FindByID(ctx, jobID); err == nil && len(fresh.Output) > lastLen {
+				writeSSEData(rw, fresh.Output[lastLen:])
+				flusher.Flush()
+				lastLen = len(fresh.Output)
+			}
 			fmt.Fprintf(rw, "event: done\ndata: ok\n\n")
 			flusher.Flush()
 			return nil
 		case sqlite.JobStatusFailed, sqlite.JobStatusCancelled:
+			if fresh, err := w.jobs.FindByID(ctx, jobID); err == nil && len(fresh.Output) > lastLen {
+				writeSSEData(rw, fresh.Output[lastLen:])
+				flusher.Flush()
+				lastLen = len(fresh.Output)
+			}
 			msg := job.Error
 			if msg == "" {
 				msg = "failed"
