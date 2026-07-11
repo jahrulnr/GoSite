@@ -9,7 +9,7 @@ import { humanizeError } from '../lib/errors';
 import { useAction, useAsync } from '../lib/hooks';
 import { useStore } from '../lib/store';
 
-const READ_SCOPES = ['system:read', 'websites:read', 'nginx:read', 'docker:read', 'jobs:read', 'plugins:read'];
+const READ_SCOPES = ['system:read', 'websites:read', 'nginx:read', 'docker:read', 'cron:read', 'plugins:read'];
 const WRITE_SCOPES = ['websites:write'];
 const MANAGE_SCOPES = ['nginx:manage', 'docker:manage'];
 

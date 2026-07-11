@@ -119,10 +119,10 @@ Gosite **manages** website nginx (`site.d` / `active.d`) via website routes; glo
 
 | Scope | Routes | MCP (planned) |
 |-------|--------|---------------|
-| `cron:read` | `GET /cronjobs` | — |
+| `cron:read` | `GET /cronjobs` | `jobs` tool |
 | `cron:write` | `POST /cronjobs`, `PUT /cronjobs/{id}`, `DELETE /cronjobs/{id}` | — |
 | `cron:manage` | `POST /cronjobs/{id}/run`, `GET /cronjobs/{id}/run/stream` | — |
-| `jobs:read` | *(via query source `job`)* `POST/GET /query` with `source=job` | `jobs` tool |
+| `jobs:read` | *(legacy query source `job`)* `POST/GET /query` with `source=job` | legacy query source only |
 
 Job worker events are also visible in Splunk-lite query UI; scope `query:read` covers search.
 
@@ -194,7 +194,7 @@ MCP catalog plugin — subset of full registry ([sequence 21](../sequences/21-pl
   "nginx:manage",
   "docker:read",
   "docker:manage",
-  "jobs:read",
+  "cron:read",
   "plugins:read"
 ]
 ```
@@ -209,7 +209,7 @@ Split `nginx:read` vs `nginx:manage` so operators can issue test-only tokens wit
 | `websites` | `websites:read`; mutations need `websites:write` |
 | `nginx` | `nginx:read` for test; `nginx:manage` for reload |
 | `docker` | `docker:read`; restart/stop need `docker:manage` |
-| `jobs` | `jobs:read` (alias: `query:read` + job source — implement as `jobs:read`) |
+| `jobs` | `cron:read` |
 | `plugins` | `plugins:read` |
 
 ## UI presets (token generator)

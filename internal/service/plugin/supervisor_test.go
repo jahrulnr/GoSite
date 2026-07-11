@@ -106,14 +106,18 @@ func TestSupervisorRestartsOnTransientFailure(t *testing.T) {
 func TestSupervisorAutoDisablesAfterRepeatedFailure(t *testing.T) {
 	t.Parallel()
 	sup, tracker, health, repo := setupSupervisor(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
-	defer cancel()
 
 	health.mu.Lock()
 	health.err = errors.New("hard fail")
 	health.mu.Unlock()
-	go sup.Run(ctx)
-	<-ctx.Done()
+
+	for i := 0; i < 5; i++ {
+		sup.tick(context.Background())
+		record, err := repo.Find(context.Background(), "acme/logger", "1.0.0")
+		if err == nil && record.State == sqlite.PluginStateInstalled {
+			break
+		}
+	}
 
 	record, err := repo.Find(context.Background(), "acme/logger", "1.0.0")
 	require.NoError(t, err)

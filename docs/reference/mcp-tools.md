@@ -51,7 +51,7 @@ sequenceDiagram
 | `nginx:manage` | `nginx` | reload |
 | `docker:read` | `docker` | list, logs |
 | `docker:manage` | `docker` | restart, stop |
-| `jobs:read` | `jobs` | list, status |
+| `cron:read` | `jobs` | list cron jobs |
 | `plugins:read` | `plugins` | list installed meta |
 
 **Dynamic `tools/list`:** MCP server registers only tools whose required scope(s) are on the token. The agent must not see tools outside the whitelist.
@@ -78,7 +78,7 @@ Consolidated tools (Coolify-style), one tool per domain with `action` parameter 
 | `websites` | `websites:read` | Requires `websites:write` |
 | `nginx` | `nginx:read` / `nginx:manage` | Test vs reload |
 | `docker` | `docker:manage` | Restart requires same scope |
-| `jobs` | `jobs:read` | None in MVP |
+| `jobs` | `cron:read` | None in MVP |
 | `plugins` | `plugins:read` | None in MVP |
 
 Mutating tool invocations must fail closed at MCP layer (pre-check scope) and API layer (middleware).
@@ -91,7 +91,7 @@ Location: monorepo `plugins/gosite/mcp/` (P6b). Community stdio `@gosite/mcp` in
 {
   "id": "gosite/mcp",
   "name": "GoSite MCP",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "tier": 1,
   "apiVersion": "gosite-plugin/1",
   "minGoSiteVersion": "1.4.0",
@@ -109,7 +109,7 @@ Location: monorepo `plugins/gosite/mcp/` (P6b). Community stdio `@gosite/mcp` in
     "nginx:manage",
     "docker:read",
     "docker:manage",
-    "jobs:read",
+    "cron:read",
     "plugins:read"
   ],
   "entrypoints": {

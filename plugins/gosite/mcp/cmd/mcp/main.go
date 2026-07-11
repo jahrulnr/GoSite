@@ -25,6 +25,7 @@ type rpcResponse struct {
 	ID      interface{} `json:"id"`
 	Result  interface{} `json:"result,omitempty"`
 	Error   *rpcError   `json:"error,omitempty"`
+	skip    bool        `json:"-"`
 }
 
 type rpcError struct {
@@ -70,6 +71,9 @@ func (s *server) serve(in io.Reader, out io.Writer) error {
 			continue
 		}
 		resp := s.dispatch(req)
+		if resp.skip {
+			continue
+		}
 		if err := enc.Encode(resp); err != nil {
 			return err
 		}
@@ -84,9 +88,12 @@ func (s *server) dispatch(req rpcRequest) rpcResponse {
 		return rpcResponse{JSONRPC: "2.0", ID: id, Result: map[string]any{
 			"protocolVersion": "2024-11-05",
 			"capabilities":    map[string]any{"tools": map[string]any{}},
-			"serverInfo":      map[string]string{"name": "gosite-mcp", "version": "0.1.0"},
+			"serverInfo":      map[string]string{"name": "gosite-mcp", "version": "0.2.0"},
 		}}
 	case "notifications/initialized", "initialized":
+		if id == nil {
+			return rpcResponse{skip: true}
+		}
 		return rpcResponse{JSONRPC: "2.0", ID: id}
 	case "tools/list":
 		items := make([]map[string]any, 0, len(s.tools))
@@ -157,8 +164,8 @@ func toolsForScopes(scopes []string) []toolDef {
 	if has("docker:read") || has("docker:manage") {
 		out = append(out, toolDef{Name: "docker", Description: "List docker containers", Scope: "docker:read"})
 	}
-	if has("jobs:read") {
-		out = append(out, toolDef{Name: "jobs", Description: "List cron jobs", Scope: "jobs:read"})
+	if has("cron:read") {
+		out = append(out, toolDef{Name: "jobs", Description: "List cron jobs", Scope: "cron:read"})
 	}
 	if has("plugins:read") {
 		out = append(out, toolDef{Name: "plugins", Description: "List installed plugins", Scope: "plugins:read"})

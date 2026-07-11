@@ -34,6 +34,9 @@ export function flattenExtensions(ext: Extension | Extension[] | undefined): Ext
   if (Array.isArray(ext)) return ext.flatMap((item) => flattenExtensions(item));
   if (typeof ext === 'object' && ext !== null && 'extension' in ext) {
     const nested = (ext as { extension: Extension | Extension[] }).extension;
+    // Some Extension values (e.g., FacetProvider) expose themselves as .extension.
+    // Unwrapping those would recurse forever; treat them as leaf extensions.
+    if (nested === ext) return [ext];
     return flattenExtensions(nested);
   }
   return [ext];
