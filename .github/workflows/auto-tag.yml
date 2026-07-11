@@ -1,0 +1,143 @@
+name: Auto Tag
+
+on:
+  pull_request:
+    types:
+      - closed
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Bump level (patch | minor | major)"
+        required: true
+        default: "patch"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: auto-tag-${{ github.repository }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    # Only run when the PR was merged (not just closed) OR manually dispatched.
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.bump.outputs.new_tag }}
+      created: ${{ steps.create_tag.outputs.created }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine bump level
+        id: bump_level
+        env:
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          MANUAL_BUMP: ${{ github.event.inputs.bump }}
+        run: |
+          if [ -n "$MANUAL_BUMP" ]; then
+            echo "level=$MANUAL_BUMP" >> "$GITHUB_OUTPUT"
+            echo "source=manual" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          labels="$PR_LABELS"
+          if echo "$labels" | grep -qi '"breaking"\|"major"'; then
+            echo "level=major" >> "$GITHUB_OUTPUT"
+          elif echo "$labels" | grep -qi '"feature"\|"minor"\|"enhancement"'; then
+            echo "level=minor" >> "$GITHUB_OUTPUT"
+          else
+            echo "level=patch" >> "$GITHUB_OUTPUT"
+          fi
+          echo "source=labels" >> "$GITHUB_OUTPUT"
+
+      - name: Bump version
+        id: bump
+        env:
+          LEVEL: ${{ steps.bump_level.outputs.level }}
+        run: |
+          # Get latest v* tag
+          latest_tag="$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null || echo "v1.0.0")"
+          version="${latest_tag#v}"
+          echo "Latest tag: $latest_tag → version: $version"
+
+          IFS='.' read -r major minor patch <<< "$version"
+
+          case "$LEVEL" in
+            major)
+              major=$((major + 1))
+              minor=0
+              patch=0
+              ;;
+            minor)
+              minor=$((minor + 1))
+              patch=0
+              ;;
+            patch)
+              patch=$((patch + 1))
+              ;;
+          esac
+
+          new_version="${major}.${minor}.${patch}"
+          new_tag="v${new_version}"
+          echo "new_tag=$new_tag" >> "$GITHUB_OUTPUT"
+          echo "Bump level: $LEVEL → new tag: $new_tag"
+
+      - name: Create tag
+        id: create_tag
+        env:
+          NEW_TAG: ${{ steps.bump.outputs.new_tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check if tag already exists
+          if git rev-parse "$NEW_TAG" >/dev/null 2>&1; then
+            echo "Tag $NEW_TAG already exists — skipping"
+            echo "created=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Create annotated tag on the merge commit
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          pr_num="${{ github.event.pull_request.number }}"
+          pr_title="${{ github.event.pull_request.title }}"
+          commit_msg="Release $NEW_TAG"
+
+          if [ -n "$pr_num" ]; then
+            commit_msg="$commit_msg
+
+Merged PR #$pr_num: $pr_title"
+          fi
+
+          git tag -a "$NEW_TAG" -m "$commit_msg"
+          git push origin "$NEW_TAG"
+
+          echo "created=true" >> "$GITHUB_OUTPUT"
+          echo "Created and pushed $NEW_TAG"
+
+      - name: Create GitHub Release
+        if: steps.create_tag.outputs.created == 'true'
+        env:
+          NEW_TAG: ${{ steps.bump.outputs.new_tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pr_num="${{ github.event.pull_request.number }}"
+          pr_url="${{ github.event.pull_request.html_url }}"
+          notes="## Release $NEW_TAG
+
+          ### Changes
+          Merged PR #$pr_num: ${{ github.event.pull_request.title }}
+
+          [View PR]($pr_url)
+
+          ### Commits
+          $(git log --oneline --pretty=format:'- %h %s' HEAD~10..HEAD 2>/dev/null || echo '- (see git log)')"
+
+          gh release create "$NEW_TAG" \
+            --title "$NEW_TAG" \
+            --notes "$notes" \
+            --generate-notes
