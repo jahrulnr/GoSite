@@ -323,8 +323,12 @@ func TestFiles_ExecuteCommandFailure(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestFiles_DeleteInvalidPath(t *testing.T) {
+func TestFiles_DeleteOutsideRootsAllowed(t *testing.T) {
 	svc, _ := newFilesSvc(t, false)
-	err := svc.Delete(context.Background(), "/etc/passwd")
-	require.Error(t, err)
+	outside := t.TempDir()
+	file := filepath.Join(outside, "outside.txt")
+	require.NoError(t, os.WriteFile(file, []byte("x"), 0o644))
+	require.NoError(t, svc.Delete(context.Background(), file))
+	_, err := os.Stat(file)
+	require.True(t, os.IsNotExist(err))
 }

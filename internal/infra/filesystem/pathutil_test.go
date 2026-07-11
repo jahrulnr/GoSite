@@ -32,12 +32,9 @@ func TestValidate_RejectsTraversal(t *testing.T) {
 	assert.Equal(t, apperror.CodePathTraversal, appErr.Code)
 }
 
-func TestValidate_RejectsOutsideRoots(t *testing.T) {
+func TestValidate_AllowsOutsideRoots(t *testing.T) {
 	v := filesystem.NewValidator("/www", "/storage", "/tmp")
-	err := v.Validate("/etc/passwd")
-	require.Error(t, err)
-	appErr := apperror.From(err)
-	assert.Equal(t, apperror.CodePathInvalid, appErr.Code)
+	require.NoError(t, v.Validate("/etc/passwd"))
 }
 
 func TestValidate_RejectsEmpty(t *testing.T) {
@@ -65,10 +62,8 @@ func TestValidate_RootAllowsAbsolutePaths(t *testing.T) {
 	require.NoError(t, v.Validate("/tmp/upload.txt"))
 }
 
-func TestDefaultAllowRoots_ContainsExpected(t *testing.T) {
-	assert.Contains(t, filesystem.DefaultAllowRoots, "/www")
-	assert.Contains(t, filesystem.DefaultAllowRoots, "/storage")
-	assert.Contains(t, filesystem.DefaultAllowRoots, "/tmp")
+func TestDefaultAllowRoots_AllowsAnyAbsolutePath(t *testing.T) {
+	assert.Contains(t, filesystem.DefaultAllowRoots, "/")
 }
 
 func TestValidate_RejectsEncodedTraversal(t *testing.T) {

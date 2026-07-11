@@ -8,7 +8,10 @@ import (
 )
 
 // DefaultAllowRoots are the filesystem roots exposed by the file manager.
-var DefaultAllowRoots = []string{"/www", "/storage", "/tmp"}
+// Allowing "/" means the file manager can browse any absolute path the
+// process has permission to read; traversal and relative paths are still
+// rejected below.
+var DefaultAllowRoots = []string{"/"}
 
 // Validator resolves and validates paths against an allowlist of roots.
 type Validator struct {
@@ -52,7 +55,12 @@ func (v *Validator) Resolve(raw string) (string, error) {
 			return clean, nil
 		}
 	}
-	return "", apperror.New(apperror.CodePathInvalid, "choose a folder under Websites, Storage, or Temp")
+	// No configured root matched, but the file manager is no longer restricted
+	// to a hard allowlist. Accept any absolute path the OS will allow.
+	if filepath.IsAbs(clean) {
+		return clean, nil
+	}
+	return "", apperror.New(apperror.CodePathInvalid, "path must be absolute")
 }
 
 func pathUnderRoot(path, root string) bool {
