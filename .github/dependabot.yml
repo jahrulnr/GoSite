@@ -19,25 +19,6 @@ updates:
       prefix: "chore(go)"
       include: "scope"
 
-  # Go modules for bundled MCP plugin
-  - package-ecosystem: "gomod"
-    directory: "/plugins/gosite/mcp"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 5
-    groups:
-      go-minor-patch:
-        update-types:
-          - "minor"
-          - "patch"
-    labels:
-      - "dependencies"
-      - "go"
-    commit-message:
-      prefix: "chore(go)"
-      include: "scope"
-
   # npm (frontend)
   - package-ecosystem: "npm"
     directory: "/web"
