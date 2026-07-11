@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -131,7 +132,7 @@ func NewPtySession(cfg SessionConfig, onExit func(int)) *PtySession {
 // ReadLoop and fan-out goroutines. The session becomes a no-op after Kill.
 func (s *PtySession) Start() error {
 	cmd := exec.Command(s.cfg.Shell)
-	cmd.Env = s.cfg.Env
+	cmd.Env = mergeEnv(os.Environ(), s.cfg.Env)
 	cmd.Dir = s.cfg.Cwd
 
 	handle, err := ptyStart(cmd, s.cfg.Cols, s.cfg.Rows)
@@ -536,4 +537,31 @@ func (s *PtySession) WaitForExit(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+// mergeEnv combines a base environment (typically os.Environ()) with
+// overrides. Overrides take precedence — if the same key appears in both,
+// the override value wins. Keys are compared by the portion before "=".
+func mergeEnv(base, overrides []string) []string {
+	seen := make(map[string]bool, len(overrides))
+	result := make([]string, 0, len(base)+len(overrides))
+
+	for _, kv := range overrides {
+		key := kv
+		if i := strings.IndexByte(kv, '='); i >= 0 {
+			key = kv[:i]
+		}
+		seen[key] = true
+		result = append(result, kv)
+	}
+	for _, kv := range base {
+		key := kv
+		if i := strings.IndexByte(kv, '='); i >= 0 {
+			key = kv[:i]
+		}
+		if !seen[key] {
+			result = append(result, kv)
+		}
+	}
+	return result
 }
