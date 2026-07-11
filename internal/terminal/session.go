@@ -75,6 +75,11 @@ type PtySession struct {
 	writer   *websocket.Conn
 	readers  map[*websocket.Conn]struct{}
 
+	// writeMu serializes all websocket WriteMessage calls across
+	// broadcast, waitLoop, and the hub read-pump. gorilla/websocket
+	// permits only one concurrent writer per Conn.
+	writeMu sync.Mutex
+
 	fanout chan ptyChunk
 
 	// pauseMu guards pauseCount. When pauseCount > 0 the fan-out loop
@@ -398,13 +403,18 @@ func (s *PtySession) broadcast(chunk ptyChunk) {
 	}
 	s.attachMu.RUnlock()
 
+	s.writeMu.Lock()
+	var failed []*websocket.Conn
 	for _, c := range targets {
 		if err := c.WriteMessage(websocket.BinaryMessage, frame); err != nil {
-			// Drop the offending client; the read pump on that
-			// connection will close and call Detach.
-			_ = c.Close()
-			s.Detach(c)
+			failed = append(failed, c)
 		}
+	}
+	s.writeMu.Unlock()
+
+	for _, c := range failed {
+		_ = c.Close()
+		s.Detach(c)
 	}
 }
 
@@ -445,9 +455,13 @@ func (s *PtySession) waitLoop() {
 	s.attachMu.RUnlock()
 
 	frame, _ := EncodeText(ExitFrame{Type: FrameExit, Code: exitCode})
+	s.writeMu.Lock()
 	for _, c := range targets {
 		_ = c.WriteMessage(websocket.TextMessage, frame)
 		_ = c.Close()
+	}
+	s.writeMu.Unlock()
+	for _, c := range targets {
 		s.Detach(c)
 	}
 	s.Kill()

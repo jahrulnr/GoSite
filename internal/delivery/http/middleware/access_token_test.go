@@ -54,7 +54,6 @@ func setupAccessTokenMiddleware(t *testing.T) (*plugin.IntegrationTokenService, 
 
 func TestRequireScope_ForbidsMissingScopeForAccessToken(t *testing.T) {
 	t.Parallel()
-	gin.SetMode(gin.TestMode)
 
 	tokens, plaintext := setupAccessTokenMiddleware(t)
 	authSvc := auth.NewService(nil, auth.NewStore(0))
@@ -82,7 +81,6 @@ func TestRequireScope_ForbidsMissingScopeForAccessToken(t *testing.T) {
 
 func TestRequireScope_AllowsMatchingScopeForAccessToken(t *testing.T) {
 	t.Parallel()
-	gin.SetMode(gin.TestMode)
 
 	tokens, plaintext := setupAccessTokenMiddleware(t)
 	authSvc := auth.NewService(nil, auth.NewStore(0))
