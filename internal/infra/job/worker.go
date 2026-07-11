@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -195,6 +196,8 @@ func (w *Worker) StreamSSE(ctx context.Context, rw http.ResponseWriter, jobID in
 		if err != nil {
 			return apperror.Wrap(apperror.CodeNotFound, "job not found", err)
 		}
+
+		fmt.Fprintf(os.Stderr, "[StreamSSE] jobID=%d status=%s outputLen=%d output=%q\n", jobID, job.Status, len(job.Output), job.Output)
 
 		if job.Status == sqlite.JobStatusPending {
 			time.Sleep(20 * time.Millisecond)
