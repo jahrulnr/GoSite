@@ -135,9 +135,9 @@ jobs:
             kill "$(cat /tmp/gosite.pid)" 2>/dev/null || true
           fi
 
-  # -- Serial: build image only if tests pass --
+  # -- Serial: build image only if tests and wiki validation pass --
   docker-build:
-    needs: [go-test, web-test, e2e-test]
+    needs: [go-test, web-test, e2e-test, wiki-validate]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
