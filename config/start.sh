@@ -34,11 +34,19 @@ DEFAULT_SSL_DIR="/storage/webconfig/ssl/live/default"
 if [ ! -f "$DEFAULT_SSL_DIR/cert.pem" ] || [ ! -f "$DEFAULT_SSL_DIR/key.pem" ]; then
     echo "--- Generate self-signed default SSL cert ---"
     mkdir -p "$DEFAULT_SSL_DIR"
-    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
-        -keyout "$DEFAULT_SSL_DIR/key.pem" \
-        -out "$DEFAULT_SSL_DIR/cert.pem" \
-        -subj "/CN=localhost" \
-        >> "$STARTUP_LOG" 2>&1
+    if [ -f "$DEFAULT_SSL_DIR/config.conf" ]; then
+        openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+            -keyout "$DEFAULT_SSL_DIR/key.pem" \
+            -out "$DEFAULT_SSL_DIR/cert.pem" \
+            -config "$DEFAULT_SSL_DIR/config.conf" \
+            >> "$STARTUP_LOG" 2>&1
+    else
+        openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+            -keyout "$DEFAULT_SSL_DIR/key.pem" \
+            -out "$DEFAULT_SSL_DIR/cert.pem" \
+            -subj "/CN=localhost" \
+            >> "$STARTUP_LOG" 2>&1
+    fi
 fi
 
 echo "--- Repair nginx config if needed ---"

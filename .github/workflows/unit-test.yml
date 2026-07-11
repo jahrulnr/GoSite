@@ -1,17 +1,6 @@
 name: Unit Tests
 
 on:
-  push:
-    paths:
-      - '.github/workflows/unit-test.yml'
-      - 'go.mod'
-      - 'go.sum'
-      - 'cmd/**'
-      - 'internal/**'
-      - 'pkg/**'
-      - 'plugins/**'
-      - 'web/**'
-      - 'Makefile'
   pull_request:
     paths:
       - '.github/workflows/unit-test.yml'
@@ -29,7 +18,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: unit-test-${{ github.repository }}-${{ github.event_name == 'push' && github.ref || github.run_id }}
+  group: unit-test-${{ github.repository }}-${{ github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -66,7 +55,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: web/package-lock.json
 

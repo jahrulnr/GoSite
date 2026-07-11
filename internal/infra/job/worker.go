@@ -129,10 +129,6 @@ func (w *Worker) process(ctx context.Context, id int64) {
 			}
 			_ = w.jobs.AppendOutput(ctx, id, chunk)
 		})
-		stored, err := w.jobs.FindByID(ctx, id)
-		if err == nil {
-			output = stored.Output
-		}
 	} else {
 		res, runErr = w.cmd.Run(ctx, "sh", "-c", command)
 		if strings.TrimSpace(res.Stdout) != "" {
@@ -150,7 +146,11 @@ func (w *Worker) process(ctx context.Context, id int64) {
 		if msg == "" && runErr != nil {
 			msg = runErr.Error()
 		}
-		_ = w.jobs.Complete(ctx, id, sqlite.JobStatusFailed, output, msg)
+		if _, ok := w.cmd.(contracts.StreamingCommandRunner); ok {
+			_ = w.jobs.CompleteStatus(ctx, id, sqlite.JobStatusFailed, msg)
+		} else {
+			_ = w.jobs.Complete(ctx, id, sqlite.JobStatusFailed, output, msg)
+		}
 		_, _ = w.hooks.Dispatch(ctx, "job.on_failure", map[string]any{
 			"id":       job.ID,
 			"job_type": job.JobType,
@@ -159,7 +159,11 @@ func (w *Worker) process(ctx context.Context, id int64) {
 		})
 		return
 	}
-	_ = w.jobs.Complete(ctx, id, sqlite.JobStatusOK, output, "")
+	if _, ok := w.cmd.(contracts.StreamingCommandRunner); ok {
+		_ = w.jobs.CompleteStatus(ctx, id, sqlite.JobStatusOK, "")
+	} else {
+		_ = w.jobs.Complete(ctx, id, sqlite.JobStatusOK, output, "")
+	}
 	_, _ = w.hooks.Dispatch(ctx, "job.after_run", map[string]any{
 		"id":       job.ID,
 		"job_type": job.JobType,

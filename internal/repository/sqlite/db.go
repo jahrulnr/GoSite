@@ -66,11 +66,15 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("create database directory: %w", err)
 	}
 
-	dsn := fmt.Sprintf("file:%s?cache=shared&_pragma=foreign_keys(1)", path)
+	dsn := fmt.Sprintf("file:%s?_txlock=immediate&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)", path)
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite database: %w", err)
 	}
+
+	// SQLite does not support concurrent writers. Limit connections to avoid
+	// SQLITE_BUSY errors. Allow a small pool for concurrent reads in WAL mode.
+	db.SetMaxOpenConns(1)
 
 	if err := db.Ping(); err != nil {
 		_ = db.Close()

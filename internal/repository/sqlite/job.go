@@ -142,6 +142,20 @@ func (r *JobRepository) Complete(ctx context.Context, id int64, status, output, 
 	return nil
 }
 
+// CompleteStatus marks a job finished without overwriting output.
+// Use this for streaming jobs where output was accumulated via AppendOutput.
+func (r *JobRepository) CompleteStatus(ctx context.Context, id int64, status, errMsg string) error {
+	now := time.Now().UTC()
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE job_runs SET status = ?, error = ?, finished_at = ?, updated_at = ?
+		WHERE id = ?
+	`, status, errMsg, now, now, id)
+	if err != nil {
+		return fmt.Errorf("complete job status: %w", err)
+	}
+	return nil
+}
+
 // AppendOutput concatenates output text for streaming jobs.
 func (r *JobRepository) AppendOutput(ctx context.Context, id int64, chunk string) error {
 	now := time.Now().UTC()

@@ -234,17 +234,39 @@ func TestJob_RealCommandStreamsEachLine(t *testing.T) {
 		JobType: "cron",
 		Name:    "stream-lines",
 		Status:  sqlite.JobStatusPending,
-		Output:  "printf 'one\\ntwo\\n'",
+		Output:  "echo one; sleep 0.1; echo two",
 	})
 	require.NoError(t, err)
+
+	// Start StreamSSE before enqueuing so it polls from the start
+	// and catches output as it's appended.
+	rec := httptest.NewRecorder()
+	sseDone := make(chan error, 1)
+	go func() {
+		sseDone <- w.StreamSSE(ctx, rec, run.ID)
+	}()
+
 	w.Enqueue(run.ID)
 
-	rec := httptest.NewRecorder()
-	require.NoError(t, w.StreamSSE(ctx, rec, run.ID))
+	// Wait for StreamSSE to finish (it returns when job reaches terminal status).
+	select {
+	case err := <-sseDone:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("timeout waiting for SSE to complete")
+	}
+
 	body := rec.Body.String()
 	assert.Contains(t, body, "data: one")
 	assert.Contains(t, body, "data: two")
 	assert.Contains(t, body, "event: done")
+
+	// Also verify the DB output independently.
+	stored, err := jobs.FindByID(ctx, run.ID)
+	require.NoError(t, err)
+	assert.Contains(t, stored.Output, "one")
+	assert.Contains(t, stored.Output, "two")
+	assert.Equal(t, sqlite.JobStatusOK, stored.Status)
 }
 
 type realCommander struct{}
