@@ -72,6 +72,10 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("open sqlite database: %w", err)
 	}
 
+	// SQLite does not support concurrent writers. Force a single connection
+	// so all read/write operations serialize through one connection.
+	db.SetMaxOpenConns(1)
+
 	if err := db.Ping(); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("ping sqlite database: %w", err)

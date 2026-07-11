@@ -239,6 +239,26 @@ func TestJob_RealCommandStreamsEachLine(t *testing.T) {
 	require.NoError(t, err)
 	w.Enqueue(run.ID)
 
+	// Wait for the job to complete before checking SSE output.
+	// This avoids a race where StreamSSE reads the job mid-processing.
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		stored, findErr := jobs.FindByID(ctx, run.ID)
+		require.NoError(t, findErr)
+		if stored.Status == sqlite.JobStatusOK || stored.Status == sqlite.JobStatusFailed {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	// Verify the DB output contains the streamed lines.
+	stored, err := jobs.FindByID(ctx, run.ID)
+	require.NoError(t, err)
+	assert.Contains(t, stored.Output, "one")
+	assert.Contains(t, stored.Output, "two")
+	assert.Equal(t, sqlite.JobStatusOK, stored.Status)
+
+	// StreamSSE should now replay the full output from the completed job.
 	rec := httptest.NewRecorder()
 	require.NoError(t, w.StreamSSE(ctx, rec, run.ID))
 	body := rec.Body.String()
