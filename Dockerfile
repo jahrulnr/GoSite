@@ -93,4 +93,4 @@ EXPOSE 8080
 
 WORKDIR /app
 CMD ["/run/start.sh"]
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 CMD ["curl", "--fail", "http://localhost:8080"]
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 CMD ["curl", "--fail", "-k", "https://localhost:8080"]
