@@ -1,0 +1,71 @@
+version: 2
+updates:
+  # Go modules (gosite + plugins)
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    groups:
+      go-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    labels:
+      - "dependencies"
+      - "go"
+    commit-message:
+      prefix: "chore(go)"
+      include: "scope"
+
+  # Go modules for bundled MCP plugin
+  - package-ecosystem: "gomod"
+    directory: "/plugins/gosite/mcp"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      go-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    labels:
+      - "dependencies"
+      - "go"
+    commit-message:
+      prefix: "chore(go)"
+      include: "scope"
+
+  # npm (frontend)
+  - package-ecosystem: "npm"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    groups:
+      npm-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    labels:
+      - "dependencies"
+      - "npm"
+    commit-message:
+      prefix: "chore(web)"
+      include: "scope"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "chore(ci)"
+      include: "scope"
