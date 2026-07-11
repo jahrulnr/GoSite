@@ -65,8 +65,8 @@ func (e *ExecRunner) RunStreaming(ctx context.Context, name string, args []strin
 	go consume("stdout", stdoutPipe, &stdout)
 	go consume("stderr", stderrPipe, &stderr)
 
-	err = cmd.Wait()
 	wg.Wait()
+	err = cmd.Wait()
 	exitCode := 0
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {

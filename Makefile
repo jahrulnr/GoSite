@@ -11,7 +11,10 @@ endif
 endif
 LDFLAGS := -X github.com/jahrulnr/gosite/internal/buildinfo.Version=$(VERSION)
 
-.PHONY: build test test-cover clean up down dev dev-api dev-fe build-fe build-docker dev-api-setup contract-check wiki-export bundled-plugins
+.PHONY: build test test-cover clean up down dev dev-api dev-fe build-fe build-docker docker-push docker-buildx dev-api-setup contract-check wiki-export bundled-plugins
+
+IMAGE ?= ghcr.io/jahrulnr/gosite
+PLATFORMS ?= linux/amd64,linux/arm64
 
 bundled-plugins:
 	mkdir -p dist/bundled-plugins
@@ -72,6 +75,13 @@ up:
 
 build-docker:
 	docker build --network=host -t gosite:local .
+
+docker-push:
+	docker buildx build --platform $(PLATFORMS) \
+		--build-arg VERSION=$(VERSION) \
+		-t $(IMAGE):$(VERSION) \
+		-t $(IMAGE):latest \
+		--push .
 
 down:
 	docker compose down

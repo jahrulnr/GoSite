@@ -461,6 +461,12 @@ func (s *Service) writeRenderedConfig(ctx context.Context, site sqlite.Website) 
 }
 
 func (s *Service) validateRenderedConfig(ctx context.Context, site sqlite.Website) error {
+	// Rendered active configs reference domain-specific SSL paths. For a new
+	// website those cert files do not exist yet, so nginx -t fails on the
+	// missing certificate. Provision the default self-signed material first.
+	if err := s.nginx.EnsureDomainSSL(site.Domain); err != nil {
+		return apperror.Wrap(apperror.CodeInternal, "provision ssl for validation", err)
+	}
 	content, err := s.renderSiteConfig(site)
 	if err != nil {
 		return err
