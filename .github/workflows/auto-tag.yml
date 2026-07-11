@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # -- Parallel: test + build --
+  # -- Parallel: test --
   go-test:
     runs-on: ubuntu-latest
     steps:
@@ -116,7 +116,9 @@ jobs:
             kill "$(cat /tmp/gosite.pid)" 2>/dev/null || true
           fi
 
+  # -- Serial: build image only if tests pass --
   docker-build:
+    needs: [go-test, web-test, e2e-test]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -137,9 +139,9 @@ jobs:
           docker image inspect gosite:ci --format '{{.Id}}' >/dev/null
           docker run --rm --entrypoint gosite gosite:ci help
 
-  # -- Serial: tag only if all above pass --
+  # -- Parallel: tag release and sync wiki after build succeeds --
   tag:
-    needs: [go-test, web-test, e2e-test, docker-build]
+    needs: [docker-build]
     if: success()
     runs-on: ubuntu-latest
     outputs:
@@ -281,3 +283,36 @@ jobs:
             --title "$NEW_TAG" \
             --notes "$notes" \
             --generate-notes
+
+  wiki:
+    needs: [docker-build]
+    if: success() && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Export wiki markdown
+        run: make wiki-export
+        env:
+          GOSITE_REPO: ${{ github.repository }}
+          GOSITE_BRANCH: ${{ github.ref_name }}
+
+      - name: Validate wiki export
+        run: |
+          set -euo pipefail
+          test -f docs/wiki-export/Home.md
+          test -f docs/wiki-export/Home-id.md
+          test -f docs/wiki-export/_Sidebar.md
+          count="$(find docs/wiki-export -maxdepth 1 -name '*.md' | wc -l)"
+          echo "Exported ${count} markdown files"
+          test "${count}" -ge 20
+
+      - name: Push to GitHub Wiki
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WIKI_TOKEN: ${{ secrets.WIKI_TOKEN }}
+          GITHUB_SHA: ${{ github.sha }}
+          GOSITE_REPO: ${{ github.repository }}
+        run: bash scripts/push-wiki.sh
