@@ -8,6 +8,12 @@ services:
     cpus: 0.5
     mem_limit: 512m
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
     devices:
       - /dev/fuse
     cap_add:
