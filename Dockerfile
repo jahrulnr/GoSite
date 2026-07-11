@@ -26,6 +26,7 @@ FROM nginx:1.30.2-trixie
 SHELL ["/bin/bash", "-c"]
 
 ENV TZ="Asia/Jakarta"
+ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 ENV STORAGE_PATH="/storage"
 ENV DB_DATABASE="/storage/db.sqlite"
 ENV WEB_PATH="/www"
