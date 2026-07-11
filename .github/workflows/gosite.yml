@@ -1,10 +1,29 @@
-name: Release Pipeline
+name: GoSite CI
 
 on:
+  pull_request:
+    paths:
+      - '.github/workflows/gosite.yml'
+      - 'go.mod'
+      - 'go.sum'
+      - 'cmd/**'
+      - 'internal/**'
+      - 'pkg/**'
+      - 'plugins/**'
+      - 'web/**'
+      - 'config/**'
+      - 'migrations/**'
+      - 'Makefile'
+      - 'Dockerfile'
+      - 'docker/**'
+      - 'docs/**'
+      - 'scripts/export-wiki.sh'
+      - 'scripts/push-wiki.sh'
+      - 'scripts/dev-api-setup.sh'
   push:
     branches:
-      - main
       - master
+      - main
   workflow_dispatch:
     inputs:
       bump:
@@ -13,19 +32,19 @@ on:
         default: "patch"
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: release-${{ github.repository }}-${{ github.ref }}
-  cancel-in-progress: false
+  group: gosite-${{ github.repository }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
 
 jobs:
-  # -- Parallel: test + build --
+  # -- Parallel: test --
   go-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
@@ -39,8 +58,8 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
@@ -53,12 +72,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
@@ -101,7 +120,7 @@ jobs:
         working-directory: web
         env:
           GOSITE_URL: http://localhost:8080
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-results
@@ -116,13 +135,15 @@ jobs:
             kill "$(cat /tmp/gosite.pid)" 2>/dev/null || true
           fi
 
+  # -- Serial: build image only if tests and wiki validation pass --
   docker-build:
+    needs: [go-test, web-test, e2e-test, wiki-validate]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
         with:
           context: .
           push: false
@@ -137,16 +158,40 @@ jobs:
           docker image inspect gosite:ci --format '{{.Id}}' >/dev/null
           docker run --rm --entrypoint gosite gosite:ci help
 
-  # -- Serial: tag only if all above pass --
-  tag:
-    needs: [go-test, web-test, e2e-test, docker-build]
-    if: success()
+  # -- Wiki export validation (runs on all triggers) --
+  wiki-validate:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Export wiki markdown
+        run: make wiki-export
+        env:
+          GOSITE_REPO: ${{ github.repository }}
+          GOSITE_BRANCH: ${{ github.ref_name }}
+
+      - name: Validate wiki export
+        run: |
+          set -euo pipefail
+          test -f docs/wiki-export/Home.md
+          test -f docs/wiki-export/Home-id.md
+          test -f docs/wiki-export/_Sidebar.md
+          count="$(find docs/wiki-export -maxdepth 1 -name '*.md' | wc -l)"
+          echo "Exported ${count} markdown files"
+          test "${count}" -ge 20
+
+  # -- Parallel: tag release and publish wiki after build succeeds --
+  tag:
+    needs: [docker-build]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       new_tag: ${{ steps.bump.outputs.new_tag }}
       created: ${{ steps.create_tag.outputs.created }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -162,8 +207,6 @@ jobs:
             exit 0
           fi
 
-          # On push (PR merge), extract PR number from merge commit message
-          # and fetch labels via gh CLI.
           commit_msg="$(git log -1 --pretty=%B)"
           pr_num="$(echo "$commit_msg" | grep -oP 'Merge pull request #\K[0-9]+' || true)"
 
@@ -281,3 +324,34 @@ jobs:
             --title "$NEW_TAG" \
             --notes "$notes" \
             --generate-notes
+
+  wiki-publish:
+    needs: [docker-build]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Export wiki markdown
+        run: make wiki-export
+        env:
+          GOSITE_REPO: ${{ github.repository }}
+          GOSITE_BRANCH: ${{ github.ref_name }}
+
+      - name: Validate wiki export
+        run: |
+          set -euo pipefail
+          test -f docs/wiki-export/Home.md
+          test -f docs/wiki-export/Home-id.md
+          test -f docs/wiki-export/_Sidebar.md
+          count="$(find docs/wiki-export -maxdepth 1 -name '*.md' | wc -l)"
+          echo "Exported ${count} markdown files"
+          test "${count}" -ge 20
+
+      - name: Push to GitHub Wiki
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WIKI_TOKEN: ${{ secrets.WIKI_TOKEN }}
+          GITHUB_SHA: ${{ github.sha }}
+          GOSITE_REPO: ${{ github.repository }}
+        run: bash scripts/push-wiki.sh
