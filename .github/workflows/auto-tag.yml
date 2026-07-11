@@ -1,9 +1,10 @@
-name: Auto Tag
+name: Release Pipeline
 
 on:
-  pull_request:
-    types:
-      - closed
+  push:
+    branches:
+      - main
+      - master
   workflow_dispatch:
     inputs:
       bump:
@@ -15,28 +16,145 @@ permissions:
   contents: write
 
 concurrency:
-  group: auto-tag-${{ github.repository }}-${{ github.event.pull_request.number || github.run_id }}
+  group: release-${{ github.repository }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  # ── Parallel: test + build ──────────────────────────────────────────
+  go-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go test -count=1 ./...
+      - run: make contract-check
+      - run: make -C plugins/gosite/mcp vet
+
+  web-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  e2e-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npx playwright install --with-deps chromium
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+      - run: make bundled-plugins
+      - run: bash scripts/dev-api-setup.sh
+      - name: Start gosite dev API
+        run: |
+          APP_ENV=local DEMO_SEED=true \
+          STORAGE_PATH=/tmp/gosite-qa/storage \
+          DB_DATABASE=/tmp/gosite-qa/storage/db.sqlite \
+          WEB_PATH=/tmp/gosite-qa/storage/www \
+          TEMPLATES_DIR=$GITHUB_WORKSPACE/config \
+          ETC_DIR=/tmp/gosite-qa/etc \
+          LETSENCRYPT_DIR=/tmp/gosite-qa/etc/letsencrypt \
+          PLUGIN_BUNDLED_PATH=$GITHUB_WORKSPACE/dist/bundled-plugins \
+          AUTH_ENABLE=false SESSION_COOKIE_SECURE=false FE_EMBED=true \
+          TLS_ENABLE=false \
+          LISTEN_ADDR=:8080 \
+          go run ./cmd/gosite serve &
+          echo $! > /tmp/gosite.pid
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080/health >/dev/null 2>&1; then
+              echo "gosite is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "gosite did not start in time"
+          cat /tmp/gosite-qa/storage/logs/bootstrap.log 2>/dev/null || true
+          exit 1
+      - name: Run Playwright smoke tests
+        run: npx playwright test --reporter=github
+        working-directory: web
+        env:
+          GOSITE_URL: http://localhost:8080
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-results
+          path: |
+            web/test-results/
+            web/playwright-report/
+          retention-days: 7
+      - name: Stop gosite
+        if: always()
+        run: |
+          if [ -f /tmp/gosite.pid ]; then
+            kill "$(cat /tmp/gosite.pid)" 2>/dev/null || true
+          fi
+
+  docker-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: gosite:ci
+          build-args: |
+            VERSION=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Verify image
+        run: |
+          docker image inspect gosite:ci --format '{{.Id}}' >/dev/null
+          docker run --rm --entrypoint gosite gosite:ci help
+
+  # ── Serial: tag only if all above pass ───────────────────────────────
   tag:
-    # Only run when the PR was merged (not just closed) OR manually dispatched.
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    needs: [go-test, web-test, e2e-test, docker-build]
+    if: success()
     runs-on: ubuntu-latest
     outputs:
       new_tag: ${{ steps.bump.outputs.new_tag }}
       created: ${{ steps.create_tag.outputs.created }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Determine bump level
         id: bump_level
         env:
-          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
           MANUAL_BUMP: ${{ github.event.inputs.bump }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ -n "$MANUAL_BUMP" ]; then
             echo "level=$MANUAL_BUMP" >> "$GITHUB_OUTPUT"
@@ -44,11 +162,21 @@ jobs:
             exit 0
           fi
 
-          labels="$PR_LABELS"
-          if echo "$labels" | grep -qi '"breaking"\|"major"'; then
-            echo "level=major" >> "$GITHUB_OUTPUT"
-          elif echo "$labels" | grep -qi '"feature"\|"minor"\|"enhancement"'; then
-            echo "level=minor" >> "$GITHUB_OUTPUT"
+          # On push (PR merge), extract PR number from merge commit message
+          # and fetch labels via gh CLI.
+          commit_msg="$(git log -1 --pretty=%B)"
+          pr_num="$(echo "$commit_msg" | grep -oP 'Merge pull request #\K[0-9]+' || true)"
+
+          if [ -n "$pr_num" ]; then
+            labels="$(gh pr view "$pr_num" --json labels --jq '.labels[].name' 2>/dev/null || echo '')"
+            echo "PR #$pr_num labels: $labels"
+            if echo "$labels" | grep -qi 'breaking\|major'; then
+              echo "level=major" >> "$GITHUB_OUTPUT"
+            elif echo "$labels" | grep -qi 'feature\|minor\|enhancement'; then
+              echo "level=minor" >> "$GITHUB_OUTPUT"
+            else
+              echo "level=patch" >> "$GITHUB_OUTPUT"
+            fi
           else
             echo "level=patch" >> "$GITHUB_OUTPUT"
           fi
@@ -59,7 +187,6 @@ jobs:
         env:
           LEVEL: ${{ steps.bump_level.outputs.level }}
         run: |
-          # Get latest v* tag
           latest_tag="$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null || echo "v1.0.0")"
           version="${latest_tag#v}"
           echo "Latest tag: $latest_tag → version: $version"
@@ -92,28 +219,31 @@ jobs:
           NEW_TAG: ${{ steps.bump.outputs.new_tag }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Check if tag already exists
           if git rev-parse "$NEW_TAG" >/dev/null 2>&1; then
             echo "Tag $NEW_TAG already exists — skipping"
             echo "created=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          # Create annotated tag on the merge commit
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          pr_num="${{ github.event.pull_request.number }}"
-          pr_title="${{ github.event.pull_request.title }}"
-          commit_msg="Release $NEW_TAG"
+          commit_msg="$(git log -1 --pretty=%B)"
+          pr_num="$(echo "$commit_msg" | grep -oP 'Merge pull request #\K[0-9]+' || true)"
+          pr_title=""
 
           if [ -n "$pr_num" ]; then
-            commit_msg="$commit_msg
+            pr_title="$(gh pr view "$pr_num" --json title --jq '.title' 2>/dev/null || echo '')"
+          fi
+
+          tag_msg="Release $NEW_TAG"
+          if [ -n "$pr_num" ]; then
+            tag_msg="$tag_msg
 
 Merged PR #$pr_num: $pr_title"
           fi
 
-          git tag -a "$NEW_TAG" -m "$commit_msg"
+          git tag -a "$NEW_TAG" -m "$tag_msg"
           git push origin "$NEW_TAG"
 
           echo "created=true" >> "$GITHUB_OUTPUT"
@@ -125,19 +255,33 @@ Merged PR #$pr_num: $pr_title"
           NEW_TAG: ${{ steps.bump.outputs.new_tag }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          pr_num="${{ github.event.pull_request.number }}"
-          pr_url="${{ github.event.pull_request.html_url }}"
-          notes="## Release $NEW_TAG
+          commit_msg="$(git log -1 --pretty=%B)"
+          pr_num="$(echo "$commit_msg" | grep -oP 'Merge pull request #\K[0-9]+' || true)"
+          pr_url=""
+          pr_title=""
 
-          ### Changes
-          Merged PR #$pr_num: ${{ github.event.pull_request.title }}
+          if [ -n "$pr_num" ]; then
+            pr_url="$(gh pr view "$pr_num" --json url --jq '.url' 2>/dev/null || echo '')"
+            pr_title="$(gh pr view "$pr_num" --json title --jq '.title' 2>/dev/null || echo '')"
+          fi
 
-          [View PR]($pr_url)
-
-          ### Commits
-          $(git log --oneline --pretty=format:'- %h %s' HEAD~10..HEAD 2>/dev/null || echo '- (see git log)')"
+          if [ -n "$pr_num" ]; then
+            changes="Merged PR #$pr_num: $pr_title"
+            link="[View PR]($pr_url)"
+          else
+            changes="Manual release"
+            link=""
+          fi
 
           gh release create "$NEW_TAG" \
             --title "$NEW_TAG" \
-            --notes "$notes" \
+            --notes "## Release $NEW_TAG
+
+### Changes
+$changes
+
+$link
+
+### Commits
+$(git log --oneline --pretty=format:'- %h %s' HEAD~10..HEAD 2>/dev/null || echo '- (see git log)')" \
             --generate-notes
