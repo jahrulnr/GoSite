@@ -30,7 +30,7 @@ func setupAccessTokenMiddleware(t *testing.T) (*plugin.IntegrationTokenService, 
 	tokenRepo := sqlite.NewPluginAccessTokenRepository(db)
 	svc := plugin.NewIntegrationTokenService(tokenRepo, pluginRepo, nil)
 
-	manifest := `{"id":"gosite/mcp","name":"MCP","version":"0.1.0","tier":1,"apiVersion":"gosite-plugin/1","permissions":["websites:read","system:read"],"capabilities":{}}`
+	manifest := `{"id":"gosite/mcp","name":"MCP","version":"0.2.0","tier":1,"apiVersion":"gosite-plugin/1","permissions":["websites:read","system:read","cron:read","plugins:read"],"capabilities":{}}`
 	_, err = pluginRepo.Create(context.Background(), sqlite.PluginVersion{
 		PluginID:       "gosite/mcp",
 		Version:        "0.1.0",
@@ -97,6 +97,36 @@ func TestRequireScope_AllowsMatchingScopeForAccessToken(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/system/info", nil)
 	req.Header.Set("X-Gosite-Access-Token", plaintext)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestRequireScope_AllowsCronReadForAccessToken(t *testing.T) {
+	t.Parallel()
+
+	tokens, _ := setupAccessTokenMiddleware(t)
+	cronResult, err := tokens.Create(context.Background(), "gosite/mcp", 1, plugin.CreateTokenInput{
+		Label:  "cron",
+		Scopes: []string{"cron:read"},
+	}, "admin@demo.com")
+	require.NoError(t, err)
+
+	authSvc := auth.NewService(nil, auth.NewStore(0))
+
+	router := gin.New()
+	router.GET(
+		"/api/v1/cronjobs",
+		middleware.RequireSessionOrAccessToken(authSvc, tokens),
+		middleware.RequireScope("cron:read"),
+		func(c *gin.Context) {
+			c.Status(http.StatusOK)
+		},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/cronjobs", nil)
+	req.Header.Set("X-Gosite-Access-Token", cronResult.Plaintext)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 

@@ -9,6 +9,7 @@
 #   MAIN_PKG    — go package path relative to GOSITE_ROOT
 
 GOSITE_ROOT ?= $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../../..)
+GO_MOD_DIR  ?= $(CURDIR)
 OUT         ?= dist
 KEY         ?=
 KEY_ID      ?=
@@ -19,7 +20,7 @@ GOSITE_URL  ?= http://127.0.0.1:8080
 
 _build-bin:
 	@mkdir -p $(OUT)/plugin
-	cd $(GOSITE_ROOT) && CGO_ENABLED=0 go build -o $(CURDIR)/$(OUT)/plugin/gosite $(MAIN_PKG)
+	cd $(GO_MOD_DIR) && CGO_ENABLED=0 go build -o $(CURDIR)/$(OUT)/plugin/gosite $(MAIN_PKG)
 	cp $(OUT)/plugin/gosite $(OUT)/plugin/validate
 
 _pack-zip: manifest.json
@@ -34,9 +35,9 @@ _sha:
 sign:
 	@test -n "$(KEY)" || (echo "KEY=path/to/signing.key required"; exit 1)
 	@test -f $(OUT)/$(PLUGIN_NAME).zip || $(MAKE) build
-	go run $(GOSITE_ROOT)/plugins/_templates/_shared/scripts/sign.go \
-		-artifact $(OUT)/$(PLUGIN_NAME).zip \
-		-manifest manifest.json \
+	cd $(GOSITE_ROOT) && go run $(GOSITE_ROOT)/plugins/_templates/_shared/scripts/sign.go \
+		-artifact $(CURDIR)/$(OUT)/$(PLUGIN_NAME).zip \
+		-manifest $(CURDIR)/manifest.json \
 		-key $(KEY) \
 		-keyid $(or $(KEY_ID),$(VENDOR)-1) \
 		-vendor $(VENDOR)
@@ -49,6 +50,9 @@ install:
 		-F "artifact=@$(OUT)/$(PLUGIN_NAME).zip" \
 		-F "sha256=$$SHA" \
 		-u "$${AUTH_USER:-admin}:$${AUTH_PASS:-123456}"
+
+vet:
+	cd $(GO_MOD_DIR) && go vet ./...
 
 clean:
 	rm -rf $(OUT)

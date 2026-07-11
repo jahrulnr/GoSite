@@ -18,6 +18,7 @@ RUN go mod download
 
 COPY . .
 COPY --from=webbuilder /src/internal/delivery/http/frontend/dist ./internal/delivery/http/frontend/dist
+RUN go mod download
 RUN make bundled-plugins
 RUN CGO_ENABLED=0 go build -ldflags "-X github.com/jahrulnr/gosite/internal/buildinfo.Version=${VERSION}" -o /out/gosite ./cmd/gosite
 

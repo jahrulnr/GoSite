@@ -238,6 +238,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	registerDatabaseRoutes(protected, databaseHandler)
 	registerUIMetaRoutes(protected, uimetaHandler)
 	registerTerminalRoutes(sessionOnly, terminalHandler)
+	registerPluginPublicRoutes(protected, pluginHandler)
 	registerPluginRoutes(sessionOnly, pluginHandler, pluginConfigHandler, pluginKeyringHandler, integrationTokenHandler)
 
 	api.GET("/integration-tokens/self",
@@ -363,12 +364,15 @@ func registerCronRoutes(api *gin.RouterGroup, h *handler.CronHandler) {
 	api.POST("/cronjobs", middleware.RequireScope("cron:write"), gin.WrapF(h.Create))
 	api.PUT("/cronjobs/:id", middleware.RequireScope("cron:write"), gin.WrapF(h.Update))
 	api.DELETE("/cronjobs/:id", middleware.RequireScope("cron:write"), gin.WrapF(h.Delete))
-	api.POST("/cronjobs/:id/run", middleware.RequireScope("cron:write"), gin.WrapF(h.Run))
+	api.POST("/cronjobs/:id/run", middleware.RequireScope("cron:manage"), gin.WrapF(h.Run))
 	api.GET("/cronjobs/:id/run/stream", middleware.RequireScope("cron:read"), gin.WrapF(h.RunStream))
 }
 
+func registerPluginPublicRoutes(api *gin.RouterGroup, h *handler.PluginHandler) {
+	api.GET("/plugins", middleware.RequireScope("plugins:read"), gin.WrapF(h.List))
+}
+
 func registerPluginRoutes(api *gin.RouterGroup, h *handler.PluginHandler, configH *handler.ConfigHandler, keyH *handler.KeyringHandler, tokenH *handler.IntegrationTokenHandler) {
-	api.GET("/plugins", gin.WrapF(h.List))
 	api.GET("/plugins/catalog", gin.WrapF(h.CatalogList))
 	api.GET("/plugins/catalog/:vendor/:name", gin.WrapF(h.CatalogGet))
 	api.GET("/plugins/install/settings", gin.WrapF(h.InstallSettings))

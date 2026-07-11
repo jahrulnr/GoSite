@@ -1,0 +1,10 @@
+go 1.26.4
+
+use (
+	.
+	./plugins/_templates/tier0-webhook
+	./plugins/_templates/tier1-full
+	./plugins/_templates/tier1-mcp
+	./plugins/_templates/tier1-minimal
+	./plugins/gosite/mcp
+)
