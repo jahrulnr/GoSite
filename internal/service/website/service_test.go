@@ -334,6 +334,29 @@ func TestValidate_ActiveDoesNotWriteSiteConfig(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "validate must not write site.d config")
 }
 
+func TestValidate_ActiveNewSiteProvisionsSSLCerts(t *testing.T) {
+	stack := testutil.SetupTestStack(t)
+	domain := "validate-ssl.example.com"
+	certPath, keyPath := stack.Nginx.DefaultSSLPaths(domain)
+
+	_, err := os.Stat(certPath)
+	require.True(t, os.IsNotExist(err), "domain cert should not exist before validation")
+	_, err = os.Stat(keyPath)
+	require.True(t, os.IsNotExist(err), "domain key should not exist before validation")
+
+	result := stack.WebsiteSvc.Validate(context.Background(), website.ValidateInput{
+		Domain:   domain,
+		Path:     filepath.Join(stack.WebRoot, "validate-ssl"),
+		Type:     sqlite.WebsiteTypeProxy,
+		Upstream: "http://127.0.0.1:8234",
+		Active:   true,
+	})
+
+	assert.True(t, result.Valid)
+	assert.FileExists(t, certPath, "validation should provision default cert")
+	assert.FileExists(t, keyPath, "validation should provision default key")
+}
+
 func TestGetNginxConfig_ReturnsContent(t *testing.T) {
 	stack := testutil.SetupTestStack(t)
 	ctx := context.Background()
