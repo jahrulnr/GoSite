@@ -18,10 +18,10 @@ func TestRenderStatic_SubstitutesPlaceholders(t *testing.T) {
 
 	tpl := testutil.ConfigPath("webconfig/site.conf")
 	out, err := nginx.RenderStatic(tpl, nginx.SiteTemplateData{
-		Domain:   "site.test",
-		Path:     "/www/site",
-		SSLCert:  "/ssl/cert.pem",
-		SSLKey:   "/ssl/key.pem",
+		Domain:  "site.test",
+		Path:    "/www/site",
+		SSLCert: "/ssl/cert.pem",
+		SSLKey:  "/ssl/key.pem",
 	})
 	require.NoError(t, err)
 	assert.Contains(t, out, "server_name site.test;")
@@ -40,7 +40,8 @@ func TestRenderProxy_IncludesUpstream(t *testing.T) {
 		SSLKey:   "/ssl/key.pem",
 	})
 	require.NoError(t, err)
-	assert.Contains(t, out, "proxy_pass http://127.0.0.1:9000;")
+	assert.Contains(t, out, "set $backend http://127.0.0.1:9000;")
+	assert.Contains(t, out, "proxy_pass $backend;")
 }
 
 func TestUpdateSSLDirectives_ReplacesPaths(t *testing.T) {

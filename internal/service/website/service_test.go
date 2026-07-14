@@ -52,7 +52,8 @@ func TestCreate_ProxyType_UpstreamInConfig(t *testing.T) {
 
 	cfg, err := stack.Nginx.ReadSiteConfig(ctx, site.Domain)
 	require.NoError(t, err)
-	assert.Contains(t, cfg, "proxy_pass "+upstream)
+	assert.Contains(t, cfg, "set $backend "+upstream+";")
+	assert.Contains(t, cfg, "proxy_pass $backend;")
 }
 
 func TestDelete_CleanFalse_KeepsFiles(t *testing.T) {
