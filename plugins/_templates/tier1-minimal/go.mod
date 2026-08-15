@@ -11,7 +11,7 @@ require (
 	github.com/hashicorp/go-plugin v1.8.0 // indirect
 	github.com/hashicorp/yamux v0.1.2 // indirect
 	github.com/mattn/go-colorable v0.1.12 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/oklog/run v1.1.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.44.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
