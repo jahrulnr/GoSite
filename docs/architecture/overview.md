@@ -51,12 +51,14 @@ Details: [sequences/01-container-startup.md](../sequences/01-container-startup.m
 
 `config/start.sh`:
 
-1. `gosite init` — storage layout, symlinks, migrate, seed
-2. Generate default self-signed SSL if missing
-3. **`gosite nginx-repair`** — `nginx -t` + auto-fix ([nginx-repair.md](../operations/nginx-repair.md))
-4. Stage `/var/setup` → `/etc/nginx`, `/storage/webconfig`
-5. `fstab_mounter.sh`
-6. `nginx` → `exec gosite serve` (two parallel processes; gosite supervises nginx reload)
+1. `mkdir /storage/logs` + `/storage/www`; migrate legacy Laravel logs
+2. Seed `/var/setup/nginx` → `/storage/nginx` (`cp -a -n`; persisted files win)
+3. `gosite init` — storage layout, symlinks, migrate, seed
+4. Generate default self-signed SSL if missing → prepare `/www/default`
+5. Consume staging: `cp -a -n` webconfig → `/storage/webconfig`, remove `/var/setup`
+6. **`gosite nginx-repair`** — `nginx -t` + auto-fix ([nginx-repair.md](../operations/nginx-repair.md))
+7. Substitute `__PUBLIC_HTTPS_PORT__` → `fstab_mounter.sh` → start `nginx`
+8. `exec gosite serve` (PID 1; job worker + nginx watchdog)
 
 ## Go application layers
 
@@ -150,7 +152,7 @@ Certbot and website placeholder SSL share the `live/{domain}/` namespace. See [s
 | `/storage/webconfig/active.d/` | Active vhost symlinks |
 | `/storage/webconfig/ssl/` | Certificates (LE layout) |
 | `/storage/logs/` | Nginx access/error + gosite (logrotate: 14-day rotation) |
-| `/storage/nginx/` | Symlink source for `/etc/nginx` |
+| `/storage/nginx/` | Source of truth for `/etc/nginx` — image templates are only copied when missing; persisted edits are never overwritten (manual reconciliation on upgrade) |
 | `/storage/plugins/` | Installed plugin artifacts `{plugin_id}/{version}/` |
 | `/storage/plugins/keyring.json` | Trusted vendor signing keys (default; override `PLUGIN_KEYRING_PATH`) |
 | `/www/` | Document roots (`/storage/www`) |
