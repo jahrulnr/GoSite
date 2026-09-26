@@ -196,7 +196,7 @@ func NewRouter(cfg config.Config, db *sql.DB) *gin.Engine {
 	terminalHubCtx, terminalCancel := context.WithCancel(context.Background())
 	defer terminalCancel()
 	terminalHub.RunSweeper(terminalHubCtx, time.Minute)
-	terminalHandler := handler.NewTerminalHandler(terminalHub, splunklite.NewAuditWriter(auditRepo), authSvc)
+	terminalHandler := handler.NewTerminalHandler(terminalHub, splunklite.NewAuditWriter(auditRepo), authSvc, cfg.CORSOrigins)
 
 	engine := gin.New()
 	engine.Use(gin.Recovery())

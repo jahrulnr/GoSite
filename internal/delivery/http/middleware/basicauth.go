@@ -14,11 +14,13 @@ const basicAuthRealm = "Access denied"
 
 // BasicAuth gates requests when AUTH_ENABLE is true.
 //
-// Browser EventSource does not support custom headers (notably Authorization),
-// so when BasicAuth is enabled, anything that would be consumed as a server
-// stream (SSE / NDJSON) needs to bypass this check and rely on the session
-// cookie instead. Without this, the Logs Live Tail stream gets stuck at 401
-// and the UI shows "Failed to fetch" with no useful error.
+// Browser EventSource does not support custom headers (notably Authorization)
+// and WebSocket handshakes carry no Authorization header either, so the
+// streaming endpoints consumed by the UI rely on the session cookie instead
+// of BasicAuth. The bypass is limited to the exact GET paths listed in
+// streamPaths/streamPathSuffixes: deciding it from request headers such as
+// Accept, Upgrade or ?stream= would let any endpoint — including
+// /auth/login — slip past the BasicAuth gate entirely.
 func BasicAuth(cfg config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !cfg.AuthEnable {
@@ -46,24 +48,36 @@ func BasicAuth(cfg config.Config) gin.HandlerFunc {
 	}
 }
 
+// streamPaths are the exact GET endpoints the browser UI consumes with
+// EventSource or a WebSocket handshake (see web/src/api/endpoints.ts).
+var streamPaths = []string{
+	"/api/v1/query/tail",
+	"/api/v1/terminal/ws",
+}
+
+// streamPathSuffixes cover the parameterised streaming endpoints.
+var streamPathSuffixes = []string{
+	"/ssl/certbot/stream",
+	"/run/stream",
+}
+
 func isStreamRequest(c *gin.Context) bool {
-	// WebSocket upgrades carry an Upgrade header. Browser WebSockets
-	// cannot set custom headers (notably Authorization) so the basic-auth
-	// gate has to be skipped and the session cookie must do the auth.
-	if strings.EqualFold(c.GetHeader("Upgrade"), "websocket") {
-		return true
+	// Only GET requests may bypass the gate: the streaming routes above are
+	// GET-only, so a mutating call to one of those paths must still
+	// authenticate.
+	if c.Request.Method != http.MethodGet {
+		return false
 	}
-	if strings.HasPrefix(c.Request.URL.Path, "/api/v1/query/tail") {
-		return true
+	path := c.Request.URL.Path
+	for _, streamPath := range streamPaths {
+		if path == streamPath {
+			return true
+		}
 	}
-	if strings.EqualFold(c.Request.URL.Query().Get("stream"), "sse") ||
-		strings.EqualFold(c.Request.URL.Query().Get("stream"), "ndjson") {
-		return true
-	}
-	accept := strings.ToLower(c.GetHeader("Accept"))
-	if strings.Contains(accept, "text/event-stream") ||
-		strings.Contains(accept, "application/x-ndjson") {
-		return true
+	for _, suffix := range streamPathSuffixes {
+		if strings.HasSuffix(path, suffix) {
+			return true
+		}
 	}
 	return false
 }

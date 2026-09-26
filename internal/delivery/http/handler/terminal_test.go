@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/base64"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jahrulnr/gosite/internal/terminal"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestTerminalHandlerSnapshotEncoding(t *testing.T) {
@@ -89,5 +91,39 @@ func TestTerminalHandlerKillMissingReturnsNotFound(t *testing.T) {
 	})
 	if err := hub.Kill("does-not-exist"); err == nil {
 		t.Fatal("expected error killing missing session")
+	}
+}
+
+func TestTerminalHandlerCheckOrigin(t *testing.T) {
+	t.Parallel()
+
+	h := NewTerminalHandler(nil, nil, nil, []string{"https://panel.example.com", "admin.example.com"})
+
+	cases := []struct {
+		name   string
+		origin string
+		host   string
+		want   bool
+	}{
+		{name: "no origin (non-browser client)", host: "panel.local:8080", want: true},
+		{name: "same origin", origin: "https://panel.local:8080", host: "panel.local:8080", want: true},
+		{name: "same origin different scheme", origin: "http://panel.local:8080", host: "panel.local:8080", want: true},
+		{name: "sibling subdomain is not same-origin", origin: "https://evil.panel.local:8080", host: "panel.local:8080", want: false},
+		{name: "foreign origin", origin: "https://attacker.example.com", host: "panel.local:8080", want: false},
+		{name: "configured origin", origin: "https://panel.example.com", host: "panel.local:8080", want: true},
+		{name: "configured bare host", origin: "https://admin.example.com", host: "panel.local:8080", want: true},
+		{name: "malformed origin", origin: "://bad", host: "panel.local:8080", want: false},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/terminal/ws", nil)
+			req.Host = tc.host
+			if tc.origin != "" {
+				req.Header.Set("Origin", tc.origin)
+			}
+			assert.Equal(t, tc.want, h.checkOrigin(req))
+		})
 	}
 }

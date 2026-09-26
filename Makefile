@@ -43,6 +43,7 @@ dev-api: dev-api-setup
 	LETSENCRYPT_DIR=/tmp/gosite-qa/etc/letsencrypt \
 	PLUGIN_BUNDLED_PATH=$(CURDIR)/dist/bundled-plugins \
 	AUTH_ENABLE=false SESSION_COOKIE_SECURE=false FE_EMBED=false \
+	CORS_ORIGINS=http://localhost:5173 \
 	TLS_CERT=$(DEV_STORAGE)/webconfig/ssl/live/default/cert.pem \
 	TLS_KEY=$(DEV_STORAGE)/webconfig/ssl/live/default/key.pem \
 	LISTEN_ADDR=:8080 go run ./cmd/gosite serve
