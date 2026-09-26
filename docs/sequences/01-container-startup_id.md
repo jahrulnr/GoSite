@@ -20,6 +20,8 @@ sequenceDiagram
     Docker->>Start: CMD start.sh
 
     Start->>Start: mkdir /storage/logs, /storage/www
+    Start->>Start: migrasi log legacy → /storage/logs
+    Start->>Start: seed /var/setup/nginx → /storage/nginx (cp -a -n)
     Start->>Init: gosite init
     Note over Init: storage layout, symlink,<br/>migrate, seed admin/cron/demo
 
@@ -27,16 +29,19 @@ sequenceDiagram
         Start->>SSL: self-signed cert.pem + key.pem
     end
 
-    Start->>Repair: gosite nginx-repair
-    Note over Repair: nginx -t + auto-fix aman
+    Start->>Start: siapkan /www/default/index.html
 
     opt /var/setup staging
-        Start->>Start: mv nginx → /etc/nginx, copy webconfig
+        Start->>Start: webconfig → /storage/webconfig (cp -a -n), hapus /var/setup
     end
+
+    Start->>Repair: gosite nginx-repair
+    Note over Repair: nginx -t + auto-fix aman
 
     Start->>Start: substitute __PUBLIC_HTTPS_PORT__ di nginx conf
     Start->>Fstab: /run/fstab_mounter.sh
     Start->>NGX: nginx -c /etc/nginx/nginx.conf
+    Start->>Start: daemon logrotate
     Start->>Go: exec gosite serve
 
     Note over Go: job worker + nginx watchdog (30s)
@@ -55,17 +60,23 @@ Cron job renewal & manual run dikelola **job worker** di dalam proses `gosite se
 
 | Langkah | Output |
 |---------|--------|
-| `createStorageLayout` | `/storage/webconfig`, `site.d`, `active.d`, `logs`, … |
-| `copyTemplatesIfMissing` | Template dari image → storage |
+| `createStorageLayout` | `/storage/webconfig`, `site.d`, `active.d`, `logs`, `nginx`, … (+ migrasi log legacy Laravel) |
+| `copyTemplatesIfMissing` | Merge `/var/setup/{webconfig,nginx}` → `/storage`: file yang belum ada disalin (healing), file persisten tidak pernah ditimpa |
 | `createSymlinks` | `/etc/nginx` → `/storage/nginx`, `/etc/letsencrypt` → `/storage/webconfig/ssl`, `/www` → `/storage/www` |
 | `sqlite.Migrate` | Schema `db.sqlite` |
 | `seedAdminIfEmpty` | User demo |
 | `seedDefaultCronIfEmpty` | `certbot renew --post-hook 'nginx -s reload'` |
 | `seedDemoIfNeeded` | Website demo (jika `DEMO_SEED=true`) |
 
+Jika `/etc/nginx` masih berupa direktori nyata (bukan symlink), `createSymlinks` memigrasikan isinya ke `/storage/nginx` tanpa menimpa file yang sudah ada; entry konflik disimpan di `/storage/nginx.migrated-conflicts/`. Entry top-level `conf.d` bawaan image dikarantina ke `/storage/nginx.migrated-conflicts/conf.d/` supaya `listen 80 default_server` bawaannya tidak bentrok dengan vhost persisten.
+
+### Kepemilikan config nginx
+
+`/storage/nginx` adalah sumber kebenaran persisten untuk `/etc/nginx` — di-seed dari `/var/setup/nginx` dengan `cp -a -n` oleh `start.sh` sebelum `gosite init`. File template dari image hanya ditambahkan jika belum ada, jadi **update template di image tidak menimpa editan persisten** — rekonsiliasi manual diperlukan saat upgrade.
+
 ### Boot nginx repair
 
-`gosite nginx-repair` dijalankan **setelah** default SSL dibuat agar fallback repair bisa mengarahkan vhost ke cert default. Lihat [nginx-repair.md](../operations/nginx-repair_id.md).
+`gosite nginx-repair` dijalankan setelah staging `/var/setup` dibersihkan dan **sebelum** nginx start — juga setelah default SSL dibuat agar fallback repair bisa mengarahkan vhost ke cert default. Lihat [nginx-repair.md](../operations/nginx-repair_id.md).
 
 ---
 

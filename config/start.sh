@@ -29,6 +29,13 @@ if [ -d "$LEGACY_LOG_DIR" ] && [ ! -L "$LEGACY_LOG_DIR" ]; then
     rmdir /storage/laravel 2>/dev/null || true
 fi
 
+echo "--- Seed persistent nginx config ---"
+mkdir -p /storage/nginx
+if [ -d /var/setup/nginx ]; then
+    # Seed before init links /etc/nginx to storage. Existing persisted edits win.
+    cp -a -n /var/setup/nginx/. /storage/nginx/
+fi
+
 echo "--- Run gosite init ---"
 /usr/local/bin/gosite init >> "$STARTUP_LOG" 2>&1
 
@@ -52,9 +59,6 @@ if [ ! -f "$DEFAULT_SSL_DIR/cert.pem" ] || [ ! -f "$DEFAULT_SSL_DIR/key.pem" ]; 
     fi
 fi
 
-echo "--- Repair nginx config if needed ---"
-/usr/local/bin/gosite nginx-repair >> "$STARTUP_LOG" 2>&1 || echo "WARN: nginx-repair failed, see bootstrap.log" >> "$STARTUP_LOG"
-
 if [ ! -f /www/default/index.html ]; then
     echo "--- Generate default /www ---"
     mkdir -p /www/default/
@@ -64,16 +68,19 @@ if [ ! -f /www/default/index.html ]; then
 fi
 
 if [ -d /var/setup ]; then
-    # Move staged configs into their runtime locations, then drop the staging area.
+    # Nginx configs were seeded before gosite init so bootstrap could create
+    # /etc/nginx as a symlink to the persistent directory without masking defaults.
     if [ -d /var/setup/nginx ]; then
-        rm -rf /etc/nginx
-        mv /var/setup/nginx /etc/nginx
+        rm -rf /var/setup/nginx
     fi
     if [ -d /var/setup/webconfig ]; then
-        cp -a /var/setup/webconfig/. /storage/webconfig/ 2>/dev/null || true
+        cp -a -n /var/setup/webconfig/. /storage/webconfig/ 2>/dev/null || true
     fi
     rm -vr /var/setup >> "$STARTUP_LOG" 2>&1 || true
 fi
+
+echo "--- Repair nginx config if needed ---"
+/usr/local/bin/gosite nginx-repair >> "$STARTUP_LOG" 2>&1 || echo "WARN: nginx-repair failed, see bootstrap.log" >> "$STARTUP_LOG"
 
 # Substitute public HTTPS/QUIC port for Alt-Svc (host-mapped port, default 443).
 PUBLIC_HTTPS_PORT="${PUBLIC_HTTPS_PORT:-443}"
