@@ -49,7 +49,16 @@ flowchart TB
 
 Detail: [sequences/01-container-startup.md](../sequences/01-container-startup_id.md)
 
-`config/start.sh`: `gosite init` → SSL default → `gosite nginx-repair` → stage nginx → `fstab_mounter` → **start nginx** → **exec gosite serve** (dua proses paralel).
+`config/start.sh`:
+
+1. `mkdir /storage/logs` + `/storage/www`; migrasi log legacy Laravel
+2. Seed `/var/setup/nginx` → `/storage/nginx` (`cp -a -n`; file persisten menang)
+3. `gosite init` — storage layout, symlink, migrate, seed
+4. SSL default self-signed jika belum ada → siapkan `/www/default`
+5. Konsumsi staging: `cp -a -n` webconfig → `/storage/webconfig`, hapus `/var/setup`
+6. **`gosite nginx-repair`** — `nginx -t` + auto-fix ([nginx-repair.md](../operations/nginx-repair_id.md))
+7. Substitusi `__PUBLIC_HTTPS_PORT__` → `fstab_mounter.sh` → start `nginx`
+8. `exec gosite serve` (PID 1; job worker + watchdog nginx)
 
 ## Layer aplikasi Go
 
@@ -103,6 +112,7 @@ Navigasi UI dari `GET /ui/meta`. Hook plugin sebelum side-effect nginx/SSL/job.
 |------|-----|
 | `/storage/db.sqlite` | SQLite panel (VACUUM harian setelah retention purge) |
 | `/storage/webconfig/` | nginx draft + SSL |
+| `/storage/nginx/` | Sumber kebenaran `/etc/nginx` — template image hanya disalin jika belum ada; editan persisten tidak ditimpa (rekonsiliasi manual saat upgrade) |
 | `/storage/plugins/` | Artifact plugin |
 | `/www/` | Document root website |
 

@@ -27,6 +27,8 @@ services:
       TZ: Asia/Jakarta
       STORAGE_PATH: /storage
       DB_DATABASE: /storage/db.sqlite
+      GOMEMLIMIT: 400MiB
+      GOGC: "50"
       WEB_PATH: /storage/www
       LISTEN_ADDR: ":8080"
       TEMPLATES_DIR: /var/setup
