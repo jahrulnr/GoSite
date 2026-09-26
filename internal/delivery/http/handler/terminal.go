@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -17,31 +19,61 @@ import (
 
 // TerminalHandler exposes the PTY hub over HTTP and WebSocket.
 type TerminalHandler struct {
-	hub       *terminal.Hub
-	audit     contracts.AuditWriter
-	authSvc   *auth.Service
-	upgrader  websocket.Upgrader
+	hub            *terminal.Hub
+	audit          contracts.AuditWriter
+	authSvc        *auth.Service
+	upgrader       websocket.Upgrader
+	allowedOrigins []string
 }
 
 // NewTerminalHandler wires the dependencies needed to serve the floating
-// terminal endpoints.
-func NewTerminalHandler(hub *terminal.Hub, audit contracts.AuditWriter, authSvc *auth.Service) *TerminalHandler {
-	return &TerminalHandler{
-		hub:     hub,
-		audit:   audit,
-		authSvc: authSvc,
-		upgrader: websocket.Upgrader{
-			ReadBufferSize:  4096,
-			WriteBufferSize: 4096,
-			CheckOrigin: func(r *http.Request) bool {
-				// Same-origin policy is enforced by the session cookie
-				// check; the websocket itself can be opened from any
-				// origin because the request must include a valid
-				// gosite_session cookie.
-				return true
-			},
-		},
+// terminal endpoints. allowedOrigins lists extra origins (CORS_ORIGINS)
+// accepted for the websocket handshake on top of the request's own host.
+func NewTerminalHandler(hub *terminal.Hub, audit contracts.AuditWriter, authSvc *auth.Service, allowedOrigins []string) *TerminalHandler {
+	h := &TerminalHandler{
+		hub:            hub,
+		audit:          audit,
+		authSvc:        authSvc,
+		allowedOrigins: allowedOrigins,
 	}
+	h.upgrader = websocket.Upgrader{
+		ReadBufferSize:  4096,
+		WriteBufferSize: 4096,
+		CheckOrigin:     h.checkOrigin,
+	}
+	return h
+}
+
+// checkOrigin enforces same-origin browser handshakes for the PTY websocket.
+// Non-browser clients (CLI, MCP, tests) send no Origin header and stay
+// allowed; browser requests must originate from the panel's own host or from
+// an origin configured through CORS_ORIGINS.
+func (h *TerminalHandler) checkOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	parsed, err := url.Parse(origin)
+	if err != nil || parsed.Host == "" {
+		return false
+	}
+	if strings.EqualFold(parsed.Host, r.Host) {
+		return true
+	}
+	for _, allowed := range h.allowedOrigins {
+		allowed = strings.TrimSpace(allowed)
+		if allowed == "" {
+			continue
+		}
+		if strings.EqualFold(allowed, parsed.Host) {
+			return true
+		}
+		au, err := url.Parse(allowed)
+		if err == nil && au.Host != "" && strings.EqualFold(au.Host, parsed.Host) {
+			return true
+		}
+	}
+	return false
 }
 
 // HandleWS upgrades the request to a websocket and pumps output to / input

@@ -181,6 +181,9 @@ func Load() Config {
 		FEEmbed:             envBool("FE_EMBED", false),
 		SessionCookieSecure: envBool("SESSION_COOKIE_SECURE", true),
 		TLSEnable:           envBool("TLS_ENABLE", true),
+		// CORSOrigins allows cross-origin panel frontends (e.g. the Vite dev
+		// server) for both the CORS middleware and the terminal websocket
+		// origin check; same-origin requests never need it.
 		CORSOrigins:         splitCSV(envOr("CORS_ORIGINS", "")),
 
 		TerminalStickyTTL:  envDuration("TERMINAL_STICKY_TTL", 12*time.Hour),
